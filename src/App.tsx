@@ -3,7 +3,6 @@ import { Header } from './components/Header';
 import { BraitenbergDiagram } from './components/BraitenbergDiagram';
 import { ConnectionControls } from './components/ConnectionControls';
 import { VehiclePresets } from './components/VehiclePresets';
-import { SimulationCanvas } from './components/SimulationCanvas';
 import { ArduinoPanel } from './components/ArduinoPanel';
 import { useSerial } from './hooks/useSerial';
 import { useVehicle } from './hooks/useVehicle';
@@ -37,7 +36,6 @@ export function App() {
       />
 
       <main className="app-main">
-        {/* Left column: vehicle editor */}
         <section className="editor-column">
           <div className="diagram-section">
             <h2 className="section-title">Vehicle Schematic</h2>
@@ -68,11 +66,6 @@ export function App() {
               {uploadMsg}
             </div>
           )}
-        </section>
-
-        {/* Right column: simulation */}
-        <section className="simulation-column">
-          <SimulationCanvas weights={vehicleState.weights} />
         </section>
       </main>
     </div>

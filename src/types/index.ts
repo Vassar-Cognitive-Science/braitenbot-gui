@@ -31,25 +31,3 @@ export interface SerialState {
   status: SerialStatus;
   error: string | null;
 }
-
-/** 2D vector */
-export interface Vec2 {
-  x: number;
-  y: number;
-}
-
-export interface SimVehicle {
-  position: Vec2;
-  /** Heading angle in radians (0 = right, π/2 = down in canvas coords) */
-  heading: number;
-  leftSpeed: number;
-  rightSpeed: number;
-}
-
-export interface SimulationConfig {
-  running: boolean;
-  lightSource: Vec2;
-  /** Trail of past positions */
-  trail: Vec2[];
-  vehicle: SimVehicle;
-}

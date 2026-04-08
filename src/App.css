@@ -47,12 +47,6 @@ body {
   flex-shrink: 0;
 }
 
-.simulation-column {
-  flex: 1;
-  display: flex;
-  align-items: flex-start;
-}
-
 /* ── Header ──────────────────────────────────────────────────────────────── */
 .app-header {
   display: flex;
@@ -332,45 +326,9 @@ body {
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ── Simulation ──────────────────────────────────────────────────────────── */
-.simulation-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.simulation-header {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.simulation-hint {
-  font-size: 0.75rem;
-  color: var(--color-muted);
-}
-
-.simulation-canvas {
-  display: block;
-  width: 100%;
-  max-width: 560px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  cursor: crosshair;
-  background: #0f0f23;
-}
-
-.simulation-controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .app-main { flex-direction: column; }
   .editor-column { width: 100%; }
-  .simulation-column { width: 100%; }
   .presets-grid { grid-template-columns: 1fr; }
 }
