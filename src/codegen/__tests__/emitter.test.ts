@@ -81,14 +81,14 @@ describe('generateSketch', () => {
     expect(code).toContain('? 1023 : 0');
   });
 
-  it('generates delay node code with millis', () => {
+  it('generates delay node as a ring buffer', () => {
     const delayNode: DiagramNode = {
       id: 'delay-1',
       type: 'compute-delay',
       label: 'Delay',
       x: 0,
       y: 0,
-      delayMs: 250,
+      delayMs: 200,
     };
     const nodes: DiagramNode[] = [makeSensor(), delayNode, makeMotor()];
     const connections: DiagramConnection[] = [
@@ -98,8 +98,10 @@ describe('generateSketch', () => {
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
-    expect(code).toContain('millis()');
-    expect(code).toContain('>= 250');
+    // 200ms / 20ms loop = 10 slots
+    expect(code).toContain('BUF_SIZE = 10');
+    expect(code).toContain('_buf[10]');
+    expect(code).toContain('% sig_delay_1_BUF_SIZE');
     expect(code).toContain('static');
   });
 

@@ -26,11 +26,13 @@ export interface WiringGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
   executionOrder: string[];
+  loopPeriodMs: number;
 }
 
 export function buildGraph(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
+  loopPeriodMs = 20,
 ): WiringGraph {
   const graphNodes: GraphNode[] = nodes.map((node) => {
     const typeDef = TYPE_BY_ID[node.type];
@@ -58,5 +60,5 @@ export function buildGraph(
   const nodeIds = graphNodes.map((n) => n.id);
   const executionOrder = toposort(nodeIds, graphEdges);
 
-  return { nodes: graphNodes, edges: graphEdges, executionOrder };
+  return { nodes: graphNodes, edges: graphEdges, executionOrder, loopPeriodMs };
 }

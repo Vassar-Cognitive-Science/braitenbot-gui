@@ -107,6 +107,7 @@ function emitComputeNode(
   graph: WiringGraph,
   node: GraphNode,
   indent: string,
+  loopPeriodMs: number,
 ): string {
   const lines: string[] = [];
   const name = varName(node);
@@ -140,13 +141,15 @@ function emitComputeNode(
   } else if (typeDef === 'compute-delay') {
     lines.push(emitInputAggregation(graph, node, indent));
     const delayMs = node.delayMs ?? 100;
-    lines.push(`${indent}static unsigned long ${name}_lastTime = 0;`);
-    lines.push(`${indent}static int ${name}_held = 0;`);
-    lines.push(`${indent}if (millis() - ${name}_lastTime >= ${delayMs}) {`);
-    lines.push(`${indent}  ${name}_held = (int)${inputVar(node)};`);
-    lines.push(`${indent}  ${name}_lastTime = millis();`);
-    lines.push(`${indent}}`);
-    lines.push(`${indent}int ${name} = ${name}_held;`);
+    // Ring buffer: each loop iteration stores the current input and
+    // outputs the value from delayMs ago. Buffer size = delayMs / loop period.
+    const bufSize = Math.max(1, Math.round(delayMs / loopPeriodMs));
+    lines.push(`${indent}static const int ${name}_BUF_SIZE = ${bufSize};`);
+    lines.push(`${indent}static int ${name}_buf[${bufSize}] = {0};`);
+    lines.push(`${indent}static int ${name}_idx = 0;`);
+    lines.push(`${indent}int ${name} = ${name}_buf[${name}_idx];`);
+    lines.push(`${indent}${name}_buf[${name}_idx] = (int)${inputVar(node)};`);
+    lines.push(`${indent}${name}_idx = (${name}_idx + 1) % ${name}_BUF_SIZE;`);
   }
 
   return lines.join('\n');
@@ -211,7 +214,7 @@ export function generateSketch(graph: WiringGraph): string {
       loopLines.push(emitSensorRead(node, '  '));
     } else if (node.kind === 'compute') {
       loopLines.push('');
-      loopLines.push(emitComputeNode(graph, node, '  '));
+      loopLines.push(emitComputeNode(graph, node, '  ', graph.loopPeriodMs));
     } else if (node.kind === 'motor') {
       loopLines.push('');
       loopLines.push(emitMotorWrite(graph, node, '  '));
@@ -219,7 +222,7 @@ export function generateSketch(graph: WiringGraph): string {
   }
 
   loopLines.push('');
-  loopLines.push('  delay(20);');
+  loopLines.push(`  delay(${graph.loopPeriodMs});`);
   loopLines.push('}');
 
   sections.push(loopLines.join('\n'));

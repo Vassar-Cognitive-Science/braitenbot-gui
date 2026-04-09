@@ -54,6 +54,22 @@ function clampWeight(value: number): number {
   return Math.max(-1, Math.min(1, value));
 }
 
+function weightToColor(weight: number): string {
+  if (weight >= 0) {
+    const t = weight;
+    const r = Math.round(80 * (1 - t));
+    const g = Math.round(80 + 120 * t);
+    const b = Math.round(80 * (1 - t));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const t = -weight;
+    const r = Math.round(80 + 150 * t);
+    const g = Math.round(80 * (1 - t));
+    const b = Math.round(80 * (1 - t));
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
 function calculateRobotOverlay(canvasWidth: number, canvasHeight: number): RobotOverlayLayout {
   const bodyDiameter = Math.max(260, Math.min(420, Math.min(canvasHeight * 0.74, canvasWidth * 0.46)));
   const bodyRadius = bodyDiameter / 2;
@@ -117,6 +133,7 @@ export function BraitenbergDiagram() {
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
+  const [loopPeriodMs, setLoopPeriodMs] = useState(20);
   const [codeGenErrors, setCodeGenErrors] = useState<ValidationError[]>([]);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
@@ -146,10 +163,10 @@ export function BraitenbergDiagram() {
       setShowCodeDialog(true);
       return;
     }
-    const graph = buildGraph(nodes, connections);
+    const graph = buildGraph(nodes, connections, loopPeriodMs);
     setGeneratedCode(generateSketch(graph));
     setShowCodeDialog(true);
-  }, [nodes, connections]);
+  }, [nodes, connections, loopPeriodMs]);
 
   const handleCopyCode = useCallback(() => {
     if (generatedCode) {
@@ -403,6 +420,20 @@ export function BraitenbergDiagram() {
             <small>{nodeType.kind}</small>
           </div>
         ))}
+        <label className="palette-setting">
+          Loop Period (ms)
+          <input
+            type="number"
+            min="1"
+            max="1000"
+            step="1"
+            value={loopPeriodMs}
+            onChange={(e) => {
+              const v = Number.parseInt(e.target.value, 10);
+              if (Number.isFinite(v) && v >= 1) setLoopPeriodMs(Math.min(1000, v));
+            }}
+          />
+        </label>
         <button
           className="palette-generate"
           onClick={handleGenerate}
@@ -467,6 +498,7 @@ export function BraitenbergDiagram() {
               key={connection.id}
               className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
               d={connection.d}
+              style={{ stroke: weightToColor(connection.weight) }}
             />
           ))}
           {linkDraftSource && nodeMap[linkDraftSource] && (

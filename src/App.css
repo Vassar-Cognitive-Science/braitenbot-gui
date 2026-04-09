@@ -332,6 +332,23 @@ body {
   font-size: 0.8rem;
 }
  
+.palette-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.palette-setting input {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #131516;
+  padding: 0.42rem 0.48rem;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
 .palette-generate {
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--accent);
