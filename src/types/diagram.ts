@@ -1,6 +1,6 @@
-export type NodeKind = 'sensor' | 'compute' | 'motor';
+export type NodeKind = 'sensor' | 'compute' | 'motor' | 'constant';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
-export type ComputeMode = 'threshold' | 'comparator' | 'delay';
+export type ComputeMode = 'threshold' | 'comparator' | 'delay' | 'summation';
 export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
@@ -8,6 +8,8 @@ export type NodeTypeId =
   | 'compute-threshold'
   | 'compute-comparator'
   | 'compute-delay'
+  | 'compute-summation'
+  | 'constant'
   | 'motor';
 
 export interface NodeTypeDefinition {
@@ -31,6 +33,14 @@ export interface DiagramNode {
   comparatorOp?: string;
   motorPinFwd?: string;
   motorPinRev?: string;
+  constantValue?: number;
+}
+
+export type TransferMode = 'linear' | 'nonlinear';
+
+export interface TransferPoint {
+  x: number; // input  0–1 (normalized sensor signal)
+  y: number; // output -1 to 1
 }
 
 export interface DiagramConnection {
@@ -38,6 +48,8 @@ export interface DiagramConnection {
   from: string;
   to: string;
   weight: number;
+  transferMode: TransferMode;
+  transferPoints: TransferPoint[];
 }
 
 export const NODE_TYPES: NodeTypeDefinition[] = [
@@ -47,6 +59,8 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
   { id: 'compute-comparator', kind: 'compute', displayName: 'Comparator', metaLabel: 'comparator', mode: 'comparator' },
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
+  { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },
+  { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
   { id: 'motor', kind: 'motor', displayName: 'Motor', metaLabel: 'actuator' },
 ];
 

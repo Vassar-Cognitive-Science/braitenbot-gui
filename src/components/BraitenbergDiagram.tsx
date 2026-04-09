@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent } from 'react';
-import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol } from '../types/diagram';
+import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
+import { TransferCurveEditor } from './TransferCurveEditor';
+import { useTraceSimulation } from '../hooks/useTraceSimulation';
 
 const NODE_W = 148;
 const NODE_H = 64;
@@ -33,7 +35,7 @@ function canOutput(nodeType: NodeTypeDefinition): boolean {
 }
 
 function canInput(nodeType: NodeTypeDefinition): boolean {
-  return nodeType.kind !== 'sensor';
+  return nodeType.kind !== 'sensor' && nodeType.kind !== 'constant';
 }
 
 function makePath(x1: number, y1: number, x2: number, y2: number): string {
@@ -140,7 +142,15 @@ export function BraitenbergDiagram() {
   const codeDialogRef = useRef<HTMLDialogElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const fallbackIdCounterRef = useRef(0);
+  const [traceMode, setTraceMode] = useState(false);
+  const [sensorValues, setSensorValues] = useState<Record<string, number>>({});
   const undoStackRef = useRef<{ nodes: DiagramNode[]; connections: DiagramConnection[] }[]>([]);
+
+  const traceValues = useTraceSimulation(
+    traceMode ? nodes : [],
+    traceMode ? connections : [],
+    sensorValues,
+  );
 
   const pushUndo = useCallback(() => {
     undoStackRef.current.push({ nodes: structuredClone(nodes), connections: structuredClone(connections) });
@@ -367,9 +377,10 @@ export function BraitenbergDiagram() {
           x,
           y,
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
-          threshold: nodeType.mode === 'threshold' ? 512 : undefined,
+          threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
           comparatorOp: nodeType.mode === 'comparator' ? '>' : undefined,
+          constantValue: nodeType.kind === 'constant' ? 512 : undefined,
         },
       ];
     });
@@ -394,7 +405,14 @@ export function BraitenbergDiagram() {
     pushUndo();
     setConnections((prev) => [
       ...prev,
-      { id: makeId('link'), from: linkDraftSource, to: toId, weight: DEFAULT_CONNECTION_WEIGHT },
+      {
+        id: makeId('link'),
+        from: linkDraftSource,
+        to: toId,
+        weight: DEFAULT_CONNECTION_WEIGHT,
+        transferMode: 'linear',
+        transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+      },
     ]);
     setLinkDraftSource(null);
   };
@@ -450,6 +468,12 @@ export function BraitenbergDiagram() {
           }}
         >
           Reset diagram
+        </button>
+        <button
+          className={`palette-trace ${traceMode ? 'active' : ''}`}
+          onClick={() => setTraceMode((v) => !v)}
+        >
+          {traceMode ? 'Exit Trace Mode' : 'Trace Signal Flow'}
         </button>
       </aside>
 
@@ -537,9 +561,13 @@ export function BraitenbergDiagram() {
             nodeMeta = `${nodeType.metaLabel} • ${node.delayMs}ms`;
           } else if (nodeType.mode === 'comparator' && node.comparatorOp) {
             nodeMeta = `${nodeType.metaLabel} • ${node.comparatorOp}`;
+          } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
+            nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
           } else if (nodeType.kind === 'motor' && node.motorPinFwd?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pins ${node.motorPinFwd.trim()}/${node.motorPinRev?.trim() || '?'}`;
           }
+
+          const traceVal = traceMode ? traceValues[node.id] : undefined;
 
           return (
             <div
@@ -551,6 +579,25 @@ export function BraitenbergDiagram() {
             >
               <div className="node-label">{node.label}</div>
               <div className="node-meta">{nodeMeta}</div>
+              {traceVal !== undefined && (
+                <span className="trace-badge">{traceVal.toFixed(2)}</span>
+              )}
+              {traceMode && nodeType.kind === 'sensor' && (
+                <input
+                  type="range"
+                  className="trace-slider"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={sensorValues[node.id] ?? 0.5}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setSensorValues((prev) => ({ ...prev, [node.id]: v }));
+                  }}
+                />
+              )}
               {canOutput(nodeType) && (
                 <button
                   className="node-handle output-handle"
@@ -598,6 +645,11 @@ export function BraitenbergDiagram() {
                 {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
                   TYPE_BY_ID[selectedNode.type].mode === 'delay' &&
                   'Delays the input signal by the configured number of milliseconds before passing it on.'}
+                {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+                  TYPE_BY_ID[selectedNode.type].mode === 'summation' &&
+                  'Sums all weighted input signals and outputs the total.'}
+                {TYPE_BY_ID[selectedNode.type].kind === 'constant' &&
+                  'Emits a fixed constant value to all connected nodes.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'motor' &&
                   'Drives a wheel motor on the robot. Speed and direction are determined by incoming connection weights.'}
               </p>
@@ -641,13 +693,13 @@ export function BraitenbergDiagram() {
                   Threshold Value
                   <input
                     type="number"
-                    min="0"
-                    max="1023"
-                    step="1"
-                    value={selectedNode.threshold ?? 512}
+                    min="-1"
+                    max="1"
+                    step="0.01"
+                    value={selectedNode.threshold ?? 0.5}
                     onChange={(event) => {
-                      const parsed = Number.parseInt(event.target.value, 10);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1023, parsed)) : 512;
+                      const parsed = Number.parseFloat(event.target.value);
+                      const value = Number.isFinite(parsed) ? Math.max(-1, Math.min(1, parsed)) : 0.5;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, threshold: value } : node,
@@ -696,6 +748,28 @@ export function BraitenbergDiagram() {
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, delayMs: value } : node,
+                        ),
+                      );
+                    }}
+                  />
+                </label>
+              )}
+
+              {TYPE_BY_ID[selectedNode.type].kind === 'constant' && (
+                <label>
+                  Constant Value
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={selectedNode.constantValue ?? 0.5}
+                    onChange={(event) => {
+                      const parsed = Number.parseFloat(event.target.value);
+                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id ? { ...node, constantValue: value } : node,
                         ),
                       );
                     }}
@@ -755,44 +829,90 @@ export function BraitenbergDiagram() {
           {selectedConnection && (
             <div className="config-section">
               <label>
-                Connection Weight
-                <input
-                  type="range"
-                  min="-1"
-                  max="1"
-                  step="0.05"
-                  value={selectedConnection.weight}
+                Transfer Function
+                <select
+                  value={selectedConnection.transferMode ?? 'linear'}
                   onChange={(event) => {
-                    const value = clampWeight(parseFloat(event.target.value));
+                    const mode = event.target.value as 'linear' | 'nonlinear';
                     setConnections((prev) =>
                       prev.map((connection) =>
-                        connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                        connection.id === selectedConnection.id
+                          ? {
+                              ...connection,
+                              transferMode: mode,
+                              transferPoints: connection.transferPoints?.length
+                                ? connection.transferPoints
+                                : [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+                            }
+                          : connection,
                       ),
                     );
                   }}
-                />
+                >
+                  <option value="linear">Linear (weight)</option>
+                  <option value="nonlinear">Non-linear (curve)</option>
+                </select>
               </label>
-              <label>
-                Numeric Weight
-                <input
-                  type="number"
-                  min="-1"
-                  max="1"
-                  step="0.05"
-                  value={selectedConnection.weight}
-                  onChange={(event) => {
-                    const parsed = Number.parseFloat(event.target.value);
-                    const value = Number.isFinite(parsed)
-                      ? clampWeight(parsed)
-                      : DEFAULT_CONNECTION_WEIGHT;
+
+              {(selectedConnection.transferMode ?? 'linear') === 'linear' && (
+                <>
+                  <label>
+                    Connection Weight
+                    <input
+                      type="range"
+                      min="-1"
+                      max="1"
+                      step="0.05"
+                      value={selectedConnection.weight}
+                      onChange={(event) => {
+                        const value = clampWeight(parseFloat(event.target.value));
+                        setConnections((prev) =>
+                          prev.map((connection) =>
+                            connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Numeric Weight
+                    <input
+                      type="number"
+                      min="-1"
+                      max="1"
+                      step="0.05"
+                      value={selectedConnection.weight}
+                      onChange={(event) => {
+                        const parsed = Number.parseFloat(event.target.value);
+                        const value = Number.isFinite(parsed)
+                          ? clampWeight(parsed)
+                          : DEFAULT_CONNECTION_WEIGHT;
+                        setConnections((prev) =>
+                          prev.map((connection) =>
+                            connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+
+              {selectedConnection.transferMode === 'nonlinear' && (
+                <TransferCurveEditor
+                  points={selectedConnection.transferPoints ?? [{ x: 0, y: 0 }, { x: 1, y: 1 }]}
+                  onChange={(pts: TransferPoint[]) =>
                     setConnections((prev) =>
                       prev.map((connection) =>
-                        connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                        connection.id === selectedConnection.id
+                          ? { ...connection, transferPoints: pts }
+                          : connection,
                       ),
-                    );
-                  }}
+                    )
+                  }
                 />
-              </label>
+              )}
+
               <button
                 className="config-delete"
                 onClick={() => deleteConnection(selectedConnection.id)}

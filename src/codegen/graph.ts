@@ -14,12 +14,15 @@ export interface GraphNode {
   comparatorOp?: string;
   motorPinFwd?: string;
   motorPinRev?: string;
+  constantValue?: number;
 }
 
 export interface GraphEdge {
   from: string;
   to: string;
   weight: number;
+  transferMode: 'linear' | 'nonlinear';
+  transferPoints: { x: number; y: number }[];
 }
 
 export interface WiringGraph {
@@ -48,6 +51,7 @@ export function buildGraph(
       comparatorOp: node.comparatorOp,
       motorPinFwd: node.motorPinFwd,
       motorPinRev: node.motorPinRev,
+      constantValue: node.constantValue,
     };
   });
 
@@ -55,6 +59,8 @@ export function buildGraph(
     from: conn.from,
     to: conn.to,
     weight: conn.weight,
+    transferMode: conn.transferMode,
+    transferPoints: conn.transferPoints,
   }));
 
   const nodeIds = graphNodes.map((n) => n.id);

@@ -15,11 +15,12 @@ export function validateGraph(
   const errors: ValidationError[] = [];
 
   const sensors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'sensor');
+  const constants = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'constant');
   const motors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'motor');
 
-  // 1. No sensor nodes
-  if (sensors.length === 0) {
-    errors.push({ message: 'Diagram has no sensor nodes', severity: 'error' });
+  // 1. No source nodes (sensors or constants)
+  if (sensors.length === 0 && constants.length === 0) {
+    errors.push({ message: 'Diagram has no source nodes (sensors or constants)', severity: 'error' });
   }
 
   // 2. Sensor missing arduinoPort
@@ -57,7 +58,7 @@ export function validateGraph(
   for (const conn of connections) {
     adjacency.get(conn.from)?.push(conn.to);
   }
-  const queue = sensors.map((s) => s.id);
+  const queue = [...sensors, ...constants].map((s) => s.id);
   for (const id of queue) {
     if (reachable.has(id)) continue;
     reachable.add(id);

@@ -33,6 +33,8 @@ function makeConnection(overrides: Partial<DiagramConnection> = {}): DiagramConn
     from: 'sensor-1',
     to: 'motor-left',
     weight: 1,
+    transferMode: 'linear',
+    transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
     ...overrides,
   };
 }
@@ -48,7 +50,7 @@ describe('validateGraph', () => {
   it('reports missing sensor nodes', () => {
     const nodes = [makeMotor()];
     const errors = validateGraph(nodes, []);
-    expect(errors.some((e) => e.message.includes('no sensor nodes'))).toBe(true);
+    expect(errors.some((e) => e.message.includes('no source nodes'))).toBe(true);
   });
 
   it('reports sensor missing arduino port', () => {

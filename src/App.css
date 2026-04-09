@@ -198,6 +198,10 @@ body {
   border-left: 2px solid #7f9cff;
 }
  
+.node-constant {
+  border-left: 2px solid #a8d8a8;
+}
+
 .node-motor {
   border-left: 2px solid var(--accent);
 }
@@ -332,6 +336,75 @@ body {
   font-size: 0.8rem;
 }
  
+.transfer-curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.transfer-curve-svg {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: crosshair;
+  background: #0d0e0f;
+}
+
+.transfer-bg {
+  fill: #0d0e0f;
+}
+
+.transfer-grid {
+  stroke: #2a2d30;
+  stroke-width: 0.5;
+}
+
+.transfer-zero {
+  stroke: #4a4d50;
+  stroke-width: 1;
+}
+
+.transfer-tick {
+  fill: var(--muted);
+  font-size: 8px;
+}
+
+.transfer-axis-label {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.transfer-identity {
+  stroke: #3a3d40;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.transfer-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+}
+
+.transfer-point {
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.transfer-point.dragging {
+  fill: #f5e37b;
+  stroke: #f5e37b;
+  cursor: grabbing;
+}
+
+.transfer-curve-hint {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-align: center;
+}
+
 .palette-setting {
   display: flex;
   flex-direction: column;
@@ -469,6 +542,57 @@ body {
   color: var(--muted);
   font-size: 0.8rem;
   text-align: center;
+}
+
+/* Trace mode */
+
+.palette-trace {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #7f9cff;
+  background: rgba(127, 156, 255, 0.1);
+  color: #7f9cff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.palette-trace:hover {
+  background: rgba(127, 156, 255, 0.2);
+}
+
+.palette-trace.active {
+  background: rgba(127, 156, 255, 0.25);
+  border-color: #a0b8ff;
+  color: #a0b8ff;
+}
+
+.trace-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: #1a1e2e;
+  border: 1px solid #7f9cff;
+  color: #a0b8ff;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  z-index: 3;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-slider {
+  position: absolute;
+  bottom: -20px;
+  left: 8px;
+  right: 8px;
+  width: calc(100% - 16px);
+  height: 14px;
+  accent-color: #f5a35c;
+  cursor: pointer;
+  z-index: 3;
 }
 
 @media (max-width: 860px) {
