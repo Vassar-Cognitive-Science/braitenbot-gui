@@ -16,7 +16,8 @@ type NodeTypeId =
 interface NodeTypeDefinition {
   id: NodeTypeId;
   kind: NodeKind;
-  label: string;
+  displayName: string;
+  metaLabel: string;
   protocol?: SensorProtocol;
   mode?: ComputeMode;
 }
@@ -39,13 +40,13 @@ const NODE_W = 148;
 const NODE_H = 64;
 
 const NODE_TYPES: NodeTypeDefinition[] = [
-  { id: 'sensor-analog', kind: 'sensor', label: 'Analog Sensor', protocol: 'analog' },
-  { id: 'sensor-digital', kind: 'sensor', label: 'Digital Sensor', protocol: 'digital' },
-  { id: 'sensor-i2c', kind: 'sensor', label: 'I2C Sensor', protocol: 'i2c' },
-  { id: 'compute-threshold', kind: 'compute', label: 'Threshold', mode: 'threshold' },
-  { id: 'compute-comparator', kind: 'compute', label: 'Comparator', mode: 'comparator' },
-  { id: 'compute-delay', kind: 'compute', label: 'Delay', mode: 'delay' },
-  { id: 'motor', kind: 'motor', label: 'Motor' },
+  { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
+  { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital' },
+  { id: 'sensor-i2c', kind: 'sensor', displayName: 'I2C Sensor', metaLabel: 'i2c', protocol: 'i2c' },
+  { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
+  { id: 'compute-comparator', kind: 'compute', displayName: 'Comparator', metaLabel: 'comparator', mode: 'comparator' },
+  { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
+  { id: 'motor', kind: 'motor', displayName: 'Motor', metaLabel: 'actuator' },
 ];
 
 const TYPE_BY_ID = Object.fromEntries(
@@ -81,6 +82,15 @@ export function BraitenbergDiagram() {
   const [linkDraftSource, setLinkDraftSource] = useState<string | null>(null);
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const fallbackIdCounterRef = useRef(0);
+
+  const makeId = (prefix: string): string => {
+    const uuid =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `fallback-${(fallbackIdCounterRef.current++).toString(36).padStart(8, '0')}`;
+    return `${prefix}-${uuid.replace(/-/g, '').slice(0, 12)}`;
+  };
 
   const nodeMap = useMemo(
     () => Object.fromEntries(nodes.map((n) => [n.id, n])) as Record<string, DiagramNode>,
@@ -152,10 +162,12 @@ export function BraitenbergDiagram() {
     const x = event.clientX - rect.left - NODE_W / 2;
     const y = event.clientY - rect.top - NODE_H / 2;
 
-    const id = `${nodeTypeId}-${crypto.randomUUID().slice(0, 8)}`;
-    const count = nodes.filter((node) => node.type === nodeTypeId).length + 1;
-    const baseLabel = TYPE_BY_ID[nodeTypeId].label;
-    setNodes((prev) => [...prev, { id, type: nodeTypeId, label: `${baseLabel} ${count}`, x, y }]);
+    const id = makeId(nodeTypeId);
+    const baseLabel = TYPE_BY_ID[nodeTypeId].displayName;
+    setNodes((prev) => {
+      const nodeNumber = prev.filter((node) => node.type === nodeTypeId).length + 1;
+      return [...prev, { id, type: nodeTypeId, label: `${baseLabel} ${nodeNumber}`, x, y }];
+    });
   };
 
   const canConnect = (fromId: string, toId: string): boolean => {
@@ -176,7 +188,7 @@ export function BraitenbergDiagram() {
     }
     setConnections((prev) => [
       ...prev,
-      { id: `link-${crypto.randomUUID().slice(0, 8)}`, from: linkDraftSource, to: toId },
+      { id: makeId('link'), from: linkDraftSource, to: toId },
     ]);
     setLinkDraftSource(null);
   };
@@ -192,7 +204,7 @@ export function BraitenbergDiagram() {
             draggable
             onDragStart={(event) => event.dataTransfer.setData('application/x-node-type', nodeType.id)}
           >
-            <span>{nodeType.label}</span>
+            <span>{nodeType.displayName}</span>
             <small>{nodeType.kind}</small>
           </div>
         ))}
@@ -243,7 +255,7 @@ export function BraitenbergDiagram() {
             >
               <div className="node-label">{node.label}</div>
               <div className="node-meta">
-                {nodeType.protocol ?? nodeType.mode ?? nodeType.kind}
+                {nodeType.metaLabel}
               </div>
               {canOutput(nodeType) && (
                 <button

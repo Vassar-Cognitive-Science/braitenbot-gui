@@ -126,7 +126,7 @@ body {
 }
 
 .diagram-links .draft-link {
-  stroke: #9da3a7;
+  stroke: var(--muted);
   stroke-dasharray: 5 5;
 }
 

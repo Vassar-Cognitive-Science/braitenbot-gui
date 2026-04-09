@@ -7,7 +7,7 @@ export function App() {
       <main className="app-main">
         <header className="minimal-header">
           <h1>BraitenBot Diagram Editor</h1>
-          <p>Drag sensors and computation nodes onto the canvas, then drag links into motors.</p>
+          <p>Drag sensors and computation nodes onto the canvas, then drag outputs to connect into motors.</p>
         </header>
         <BraitenbergDiagram />
       </main>
