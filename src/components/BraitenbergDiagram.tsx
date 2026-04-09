@@ -5,7 +5,7 @@ import { NODE_TYPES, TYPE_BY_ID } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
-import { useTraceSimulation } from '../hooks/useTraceSimulation';
+import { useTraceSimulation, formatTraceValue } from '../hooks/useTraceSimulation';
 
 const NODE_W = 148;
 const NODE_H = 64;
@@ -57,18 +57,36 @@ function clampWeight(value: number): number {
 }
 
 function weightToColor(weight: number): string {
+  // Warm ink-like tones: positive → muted green, negative → muted rust
   if (weight >= 0) {
     const t = weight;
-    const r = Math.round(80 * (1 - t));
-    const g = Math.round(80 + 120 * t);
-    const b = Math.round(80 * (1 - t));
+    const r = Math.round(70 + 10 * (1 - t));
+    const g = Math.round(80 + 90 * t);
+    const b = Math.round(50 + 20 * (1 - t));
     return `rgb(${r},${g},${b})`;
   } else {
     const t = -weight;
-    const r = Math.round(80 + 150 * t);
+    const r = Math.round(90 + 110 * t);
     const g = Math.round(80 * (1 - t));
-    const b = Math.round(80 * (1 - t));
+    const b = Math.round(50 * (1 - t));
     return `rgb(${r},${g},${b})`;
+  }
+}
+
+function signalToStroke(signal: number): { color: string; width: number; opacity: number } {
+  const abs = Math.min(Math.abs(signal), 1);
+  const width = 1.2 + abs * 2.5;
+  const opacity = 0.4 + abs * 0.6;
+  if (signal >= 0) {
+    const r = Math.round(70 + 10 * (1 - abs));
+    const g = Math.round(100 + 70 * abs);
+    const b = Math.round(50 + 20 * (1 - abs));
+    return { color: `rgb(${r},${g},${b})`, width, opacity };
+  } else {
+    const r = Math.round(130 + 70 * abs);
+    const g = Math.round(90 * (1 - abs));
+    const b = Math.round(50 * (1 - abs));
+    return { color: `rgb(${r},${g},${b})`, width, opacity };
   }
 }
 
@@ -146,7 +164,7 @@ export function BraitenbergDiagram() {
   const [sensorValues, setSensorValues] = useState<Record<string, number>>({});
   const undoStackRef = useRef<{ nodes: DiagramNode[]; connections: DiagramConnection[] }[]>([]);
 
-  const traceValues = useTraceSimulation(
+  const traceResult = useTraceSimulation(
     traceMode ? nodes : [],
     traceMode ? connections : [],
     sensorValues,
@@ -438,6 +456,14 @@ export function BraitenbergDiagram() {
             <small>{nodeType.kind}</small>
           </div>
         ))}
+        <h2>Tools</h2>
+        <button
+          className={`palette-trace ${traceMode ? 'active' : ''}`}
+          onClick={() => setTraceMode((v) => !v)}
+        >
+          {traceMode ? 'Exit Trace Mode' : 'Trace Signal Flow'}
+        </button>
+        <h2>Output</h2>
         <label className="palette-setting">
           Loop Period (ms)
           <input
@@ -469,22 +495,22 @@ export function BraitenbergDiagram() {
         >
           Reset diagram
         </button>
-        <button
-          className={`palette-trace ${traceMode ? 'active' : ''}`}
-          onClick={() => setTraceMode((v) => !v)}
-        >
-          {traceMode ? 'Exit Trace Mode' : 'Trace Signal Flow'}
-        </button>
       </aside>
 
       <div
         ref={canvasRef}
-        className="diagram-canvas"
+        className={`diagram-canvas ${traceMode ? 'trace-active' : ''}`}
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDropNode}
         onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasMouseUp}
       >
+        {traceMode && (
+          <div className="trace-banner">
+            <span>Trace Mode</span> — set sensor values to see signal propagation
+            <button className="trace-banner-close" onClick={() => setTraceMode(false)}>Exit</button>
+          </div>
+        )}
         <div
           className="robot-overlay robot-body"
           style={{
@@ -517,14 +543,21 @@ export function BraitenbergDiagram() {
         />
 
         <svg className="diagram-links" aria-hidden="true">
-          {connectionPaths.map((connection) => (
-            <path
-              key={connection.id}
-              className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
-              d={connection.d}
-              style={{ stroke: weightToColor(connection.weight) }}
-            />
-          ))}
+          {connectionPaths.map((connection) => {
+            const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
+            const stroke = edgeSignal !== undefined ? signalToStroke(edgeSignal) : null;
+            return (
+              <path
+                key={connection.id}
+                className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
+                d={connection.d}
+                style={stroke
+                  ? { stroke: stroke.color, strokeWidth: stroke.width, opacity: stroke.opacity }
+                  : { stroke: weightToColor(connection.weight) }
+                }
+              />
+            );
+          })}
           {linkDraftSource && nodeMap[linkDraftSource] && (
             <path
               className="draft-link"
@@ -538,22 +571,33 @@ export function BraitenbergDiagram() {
           )}
         </svg>
 
-        {connectionPaths.map((connection) => (
-          <button
-            key={`${connection.id}-config`}
-            className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
-            style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={() => setConfigTarget({ kind: 'connection', id: connection.id })}
-          >
-            w {connection.weight.toFixed(2)}
-          </button>
-        ))}
+        {connectionPaths.map((connection) => {
+          const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
+          return (
+            <button
+              key={`${connection.id}-config`}
+              className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''}`}
+              style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={() => setConfigTarget({ kind: 'connection', id: connection.id })}
+            >
+              {edgeSignal !== undefined
+                ? formatTraceValue(edgeSignal)
+                : `w ${connection.weight.toFixed(2)}`}
+            </button>
+          );
+        })}
 
         {nodes.map((node) => {
           const nodeType = TYPE_BY_ID[node.type];
-          let nodeMeta = nodeType.metaLabel;
-          if (supportsArduinoPort(nodeType) && node.arduinoPort?.trim()) {
+          const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
+          const isDisconnected = traceMode && traceResult.disconnected.has(node.id);
+          const hasSlider = traceMode && (nodeType.kind === 'sensor' || nodeType.kind === 'constant');
+
+          let nodeMeta: string;
+          if (traceVal !== undefined) {
+            nodeMeta = `output: ${formatTraceValue(traceVal)}`;
+          } else if (supportsArduinoPort(nodeType) && node.arduinoPort?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • port ${node.arduinoPort.trim()}`;
           } else if (nodeType.mode === 'threshold' && node.threshold !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.threshold}`;
@@ -565,38 +609,55 @@ export function BraitenbergDiagram() {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
           } else if (nodeType.kind === 'motor' && node.motorPinFwd?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pins ${node.motorPinFwd.trim()}/${node.motorPinRev?.trim() || '?'}`;
+          } else {
+            nodeMeta = nodeType.metaLabel;
           }
-
-          const traceVal = traceMode ? traceValues[node.id] : undefined;
 
           return (
             <div
               key={node.id}
-              className={`diagram-node node-${nodeType.kind} ${selectedNode?.id === node.id ? 'selected' : ''}`}
+              className={[
+                'diagram-node',
+                `node-${nodeType.kind}`,
+                selectedNode?.id === node.id ? 'selected' : '',
+                isDisconnected ? 'trace-disconnected' : '',
+                hasSlider ? 'trace-expanded' : '',
+              ].filter(Boolean).join(' ')}
               style={{ left: `${node.x}px`, top: `${node.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
               onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
             >
               <div className="node-label">{node.label}</div>
-              <div className="node-meta">{nodeMeta}</div>
-              {traceVal !== undefined && (
-                <span className="trace-badge">{traceVal.toFixed(2)}</span>
-              )}
-              {traceMode && nodeType.kind === 'sensor' && (
-                <input
-                  type="range"
-                  className="trace-slider"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={sensorValues[node.id] ?? 0.5}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    setSensorValues((prev) => ({ ...prev, [node.id]: v }));
-                  }}
-                />
+              <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
+              {hasSlider && (
+                <div className="trace-slider-row">
+                  <span className="trace-slider-label">0</span>
+                  <input
+                    type="range"
+                    className="trace-slider"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={nodeType.kind === 'sensor'
+                      ? (sensorValues[node.id] ?? 0.5)
+                      : (node.constantValue ?? 0.5)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (nodeType.kind === 'sensor') {
+                        setSensorValues((prev) => ({ ...prev, [node.id]: v }));
+                      } else {
+                        setNodes((prev) =>
+                          prev.map((n) =>
+                            n.id === node.id ? { ...n, constantValue: v } : n,
+                          ),
+                        );
+                      }
+                    }}
+                  />
+                  <span className="trace-slider-label">1</span>
+                </div>
               )}
               {canOutput(nodeType) && (
                 <button
