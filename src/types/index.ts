@@ -1,3 +1,5 @@
+export * from './diagram';
+
 /** Connection weights for a Braitenberg vehicle.
  * Each weight represents a sensor-to-motor connection.
  * Positive = excitatory, negative = inhibitory, zero = no connection.

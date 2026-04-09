@@ -9,50 +9,50 @@
   --muted: #9da3a7;
   --accent: #79c58f;
 }
-
+ 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
-
+ 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
 }
-
+ 
 #root,
 .app {
   min-height: 100vh;
 }
-
+ 
 .app-main {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
 }
-
+ 
 .minimal-header h1 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
 }
-
+ 
 .minimal-header p {
   margin: 0.35rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
 }
-
+ 
 .diagram-layout {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
   gap: 1rem;
   min-height: calc(100vh - 110px);
 }
-
+ 
 .node-palette {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -62,7 +62,7 @@ body {
   flex-direction: column;
   gap: 0.55rem;
 }
-
+ 
 .node-palette h2 {
   margin: 0 0 0.25rem;
   font-size: 0.8rem;
@@ -70,7 +70,7 @@ body {
   letter-spacing: 0.08em;
   color: var(--muted);
 }
-
+ 
 .palette-item {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -83,12 +83,12 @@ body {
   gap: 0.5rem;
   user-select: none;
 }
-
+ 
 .palette-item small {
   color: var(--muted);
   text-transform: capitalize;
 }
-
+ 
 .palette-reset {
   margin-top: auto;
   padding: 0.55rem 0.65rem;
@@ -98,7 +98,7 @@ body {
   border-radius: 8px;
   cursor: pointer;
 }
-
+ 
 .diagram-canvas {
   position: relative;
   overflow: hidden;
@@ -109,7 +109,7 @@ body {
     linear-gradient(to bottom, #191b1d 1px, transparent 1px) 0 0 / 24px 24px,
     var(--surface);
 }
-
+ 
 .diagram-links {
   position: absolute;
   inset: 0;
@@ -117,47 +117,49 @@ body {
   height: 100%;
   pointer-events: none;
 }
-
+ 
 .diagram-links path {
   stroke: var(--accent);
   stroke-width: 2;
   fill: none;
   opacity: 0.95;
 }
-
+ 
 .diagram-links .draft-link {
   stroke: var(--muted);
   stroke-dasharray: 5 5;
 }
-
+ 
 .diagram-links .connection-link {
   opacity: 0.8;
 }
-
+ 
 .diagram-links .connection-link.selected {
   stroke: #f5e37b;
   stroke-width: 2.3;
   opacity: 1;
 }
-
+ 
 .robot-overlay {
   position: absolute;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
-
+ 
 .robot-body {
   border: 2px solid #495158;
   border-radius: 50%;
   background: radial-gradient(circle at 40% 40%, rgba(63, 70, 76, 0.2), rgba(15, 16, 17, 0.1));
 }
-
+ 
 .robot-wheel {
   border: 1px solid #5e666d;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(88, 95, 101, 0.3), rgba(38, 42, 46, 0.7));
+  border-radius: 5px;
+  background: linear-gradient(to right, rgba(38, 42, 46, 0.7), rgba(88, 95, 101, 0.3), rgba(38, 42, 46, 0.7));
 }
-
+ 
 .diagram-node {
   position: absolute;
   width: 148px;
@@ -169,17 +171,17 @@ body {
   cursor: move;
   z-index: 2;
 }
-
+ 
 .diagram-node.selected {
   box-shadow: 0 0 0 1px #f5e37b;
 }
-
+ 
 .diagram-node .node-label {
   font-size: 0.84rem;
   font-weight: 600;
   margin-right: 14px;
 }
-
+ 
 .diagram-node .node-meta {
   margin-top: 0.15rem;
   font-size: 0.72rem;
@@ -187,56 +189,40 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
-.node-config-trigger {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #1f2123;
-  color: var(--text);
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  font-size: 0.82rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
+ 
 .node-sensor {
   border-left: 2px solid #f5a35c;
 }
-
+ 
 .node-compute {
   border-left: 2px solid #7f9cff;
 }
-
+ 
 .node-motor {
   border-left: 2px solid var(--accent);
 }
-
+ 
 .node-handle {
   position: absolute;
-  top: 50%;
+  left: 50%;
   width: 12px;
   height: 12px;
   border-radius: 50%;
   border: 1px solid #a2a8ad;
   background: #1f2123;
-  transform: translateY(-50%);
+  transform: translateX(-50%);
   padding: 0;
 }
 
 .output-handle {
-  right: -7px;
+  bottom: -7px;
   cursor: crosshair;
 }
 
 .input-handle {
-  left: -7px;
+  top: -7px;
 }
-
+ 
 .connection-config-trigger {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -249,12 +235,12 @@ body {
   border-radius: 6px;
   cursor: pointer;
 }
-
+ 
 .connection-config-trigger.selected {
   border-color: #f5e37b;
   color: #f5e37b;
 }
-
+ 
 .diagram-config-panel {
   position: absolute;
   top: 0.75rem;
@@ -269,13 +255,13 @@ body {
   flex-direction: column;
   gap: 0.6rem;
 }
-
+ 
 .config-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-
+ 
 .config-header h3 {
   margin: 0;
   font-size: 0.76rem;
@@ -283,7 +269,7 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
-
+ 
 .config-close {
   border: 1px solid var(--line);
   background: transparent;
@@ -293,17 +279,39 @@ body {
   height: 24px;
   cursor: pointer;
 }
-
+ 
 .config-empty {
   margin: 0;
   color: var(--muted);
   font-size: 0.78rem;
+}
+ 
+.config-description {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .config-section {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+ 
+.config-delete {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #c0392b;
+  border-radius: 6px;
+  background: rgba(192, 57, 43, 0.15);
+  color: #e74c3c;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.config-delete:hover {
+  background: rgba(192, 57, 43, 0.3);
 }
 
 .config-section label {
@@ -313,15 +321,137 @@ body {
   font-size: 0.75rem;
   color: var(--muted);
 }
-
+ 
 .config-section input[type='text'],
-.config-section input[type='number'] {
+.config-section input[type='number'],
+.config-section select {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #131516;
-  color: var(--text);
   padding: 0.42rem 0.48rem;
   font-size: 0.8rem;
+}
+ 
+.palette-generate {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--accent);
+  background: rgba(121, 197, 143, 0.12);
+  color: var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.palette-generate:hover {
+  background: rgba(121, 197, 143, 0.22);
+}
+
+.code-dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0;
+  max-width: 720px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.code-dialog-inner {
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.code-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.code-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.code-dialog-header h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.code-errors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.code-error-error {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(192, 57, 43, 0.15);
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  color: #e74c3c;
+  font-size: 0.78rem;
+}
+
+.code-error-warning {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(241, 196, 15, 0.1);
+  border: 1px solid rgba(241, 196, 15, 0.3);
+  color: #f1c40f;
+  font-size: 0.78rem;
+}
+
+.code-preview {
+  flex: 1;
+  overflow: auto;
+  background: #0d0e0f;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.8rem;
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.code-dialog-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.code-dialog-actions button {
+  flex: 1;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.code-dialog-actions button:hover {
+  background: var(--line);
+}
+
+.code-error-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
 }
 
 @media (max-width: 860px) {
@@ -329,7 +459,7 @@ body {
     grid-template-columns: 1fr;
     min-height: auto;
   }
-
+ 
   .diagram-canvas {
     min-height: 72vh;
   }
