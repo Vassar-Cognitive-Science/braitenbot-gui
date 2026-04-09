@@ -130,6 +130,34 @@ body {
   stroke-dasharray: 5 5;
 }
 
+.diagram-links .connection-link {
+  opacity: 0.8;
+}
+
+.diagram-links .connection-link.selected {
+  stroke: #f5e37b;
+  stroke-width: 2.3;
+  opacity: 1;
+}
+
+.robot-overlay {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.robot-body {
+  border: 2px solid #495158;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(63, 70, 76, 0.2), rgba(15, 16, 17, 0.1));
+}
+
+.robot-wheel {
+  border: 1px solid #5e666d;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(88, 95, 101, 0.3), rgba(38, 42, 46, 0.7));
+}
+
 .diagram-node {
   position: absolute;
   width: 148px;
@@ -139,6 +167,11 @@ body {
   border-radius: 8px;
   padding: 0.55rem;
   cursor: move;
+  z-index: 2;
+}
+
+.diagram-node.selected {
+  box-shadow: 0 0 0 1px #f5e37b;
 }
 
 .diagram-node .node-label {
@@ -153,6 +186,22 @@ body {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.node-config-trigger {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #1f2123;
+  color: var(--text);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .node-sensor {
@@ -186,6 +235,93 @@ body {
 
 .input-handle {
   left: -7px;
+}
+
+.connection-config-trigger {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  border: 1px solid #4d5358;
+  background: rgba(20, 22, 24, 0.95);
+  color: #d9dfe3;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.connection-config-trigger.selected {
+  border-color: #f5e37b;
+  color: #f5e37b;
+}
+
+.diagram-config-panel {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 230px;
+  z-index: 4;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(23, 25, 27, 0.96);
+  padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.config-header h3 {
+  margin: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.config-close {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.config-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.config-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.config-section input[type='text'],
+.config-section input[type='number'] {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #131516;
+  color: var(--text);
+  padding: 0.42rem 0.48rem;
+  font-size: 0.8rem;
 }
 
 @media (max-width: 860px) {

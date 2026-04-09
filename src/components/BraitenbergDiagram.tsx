@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent } from 'react';
 
 type NodeKind = 'sensor' | 'compute' | 'motor';
@@ -28,16 +28,32 @@ interface DiagramNode {
   label: string;
   x: number;
   y: number;
+  arduinoPort?: string;
 }
 
 interface DiagramConnection {
   id: string;
   from: string;
   to: string;
+  weight: number;
 }
 
 const NODE_W = 148;
 const NODE_H = 64;
+const DEFAULT_CONNECTION_WEIGHT = 1;
+const ANALOG_PORT_PLACEHOLDER = 'A0';
+const DIGITAL_PORT_PLACEHOLDER = '2';
+
+interface RobotOverlayLayout {
+  bodyCx: number;
+  bodyCy: number;
+  bodyRadius: number;
+  wheelRadius: number;
+  leftWheelCx: number;
+  leftWheelCy: number;
+  rightWheelCx: number;
+  rightWheelCy: number;
+}
 
 const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
@@ -52,11 +68,6 @@ const NODE_TYPES: NodeTypeDefinition[] = [
 const TYPE_BY_ID = Object.fromEntries(
   NODE_TYPES.map((nodeType) => [nodeType.id, nodeType] as const),
 ) as Record<NodeTypeId, NodeTypeDefinition>;
-
-const START_NODES: DiagramNode[] = [
-  { id: 'motor-left', type: 'motor', label: 'Left Motor', x: 620, y: 180 },
-  { id: 'motor-right', type: 'motor', label: 'Right Motor', x: 620, y: 300 },
-];
 
 const START_CONNECTIONS: DiagramConnection[] = [];
 
@@ -74,6 +85,65 @@ function makePath(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${x2} ${y2}`;
 }
 
+function supportsArduinoPort(nodeType: NodeTypeDefinition): boolean {
+  return nodeType.kind === 'sensor' && (nodeType.protocol === 'analog' || nodeType.protocol === 'digital');
+}
+
+function getArduinoPortPlaceholder(protocol?: SensorProtocol): string {
+  return protocol === 'analog' ? ANALOG_PORT_PLACEHOLDER : DIGITAL_PORT_PLACEHOLDER;
+}
+
+function clampWeight(value: number): number {
+  return Math.max(-1, Math.min(1, value));
+}
+
+function calculateRobotOverlay(canvasWidth: number, canvasHeight: number): RobotOverlayLayout {
+  const bodyDiameter = Math.max(260, Math.min(420, Math.min(canvasHeight * 0.74, canvasWidth * 0.46)));
+  const bodyRadius = bodyDiameter / 2;
+  const wheelRadius = bodyRadius * 0.27;
+  const wheelOffset = bodyRadius - wheelRadius * 0.8;
+  const horizontalPadding = bodyRadius + wheelRadius + 32;
+  const bodyCx = Math.min(
+    canvasWidth - horizontalPadding,
+    Math.max(horizontalPadding, canvasWidth * 0.67),
+  );
+  const bodyCy = Math.max(bodyRadius + 22, Math.min(canvasHeight - bodyRadius - 22, canvasHeight / 2));
+
+  return {
+    bodyCx,
+    bodyCy,
+    bodyRadius,
+    wheelRadius,
+    leftWheelCx: bodyCx - wheelOffset,
+    leftWheelCy: bodyCy,
+    rightWheelCx: bodyCx + wheelOffset,
+    rightWheelCy: bodyCy,
+  };
+}
+
+const INITIAL_ROBOT_LAYOUT = calculateRobotOverlay(960, 620);
+
+function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
+  return [
+    {
+      id: 'motor-left',
+      type: 'motor',
+      label: 'Left Motor',
+      x: layout.leftWheelCx - NODE_W / 2,
+      y: layout.leftWheelCy - NODE_H / 2,
+    },
+    {
+      id: 'motor-right',
+      type: 'motor',
+      label: 'Right Motor',
+      x: layout.rightWheelCx - NODE_W / 2,
+      y: layout.rightWheelCy - NODE_H / 2,
+    },
+  ];
+}
+
+const START_NODES: DiagramNode[] = makeMotorNodes(INITIAL_ROBOT_LAYOUT);
+
 export function BraitenbergDiagram() {
   const [nodes, setNodes] = useState<DiagramNode[]>(START_NODES);
   const [connections, setConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
@@ -81,6 +151,8 @@ export function BraitenbergDiagram() {
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
   const [linkDraftSource, setLinkDraftSource] = useState<string | null>(null);
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
+  const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
+  const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const fallbackIdCounterRef = useRef(0);
 
@@ -103,13 +175,46 @@ export function BraitenbergDiagram() {
         const from = nodeMap[connection.from];
         const to = nodeMap[connection.to];
         if (!from || !to) return null;
+        const x1 = from.x + NODE_W;
+        const y1 = from.y + NODE_H / 2;
+        const x2 = to.x;
+        const y2 = to.y + NODE_H / 2;
         return {
           id: connection.id,
-          d: makePath(from.x + NODE_W, from.y + NODE_H / 2, to.x, to.y + NODE_H / 2),
+          d: makePath(x1, y1, x2, y2),
+          weight: connection.weight,
+          midX: (x1 + x2) / 2,
+          midY: (y1 + y2) / 2,
         };
       })
-      .filter((item): item is { id: string; d: string } => item !== null);
+      .filter((item): item is { id: string; d: string; weight: number; midX: number; midY: number } => item !== null);
   }, [connections, nodeMap]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateLayout = () => {
+      const rect = canvas.getBoundingClientRect();
+      setRobotLayout(calculateRobotOverlay(rect.width, rect.height));
+    };
+
+    updateLayout();
+    const observer = new ResizeObserver(updateLayout);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!configTarget) return;
+    if (configTarget.kind === 'node' && !nodeMap[configTarget.id]) {
+      setConfigTarget(null);
+      return;
+    }
+    if (configTarget.kind === 'connection' && !connections.some((connection) => connection.id === configTarget.id)) {
+      setConfigTarget(null);
+    }
+  }, [configTarget, connections, nodeMap]);
 
   const beginNodeDrag = (event: MouseEvent, nodeId: string) => {
     const target = event.currentTarget as HTMLDivElement;
@@ -166,7 +271,18 @@ export function BraitenbergDiagram() {
     const baseLabel = TYPE_BY_ID[nodeTypeId].displayName;
     setNodes((prev) => {
       const nodeNumber = prev.filter((node) => node.type === nodeTypeId).length + 1;
-      return [...prev, { id, type: nodeTypeId, label: `${baseLabel} ${nodeNumber}`, x, y }];
+      const nodeType = TYPE_BY_ID[nodeTypeId];
+      return [
+        ...prev,
+        {
+          id,
+          type: nodeTypeId,
+          label: `${baseLabel} ${nodeNumber}`,
+          x,
+          y,
+          arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
+        },
+      ];
     });
   };
 
@@ -188,10 +304,16 @@ export function BraitenbergDiagram() {
     }
     setConnections((prev) => [
       ...prev,
-      { id: makeId('link'), from: linkDraftSource, to: toId },
+      { id: makeId('link'), from: linkDraftSource, to: toId, weight: DEFAULT_CONNECTION_WEIGHT },
     ]);
     setLinkDraftSource(null);
   };
+
+  const selectedNode = configTarget?.kind === 'node' ? nodeMap[configTarget.id] : null;
+  const selectedConnection =
+    configTarget?.kind === 'connection'
+      ? connections.find((connection) => connection.id === configTarget.id) ?? null
+      : null;
 
   return (
     <section className="diagram-layout">
@@ -211,8 +333,9 @@ export function BraitenbergDiagram() {
         <button
           className="palette-reset"
           onClick={() => {
-            setNodes(START_NODES);
+            setNodes(makeMotorNodes(robotLayout));
             setConnections(START_CONNECTIONS);
+            setConfigTarget(null);
           }}
         >
           Reset diagram
@@ -227,9 +350,44 @@ export function BraitenbergDiagram() {
         onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasMouseUp}
       >
+        <div
+          className="robot-overlay robot-body"
+          style={{
+            left: `${robotLayout.bodyCx}px`,
+            top: `${robotLayout.bodyCy}px`,
+            width: `${robotLayout.bodyRadius * 2}px`,
+            height: `${robotLayout.bodyRadius * 2}px`,
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="robot-overlay robot-wheel"
+          style={{
+            left: `${robotLayout.leftWheelCx}px`,
+            top: `${robotLayout.leftWheelCy}px`,
+            width: `${robotLayout.wheelRadius * 2}px`,
+            height: `${robotLayout.wheelRadius * 2}px`,
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="robot-overlay robot-wheel"
+          style={{
+            left: `${robotLayout.rightWheelCx}px`,
+            top: `${robotLayout.rightWheelCy}px`,
+            width: `${robotLayout.wheelRadius * 2}px`,
+            height: `${robotLayout.wheelRadius * 2}px`,
+          }}
+          aria-hidden="true"
+        />
+
         <svg className="diagram-links" aria-hidden="true">
           {connectionPaths.map((connection) => (
-            <path key={connection.id} d={connection.d} />
+            <path
+              key={connection.id}
+              className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
+              d={connection.d}
+            />
           ))}
           {linkDraftSource && nodeMap[linkDraftSource] && (
             <path
@@ -244,19 +402,41 @@ export function BraitenbergDiagram() {
           )}
         </svg>
 
+        {connectionPaths.map((connection) => (
+          <button
+            key={`${connection.id}-config`}
+            className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
+            style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={() => setConfigTarget({ kind: 'connection', id: connection.id })}
+          >
+            w {connection.weight.toFixed(2)}
+          </button>
+        ))}
+
         {nodes.map((node) => {
           const nodeType = TYPE_BY_ID[node.type];
+          const nodeMeta = supportsArduinoPort(nodeType) && node.arduinoPort?.trim()
+            ? `${nodeType.metaLabel} • port ${node.arduinoPort.trim()}`
+            : nodeType.metaLabel;
+
           return (
             <div
               key={node.id}
-              className={`diagram-node node-${nodeType.kind}`}
+              className={`diagram-node node-${nodeType.kind} ${selectedNode?.id === node.id ? 'selected' : ''}`}
               style={{ left: `${node.x}px`, top: `${node.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
             >
               <div className="node-label">{node.label}</div>
-              <div className="node-meta">
-                {nodeType.metaLabel}
-              </div>
+              <div className="node-meta">{nodeMeta}</div>
+              <button
+                className="node-config-trigger"
+                aria-label={`Configure ${node.label}`}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
+              >
+                ⚙
+              </button>
               {canOutput(nodeType) && (
                 <button
                   className="node-handle output-handle"
@@ -268,12 +448,111 @@ export function BraitenbergDiagram() {
                 <button
                   className="node-handle input-handle"
                   aria-label={`Connect to ${node.label}`}
+                  onMouseDown={(event) => event.stopPropagation()}
                   onMouseUp={() => completeLink(node.id)}
                 />
               )}
             </div>
           );
         })}
+
+        <aside className="diagram-config-panel" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="config-header">
+            <h3>Configuration</h3>
+            {configTarget && (
+              <button className="config-close" onClick={() => setConfigTarget(null)} aria-label="Close configuration">
+                ✕
+              </button>
+            )}
+          </div>
+
+          {!selectedNode && !selectedConnection && (
+            <p className="config-empty">Select a node or connection to configure it.</p>
+          )}
+
+          {selectedNode && (
+            <div className="config-section">
+              <label>
+                Node Label
+                <input
+                  type="text"
+                  value={selectedNode.label}
+                  onChange={(event) =>
+                    setNodes((prev) =>
+                      prev.map((node) =>
+                        node.id === selectedNode.id ? { ...node, label: event.target.value } : node,
+                      ),
+                    )
+                  }
+                />
+              </label>
+
+              {supportsArduinoPort(TYPE_BY_ID[selectedNode.type]) && (
+                <label>
+                  Arduino Port
+                  <input
+                    type="text"
+                    value={selectedNode.arduinoPort ?? ''}
+                    placeholder={getArduinoPortPlaceholder(TYPE_BY_ID[selectedNode.type].protocol)}
+                    onChange={(event) =>
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id
+                            ? { ...node, arduinoPort: event.target.value.trimStart() }
+                            : node,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          {selectedConnection && (
+            <div className="config-section">
+              <label>
+                Connection Weight
+                <input
+                  type="range"
+                  min="-1"
+                  max="1"
+                  step="0.05"
+                  value={selectedConnection.weight}
+                  onChange={(event) => {
+                    const value = clampWeight(parseFloat(event.target.value));
+                    setConnections((prev) =>
+                      prev.map((connection) =>
+                        connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <label>
+                Numeric Weight
+                <input
+                  type="number"
+                  min="-1"
+                  max="1"
+                  step="0.05"
+                  value={selectedConnection.weight}
+                  onChange={(event) => {
+                    const parsed = Number.parseFloat(event.target.value);
+                    const value = Number.isFinite(parsed)
+                      ? clampWeight(parsed)
+                      : DEFAULT_CONNECTION_WEIGHT;
+                    setConnections((prev) =>
+                      prev.map((connection) =>
+                        connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+            </div>
+          )}
+        </aside>
       </div>
     </section>
   );
