@@ -1,45 +1,25 @@
 # BraitenBot GUI
 
-A **Progressive Web Application** for programming Braitenberg-style robots via
-USB.  Built with TypeScript, React, and Vite.
+A **Progressive Web Application** for building Braitenberg-style robot wiring
+diagrams. Built with TypeScript, React, and Vite.
 
 ---
 
 ## What is a Braitenberg Vehicle?
 
 [Braitenberg Vehicles](https://en.wikipedia.org/wiki/Braitenberg_vehicle) are
-simple thought-experiment robots whose emergent behaviour (fear, aggression,
-love, curiosity) arises from wiring two sensors directly to two motors with
-different connection weights.  This GUI lets you design and visualise such
-wiring, simulate the result, and flash the configuration to an Arduino.
+simple thought-experiment robots whose emergent behaviour arises from wiring
+sensors to motors. This GUI focuses on composing those circuits visually.
 
 ## Features
 
 | Feature | Details |
 |---|---|
-| **Visual schematic** | SVG diagram of sensor → motor connections, styled by weight |
-| **Connection editor** | Four sliders (LL, LR, RL, RR) in the range −1 … +1 |
-| **Presets** | Vehicle 2a Coward · 2b Aggressor · 3a Lover · 3b Explorer |
-| **Physics simulation** | Real-time differential-drive canvas; draggable light source |
-| **USB upload** | Web Serial API (Chrome / Edge) uploads JSON weights to an Arduino |
+| **Diagram-first editor** | Main interface is a drag-and-drop vehicle circuit diagram |
+| **Extensible sensors** | Analog and digital sensor nodes now, schema supports protocol-specific types (for example I2C) |
+| **Connections by dragging** | Drag links from node outputs to valid node inputs |
+| **Intermediate compute nodes** | Threshold, comparator, and delay nodes can be inserted between sensors and motors |
 | **PWA** | Installable, offline-capable via Workbox service worker |
-
-## Arduino Protocol
-
-The GUI sends newline-delimited JSON over serial (115 200 baud):
-
-```json
-{"ll":0.8,"lr":0.0,"rl":0.0,"rr":0.8}
-```
-
-| Field | Meaning |
-|---|---|
-| `ll` | Left sensor → Left motor weight |
-| `lr` | Left sensor → Right motor weight |
-| `rl` | Right sensor → Left motor weight |
-| `rr` | Right sensor → Right motor weight |
-
-Weights are floats in `[-1, 1]`.  Positive = excitatory; negative = inhibitory.
 
 ## Getting Started
 
@@ -87,25 +67,17 @@ src/
 │   └── ArduinoSerial.ts         # Web Serial API wrapper
 ├── hooks/
 │   ├── useSerial.ts             # Serial connection lifecycle hook
-│   └── useVehicle.ts            # Vehicle state + preset management hook
+│   └── useVehicle.ts            # Legacy weight/preset hook
 └── components/
-    ├── Header.tsx               # App header with connection status
-    ├── BraitenbergDiagram.tsx   # SVG schematic of sensor-motor wiring
-    ├── ConnectionControls.tsx   # Slider panel for four connection weights
-    ├── VehiclePresets.tsx       # Preset selector buttons
-    ├── SimulationCanvas.tsx     # Canvas-based physics simulation
-    └── ArduinoPanel.tsx         # Upload-to-Arduino UI
+    ├── BraitenbergDiagram.tsx   # Drag-and-drop node and connection editor
+    ├── Header.tsx               # Legacy serial connection header
+    ├── ConnectionControls.tsx   # Legacy four-weight control panel
+    └── ArduinoPanel.tsx         # Legacy upload UI
 ```
 
 ## Browser Compatibility
 
-The **Web Serial API** is required for Arduino upload and is currently
-supported in:
-
-- Google Chrome 89+
-- Microsoft Edge 89+
-
-All other features (diagram, simulation, presets) work in any modern browser.
+All editor features work in modern browsers.
 
 ## License
 
