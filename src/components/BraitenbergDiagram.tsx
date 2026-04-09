@@ -41,6 +41,8 @@ interface DiagramConnection {
 const NODE_W = 148;
 const NODE_H = 64;
 const DEFAULT_CONNECTION_WEIGHT = 1;
+const ANALOG_PORT_PLACEHOLDER = 'A0';
+const DIGITAL_PORT_PLACEHOLDER = '2';
 
 interface RobotOverlayLayout {
   bodyCx: number;
@@ -52,8 +54,6 @@ interface RobotOverlayLayout {
   rightWheelCx: number;
   rightWheelCy: number;
 }
-
-const INITIAL_ROBOT_LAYOUT = calculateRobotOverlay(960, 620);
 
 const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
@@ -68,8 +68,6 @@ const NODE_TYPES: NodeTypeDefinition[] = [
 const TYPE_BY_ID = Object.fromEntries(
   NODE_TYPES.map((nodeType) => [nodeType.id, nodeType] as const),
 ) as Record<NodeTypeId, NodeTypeDefinition>;
-
-const START_NODES: DiagramNode[] = makeMotorNodes(INITIAL_ROBOT_LAYOUT);
 
 const START_CONNECTIONS: DiagramConnection[] = [];
 
@@ -89,6 +87,10 @@ function makePath(x1: number, y1: number, x2: number, y2: number): string {
 
 function supportsArduinoPort(nodeType: NodeTypeDefinition): boolean {
   return nodeType.kind === 'sensor' && (nodeType.protocol === 'analog' || nodeType.protocol === 'digital');
+}
+
+function getArduinoPortPlaceholder(protocol?: SensorProtocol): string {
+  return protocol === 'analog' ? ANALOG_PORT_PLACEHOLDER : DIGITAL_PORT_PLACEHOLDER;
 }
 
 function clampWeight(value: number): number {
@@ -119,6 +121,8 @@ function calculateRobotOverlay(canvasWidth: number, canvasHeight: number): Robot
   };
 }
 
+const INITIAL_ROBOT_LAYOUT = calculateRobotOverlay(960, 620);
+
 function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
   return [
     {
@@ -137,6 +141,8 @@ function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
     },
   ];
 }
+
+const START_NODES: DiagramNode[] = makeMotorNodes(INITIAL_ROBOT_LAYOUT);
 
 export function BraitenbergDiagram() {
   const [nodes, setNodes] = useState<DiagramNode[]>(START_NODES);
@@ -487,7 +493,7 @@ export function BraitenbergDiagram() {
                   <input
                     type="text"
                     value={selectedNode.arduinoPort ?? ''}
-                    placeholder={TYPE_BY_ID[selectedNode.type].protocol === 'analog' ? 'A0' : '2'}
+                    placeholder={getArduinoPortPlaceholder(TYPE_BY_ID[selectedNode.type].protocol)}
                     onChange={(event) =>
                       setNodes((prev) =>
                         prev.map((node) =>
@@ -533,7 +539,9 @@ export function BraitenbergDiagram() {
                   value={selectedConnection.weight}
                   onChange={(event) => {
                     const parsed = Number.parseFloat(event.target.value);
-                    const value = Number.isFinite(parsed) ? clampWeight(parsed) : 0;
+                    const value = Number.isFinite(parsed)
+                      ? clampWeight(parsed)
+                      : DEFAULT_CONNECTION_WEIGHT;
                     setConnections((prev) =>
                       prev.map((connection) =>
                         connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
