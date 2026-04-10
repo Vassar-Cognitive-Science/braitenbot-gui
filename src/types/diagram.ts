@@ -1,16 +1,17 @@
 export type NodeKind = 'sensor' | 'compute' | 'motor' | 'constant';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
-export type ComputeMode = 'threshold' | 'comparator' | 'delay' | 'summation';
+export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply';
 export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
   | 'sensor-i2c'
   | 'compute-threshold'
-  | 'compute-comparator'
   | 'compute-delay'
   | 'compute-summation'
+  | 'compute-multiply'
   | 'constant'
-  | 'motor';
+  | 'motor'
+  | 'servo';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -30,9 +31,9 @@ export interface DiagramNode {
   arduinoPort?: string;
   threshold?: number;
   delayMs?: number;
-  comparatorOp?: string;
   motorPinFwd?: string;
   motorPinRev?: string;
+  servoPin?: string;
   constantValue?: number;
 }
 
@@ -57,11 +58,12 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital' },
   { id: 'sensor-i2c', kind: 'sensor', displayName: 'I2C Sensor', metaLabel: 'i2c', protocol: 'i2c' },
   { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
-  { id: 'compute-comparator', kind: 'compute', displayName: 'Comparator', metaLabel: 'comparator', mode: 'comparator' },
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },
+  { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
   { id: 'motor', kind: 'motor', displayName: 'Motor', metaLabel: 'actuator' },
+  { id: 'servo', kind: 'motor', displayName: 'Servo', metaLabel: 'servo' },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

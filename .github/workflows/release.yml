@@ -1,0 +1,145 @@
+name: Release (Tauri desktop)
+
+# Builds the BraitenBot GUI desktop app for macOS (Apple Silicon + Intel),
+# Windows, and Linux, and attaches the installers/bundles to a GitHub release.
+#
+# How it runs:
+#   - Push a tag like `v0.1.0`, OR trigger manually from the Actions tab.
+#   - The workflow creates (or reuses) a draft release, then each matrix job
+#     builds its platform and uploads its artifacts to that release.
+#
+# Notes:
+#   - `beforeBuildCommand` in tauri.conf.json runs `npm run fetch:arduino-cli`,
+#     which downloads the current platform's arduino-cli sidecar into
+#     src-tauri/binaries/ before the Tauri bundler runs. Each matrix job fetches
+#     its own platform, so the binary shipped in the bundle is always correct.
+#   - Linux needs webkit2gtk + extras to build the Tauri webview; those are
+#     installed in the "Install Linux deps" step.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0). Must already exist or will be created as draft.'
+        required: true
+        default: 'v0.0.0-dev'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+      tag_name: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag name
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or fetch draft release
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = '${{ steps.resolve.outputs.tag }}';
+            const { owner, repo } = context.repo;
+            let release;
+            try {
+              const res = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              release = res.data;
+            } catch (e) {
+              const res = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: `BraitenBot GUI ${tag}`,
+                draft: true,
+                prerelease: false,
+                body: 'Automated build from GitHub Actions. See assets below for platform installers.',
+              });
+              release = res.data;
+            }
+            return release.id;
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            rust-target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            rust-target: x86_64-unknown-linux-gnu
+            args: ''
+          - platform: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.rust-target }}
+
+      - run: npm ci
+
+      # tauri-action runs `beforeBuildCommand` from tauri.conf.json, which
+      # in turn invokes `npm run fetch:arduino-cli` to pull the sidecar for
+      # this platform before the Tauri bundler runs.
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
+
+  publish-release:
+    needs: [create-release, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leave release as draft
+        run: echo "Release ${{ needs.create-release.outputs.tag_name }} is ready for manual review in the Releases tab."

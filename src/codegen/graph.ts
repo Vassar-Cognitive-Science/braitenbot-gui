@@ -11,9 +11,9 @@ export interface GraphNode {
   protocol?: SensorProtocol;
   threshold?: number;
   delayMs?: number;
-  comparatorOp?: string;
   motorPinFwd?: string;
   motorPinRev?: string;
+  servoPin?: string;
   constantValue?: number;
 }
 
@@ -48,9 +48,9 @@ export function buildGraph(
       protocol: typeDef.protocol,
       threshold: node.threshold,
       delayMs: node.delayMs,
-      comparatorOp: node.comparatorOp,
       motorPinFwd: node.motorPinFwd,
       motorPinRev: node.motorPinRev,
+      servoPin: node.servoPin,
       constantValue: node.constantValue,
     };
   });

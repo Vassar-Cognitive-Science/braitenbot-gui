@@ -15,100 +15,107 @@ export interface TraceResult {
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
 
 /**
- * Given sensor/constant input values set by the user, propagate signals
- * through the wiring graph and return the computed value at every node
- * plus the signal carried on every edge.
+ * Pure simulation function — propagates sensor/constant input values through
+ * the wiring graph and returns the computed value at every node plus the
+ * signal carried on every edge.
  *
  * This is a *static* trace — delay nodes simply pass their input through
  * since there is no time dimension.
+ *
+ * Exposed separately from the hook so tests can call it without React.
  */
+export function simulateGraph(
+  nodes: DiagramNode[],
+  connections: DiagramConnection[],
+  sensorValues: Record<string, number>,
+): TraceResult {
+  if (nodes.length === 0) return EMPTY;
+
+  let order: string[];
+  try {
+    order = toposort(
+      nodes.map((n) => n.id),
+      connections.map((c) => ({ from: c.from, to: c.to })),
+    );
+  } catch {
+    return EMPTY;
+  }
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const nodeValues: Record<string, number> = {};
+  const edgeSignals: Record<string, number> = {};
+  const disconnected = new Set<string>();
+
+  for (const nodeId of order) {
+    const node = nodeById.get(nodeId);
+    if (!node) continue;
+    const typeDef = TYPE_BY_ID[node.type];
+
+    if (typeDef.kind === 'sensor') {
+      nodeValues[nodeId] = sensorValues[nodeId] ?? 0.5;
+      continue;
+    }
+
+    if (typeDef.kind === 'constant') {
+      nodeValues[nodeId] = node.constantValue ?? 0.5;
+      continue;
+    }
+
+    // Gather weighted inputs and record per-edge signals
+    const incomingEdges = connections.filter((c) => c.to === nodeId);
+
+    if (incomingEdges.length === 0) {
+      nodeValues[nodeId] = 0;
+      disconnected.add(nodeId);
+      continue;
+    }
+
+    const inputs: number[] = [];
+    for (const edge of incomingEdges) {
+      const raw = nodeValues[edge.from] ?? 0;
+      const signal = applyTransfer(raw, edge);
+      edgeSignals[edge.id] = signal;
+      inputs.push(signal);
+    }
+
+    const sum = inputs.reduce((a, b) => a + b, 0);
+
+    if (typeDef.kind === 'motor') {
+      nodeValues[nodeId] = clamp(sum, -1, 1);
+    } else if (typeDef.mode === 'threshold') {
+      const thresh = node.threshold ?? 0.5;
+      nodeValues[nodeId] = sum > thresh ? 1 : 0;
+    } else if (typeDef.mode === 'multiply') {
+      nodeValues[nodeId] = inputs.reduce((a, b) => a * b, 1);
+    } else if (typeDef.mode === 'delay') {
+      nodeValues[nodeId] = sum;
+    } else if (typeDef.mode === 'summation') {
+      nodeValues[nodeId] = sum;
+    } else {
+      nodeValues[nodeId] = sum;
+    }
+  }
+
+  // Also compute outgoing edge signals for source nodes (sensors/constants)
+  for (const edge of connections) {
+    if (!(edge.id in edgeSignals)) {
+      const raw = nodeValues[edge.from] ?? 0;
+      edgeSignals[edge.id] = applyTransfer(raw, edge);
+    }
+  }
+
+  return { nodeValues, edgeSignals, disconnected };
+}
+
 export function useTraceSimulation(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
   sensorValues: Record<string, number>,
 ): TraceResult {
-  return useMemo(() => {
-    if (nodes.length === 0) return EMPTY;
-
-    let order: string[];
-    try {
-      order = toposort(
-        nodes.map((n) => n.id),
-        connections.map((c) => ({ from: c.from, to: c.to })),
-      );
-    } catch {
-      return EMPTY;
-    }
-
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-    const nodeValues: Record<string, number> = {};
-    const edgeSignals: Record<string, number> = {};
-    const disconnected = new Set<string>();
-
-    for (const nodeId of order) {
-      const node = nodeById.get(nodeId);
-      if (!node) continue;
-      const typeDef = TYPE_BY_ID[node.type];
-
-      if (typeDef.kind === 'sensor') {
-        nodeValues[nodeId] = sensorValues[nodeId] ?? 0.5;
-        continue;
-      }
-
-      if (typeDef.kind === 'constant') {
-        nodeValues[nodeId] = node.constantValue ?? 0.5;
-        continue;
-      }
-
-      // Gather weighted inputs and record per-edge signals
-      const incomingEdges = connections.filter((c) => c.to === nodeId);
-
-      if (incomingEdges.length === 0) {
-        nodeValues[nodeId] = 0;
-        disconnected.add(nodeId);
-        continue;
-      }
-
-      const inputs: number[] = [];
-      for (const edge of incomingEdges) {
-        const raw = nodeValues[edge.from] ?? 0;
-        const signal = applyTransfer(raw, edge);
-        edgeSignals[edge.id] = signal;
-        inputs.push(signal);
-      }
-
-      const sum = inputs.reduce((a, b) => a + b, 0);
-
-      if (typeDef.kind === 'motor') {
-        nodeValues[nodeId] = clamp(sum, -1, 1);
-      } else if (typeDef.mode === 'threshold') {
-        const thresh = node.threshold ?? 0.5;
-        nodeValues[nodeId] = sum >= thresh ? sum : 0;
-      } else if (typeDef.mode === 'comparator') {
-        if (inputs.length >= 2) {
-          nodeValues[nodeId] = compare(inputs[0], inputs[1], node.comparatorOp ?? '>') ? 1 : 0;
-        } else {
-          nodeValues[nodeId] = 0;
-        }
-      } else if (typeDef.mode === 'delay') {
-        nodeValues[nodeId] = sum;
-      } else if (typeDef.mode === 'summation') {
-        nodeValues[nodeId] = sum;
-      } else {
-        nodeValues[nodeId] = sum;
-      }
-    }
-
-    // Also compute outgoing edge signals for source nodes (sensors/constants)
-    for (const edge of connections) {
-      if (!(edge.id in edgeSignals)) {
-        const raw = nodeValues[edge.from] ?? 0;
-        edgeSignals[edge.id] = applyTransfer(raw, edge);
-      }
-    }
-
-    return { nodeValues, edgeSignals, disconnected };
-  }, [nodes, connections, sensorValues]);
+  return useMemo(
+    () => simulateGraph(nodes, connections, sensorValues),
+    [nodes, connections, sensorValues],
+  );
 }
 
 function applyTransfer(input: number, edge: DiagramConnection): number {
@@ -133,18 +140,6 @@ function interpolateTransfer(input: number, points: TransferPoint[]): number {
   }
 
   return sorted[sorted.length - 1].y;
-}
-
-function compare(a: number, b: number, op: string): boolean {
-  switch (op) {
-    case '>': return a > b;
-    case '<': return a < b;
-    case '>=': return a >= b;
-    case '<=': return a <= b;
-    case '==': return a === b;
-    case '!=': return a !== b;
-    default: return false;
-  }
 }
 
 function clamp(v: number, min: number, max: number): number {

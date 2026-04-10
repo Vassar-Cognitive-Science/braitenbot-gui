@@ -4,15 +4,24 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite --mode tauri",
     "build": "tsc && vite build",
+    "build:web": "tsc && vite build --mode tauri",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "fetch:arduino-cli": "node scripts/fetch-arduino-cli.mjs",
+    "fetch:arduino-cli:all": "node scripts/fetch-arduino-cli.mjs --all",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@typescript-eslint/eslint-plugin": "^7.2.0",

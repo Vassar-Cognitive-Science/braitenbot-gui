@@ -4,12 +4,45 @@ function sanitizeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
+/**
+ * Build a mapping from node id → human-readable C identifier based on labels.
+ * Duplicate labels get a numeric suffix (_2, _3, …).
+ */
+function buildLabelMap(graph: WiringGraph): Map<string, string> {
+  const map = new Map<string, string>();
+  const counts = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const base = sanitizeId(node.label || node.id);
+    const prev = counts.get(base) ?? 0;
+    counts.set(base, prev + 1);
+    map.set(node.id, prev === 0 ? base : `${base}_${prev + 1}`);
+  }
+  // Go back and suffix the first occurrence if there were duplicates
+  for (const node of graph.nodes) {
+    const base = sanitizeId(node.label || node.id);
+    if ((counts.get(base) ?? 0) > 1 && map.get(node.id) === base) {
+      map.set(node.id, `${base}_1`);
+    }
+  }
+  return map;
+}
+
+let _labelMap: Map<string, string> = new Map();
+
+function setLabelMap(m: Map<string, string>) {
+  _labelMap = m;
+}
+
+function readableId(node: GraphNode): string {
+  return _labelMap.get(node.id) ?? sanitizeId(node.id);
+}
+
 function varName(node: GraphNode): string {
-  return `sig_${sanitizeId(node.id)}`;
+  return `sig_${readableId(node)}`;
 }
 
 function inputVar(node: GraphNode): string {
-  return `input_${sanitizeId(node.id)}`;
+  return `input_${readableId(node)}`;
 }
 
 function incomingEdges(graph: WiringGraph, nodeId: string): GraphEdge[] {
@@ -24,8 +57,16 @@ function nodeById(graph: WiringGraph, id: string): GraphNode | undefined {
  * Emit a piecewise-linear lookup function for a non-linear edge.
  * Input: 0–1 (normalized sensor signal). Output: -1 to 1.
  */
+function readableEdgeId(nodeId: string): string {
+  // Look up the readable name via the label map, fall back to sanitized raw id
+  for (const [id, label] of _labelMap) {
+    if (id === nodeId) return label;
+  }
+  return sanitizeId(nodeId);
+}
+
 function emitTransferFunction(edge: GraphEdge, idx: number): string {
-  const fname = `transfer_${sanitizeId(edge.from)}_${sanitizeId(edge.to)}_${idx}`;
+  const fname = `transfer_${readableEdgeId(edge.from)}_${readableEdgeId(edge.to)}_${idx}`;
   const pts = [...edge.transferPoints].sort((a, b) => a.x - b.x);
   const lines: string[] = [];
   lines.push(`float ${fname}(float x) {`);
@@ -51,7 +92,7 @@ function emitTransferFunction(edge: GraphEdge, idx: number): string {
 function emitEdgeTerm(graph: WiringGraph, edge: GraphEdge, src: GraphNode): string {
   if (edge.transferMode === 'nonlinear' && edge.transferPoints.length >= 2) {
     const fnIdx = graph.edges.indexOf(edge);
-    const fname = `transfer_${sanitizeId(edge.from)}_${sanitizeId(edge.to)}_${fnIdx}`;
+    const fname = `transfer_${readableEdgeId(edge.from)}_${readableEdgeId(edge.to)}_${fnIdx}`;
     return `${fname}(${varName(src)})`;
   }
   return `${varName(src)} * ${edge.weight.toFixed(4)}`;
@@ -73,25 +114,50 @@ function emitInputAggregation(
   return lines.join('\n');
 }
 
+function emitProductAggregation(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  const edges = incomingEdges(graph, node.id);
+  const lines: string[] = [];
+  if (edges.length === 0) {
+    lines.push(`${indent}float ${inputVar(node)} = 0.0;`);
+    return lines.join('\n');
+  }
+  lines.push(`${indent}float ${inputVar(node)} = 1.0;`);
+  for (const edge of edges) {
+    const src = nodeById(graph, edge.from);
+    if (!src) continue;
+    lines.push(`${indent}${inputVar(node)} *= (${emitEdgeTerm(graph, edge, src)});`);
+  }
+  return lines.join('\n');
+}
+
 function emitPinDeclarations(graph: WiringGraph): string {
   const lines: string[] = [];
   for (const node of graph.nodes) {
     if (node.kind === 'sensor' && node.arduinoPort?.trim()) {
       lines.push(
-        `const int SENSOR_${sanitizeId(node.id)} = ${node.arduinoPort.trim()};`,
+        `const int SENSOR_${readableId(node)} = ${node.arduinoPort.trim()};`,
       );
     }
-    if (node.kind === 'motor') {
+    if (node.kind === 'motor' && node.typeId === 'motor') {
       if (node.motorPinFwd?.trim()) {
         lines.push(
-          `const int MOTOR_${sanitizeId(node.id)}_FWD = ${node.motorPinFwd.trim()};`,
+          `const int MOTOR_${readableId(node)}_FWD = ${node.motorPinFwd.trim()};`,
         );
       }
       if (node.motorPinRev?.trim()) {
         lines.push(
-          `const int MOTOR_${sanitizeId(node.id)}_REV = ${node.motorPinRev.trim()};`,
+          `const int MOTOR_${readableId(node)}_REV = ${node.motorPinRev.trim()};`,
         );
       }
+    }
+    if (node.typeId === 'servo' && node.servoPin?.trim()) {
+      lines.push(
+        `const int SERVO_${readableId(node)}_PIN = ${node.servoPin.trim()};`,
+      );
     }
   }
   return lines.join('\n');
@@ -110,15 +176,18 @@ function emitSetup(graph: WiringGraph): string {
 
   for (const node of graph.nodes) {
     if (node.kind === 'sensor' && node.protocol === 'digital' && node.arduinoPort?.trim()) {
-      lines.push(`  pinMode(SENSOR_${sanitizeId(node.id)}, INPUT);`);
+      lines.push(`  pinMode(SENSOR_${readableId(node)}, INPUT);`);
     }
-    if (node.kind === 'motor') {
+    if (node.kind === 'motor' && node.typeId === 'motor') {
       if (node.motorPinFwd?.trim()) {
-        lines.push(`  pinMode(MOTOR_${sanitizeId(node.id)}_FWD, OUTPUT);`);
+        lines.push(`  pinMode(MOTOR_${readableId(node)}_FWD, OUTPUT);`);
       }
       if (node.motorPinRev?.trim()) {
-        lines.push(`  pinMode(MOTOR_${sanitizeId(node.id)}_REV, OUTPUT);`);
+        lines.push(`  pinMode(MOTOR_${readableId(node)}_REV, OUTPUT);`);
       }
+    }
+    if (node.typeId === 'servo' && node.servoPin?.trim()) {
+      lines.push(`  servo_${readableId(node)}.attach(SERVO_${readableId(node)}_PIN);`);
     }
   }
 
@@ -129,10 +198,10 @@ function emitSetup(graph: WiringGraph): string {
 function emitSensorRead(node: GraphNode, indent: string): string {
   const name = varName(node);
   if (node.protocol === 'analog') {
-    return `${indent}float ${name} = analogRead(SENSOR_${sanitizeId(node.id)}) / 1023.0;`;
+    return `${indent}float ${name} = analogRead(SENSOR_${readableId(node)}) / 1023.0;`;
   }
   if (node.protocol === 'digital') {
-    return `${indent}float ${name} = (float)digitalRead(SENSOR_${sanitizeId(node.id)});`;
+    return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
   }
   // I2C stub
   return `${indent}float ${name} = 0.0; // TODO: read I2C sensor (Wire.requestFrom)`;
@@ -154,25 +223,11 @@ function emitComputeNode(
     lines.push(
       `${indent}float ${name} = (${inputVar(node)} > ${threshold.toFixed(4)}) ? 1.0 : 0.0;`,
     );
-  } else if (typeDef === 'compute-comparator') {
-    const edges = incomingEdges(graph, node.id);
-    const op = node.comparatorOp ?? '>';
-    if (edges.length >= 2) {
-      const srcA = nodeById(graph, edges[0].from);
-      const srcB = nodeById(graph, edges[1].from);
-      if (srcA && srcB) {
-        const termA = emitEdgeTerm(graph, edges[0], srcA);
-        const termB = emitEdgeTerm(graph, edges[1], srcB);
-        lines.push(
-          `${indent}float ${name} = ((${termA}) ${op} (${termB})) ? 1.0 : 0.0;`,
-        );
-      }
-    } else {
-      lines.push(emitInputAggregation(graph, node, indent));
-      lines.push(`${indent}float ${name} = ${inputVar(node)};`);
-    }
   } else if (typeDef === 'compute-summation') {
     lines.push(emitInputAggregation(graph, node, indent));
+    lines.push(`${indent}float ${name} = ${inputVar(node)};`);
+  } else if (typeDef === 'compute-multiply') {
+    lines.push(emitProductAggregation(graph, node, indent));
     lines.push(`${indent}float ${name} = ${inputVar(node)};`);
   } else if (typeDef === 'compute-delay') {
     lines.push(emitInputAggregation(graph, node, indent));
@@ -195,7 +250,7 @@ function emitMotorWrite(
   indent: string,
 ): string {
   const lines: string[] = [];
-  const sid = sanitizeId(node.id);
+  const sid = readableId(node);
 
   lines.push(emitInputAggregation(graph, node, indent));
   lines.push(
@@ -212,9 +267,29 @@ function emitMotorWrite(
   return lines.join('\n');
 }
 
+function emitServoWrite(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  const lines: string[] = [];
+  const sid = readableId(node);
+
+  lines.push(emitInputAggregation(graph, node, indent));
+  lines.push(
+    `${indent}int angle_${sid} = constrain((int)((${inputVar(node)} + 1.0) * 0.5 * 180.0), 0, 180);`,
+  );
+  lines.push(`${indent}servo_${sid}.write(angle_${sid});`);
+
+  return lines.join('\n');
+}
+
 export function generateSketch(graph: WiringGraph): string {
+  setLabelMap(buildLabelMap(graph));
   const sections: string[] = [];
   const hasI2C = graph.nodes.some((n) => n.protocol === 'i2c');
+  const servoNodes = graph.nodes.filter((n) => n.typeId === 'servo');
+  const hasServo = servoNodes.length > 0;
 
   // Header
   sections.push('// --- Auto-generated by BraitenBot GUI ---');
@@ -222,12 +297,23 @@ export function generateSketch(graph: WiringGraph): string {
   if (hasI2C) {
     sections.push('#include <Wire.h>');
   }
+  if (hasServo) {
+    sections.push('#include <Servo.h>');
+  }
   sections.push('');
 
   // Pin declarations
   const pins = emitPinDeclarations(graph);
   if (pins) {
     sections.push(pins);
+    sections.push('');
+  }
+
+  // Servo objects
+  if (hasServo) {
+    for (const node of servoNodes) {
+      sections.push(`Servo servo_${readableId(node)};`);
+    }
     sections.push('');
   }
 
@@ -263,6 +349,9 @@ export function generateSketch(graph: WiringGraph): string {
     } else if (node.kind === 'compute') {
       loopLines.push('');
       loopLines.push(emitComputeNode(graph, node, '  ', graph.loopPeriodMs));
+    } else if (node.typeId === 'servo') {
+      loopLines.push('');
+      loopLines.push(emitServoWrite(graph, node, '  '));
     } else if (node.kind === 'motor') {
       loopLines.push('');
       loopLines.push(emitMotorWrite(graph, node, '  '));

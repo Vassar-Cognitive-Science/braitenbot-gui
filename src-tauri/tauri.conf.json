@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BraitenBot GUI",
+  "version": "0.1.0",
+  "identifier": "edu.vassar.braitenbot-gui",
+  "build": {
+    "beforeDevCommand": "npm run fetch:arduino-cli && npm run dev:web",
+    "beforeBuildCommand": "npm run fetch:arduino-cli && npm run build:web",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BraitenBot GUI",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "externalBin": ["binaries/arduino-cli"],
+    "resources": ["binaries/LICENSE-arduino-cli.txt"],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {}
+}

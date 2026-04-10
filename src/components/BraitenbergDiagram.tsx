@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, MouseEvent } from 'react';
+import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
 import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
 import { useTraceSimulation, formatTraceValue } from '../hooks/useTraceSimulation';
+import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
+import type { useArduino } from '../hooks/useArduino';
 
 const NODE_W = 148;
 const NODE_H = 64;
@@ -14,6 +16,7 @@ const ANALOG_PORT_PLACEHOLDER = 'A0';
 const DIGITAL_PORT_PLACEHOLDER = '2';
 const MOTOR_PIN_FWD_PLACEHOLDER = '5';
 const MOTOR_PIN_REV_PLACEHOLDER = '6';
+const SERVO_PIN_PLACEHOLDER = '9';
 
 interface RobotOverlayLayout {
   bodyCx: number;
@@ -144,7 +147,24 @@ function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
 
 const START_NODES: DiagramNode[] = makeMotorNodes(INITIAL_ROBOT_LAYOUT);
 
-export function BraitenbergDiagram() {
+interface BraitenbergDiagramProps {
+  arduino: ReturnType<typeof useArduino>;
+}
+
+export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
+  const {
+    tauriAvailable,
+    cliAvailable,
+    cliVersion,
+    cliError,
+    boards,
+    selectedBoard,
+    setSelectedBoard,
+    refreshBoards,
+    uploadStatus,
+    lastResult,
+    compileAndUpload,
+  } = arduino;
   const [nodes, setNodes] = useState<DiagramNode[]>(START_NODES);
   const [connections, setConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
@@ -159,10 +179,15 @@ export function BraitenbergDiagram() {
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const codeDialogRef = useRef<HTMLDialogElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const lastAppliedLayoutRef = useRef<RobotOverlayLayout | null>(null);
   const fallbackIdCounterRef = useRef(0);
   const [traceMode, setTraceMode] = useState(false);
   const [sensorValues, setSensorValues] = useState<Record<string, number>>({});
   const undoStackRef = useRef<{ nodes: DiagramNode[]; connections: DiagramConnection[] }[]>([]);
+  const [resetArmed, setResetArmed] = useState(false);
+  const resetArmTimerRef = useRef<number | null>(null);
+  const resetButtonRef = useRef<HTMLButtonElement | null>(null);
+
 
   const traceResult = useTraceSimulation(
     traceMode ? nodes : [],
@@ -181,6 +206,72 @@ export function BraitenbergDiagram() {
     setConnections(snapshot.connections);
     setConfigTarget(null);
   }, []);
+
+  const isDiagramPristine = useMemo(
+    () =>
+      connections.length === 0 &&
+      nodes.every((node) => TYPE_BY_ID[node.type]?.kind === 'motor'),
+    [nodes, connections],
+  );
+
+  const resetToDefault = useCallback(() => {
+    setNodes(makeMotorNodes(robotLayout));
+    setConnections(START_CONNECTIONS);
+    setLoopPeriodMs(20);
+    setConfigTarget(null);
+  }, [robotLayout]);
+
+  useDiagramPersistence({
+    state: { nodes, connections, loopPeriodMs },
+    setters: { setNodes, setConnections, setLoopPeriodMs },
+    isPristine: isDiagramPristine,
+    resetToDefault,
+  });
+
+  const clearResetArmTimer = useCallback(() => {
+    if (resetArmTimerRef.current !== null) {
+      window.clearTimeout(resetArmTimerRef.current);
+      resetArmTimerRef.current = null;
+    }
+  }, []);
+
+  const disarmReset = useCallback(() => {
+    clearResetArmTimer();
+    setResetArmed(false);
+  }, [clearResetArmTimer]);
+
+  useEffect(() => () => clearResetArmTimer(), [clearResetArmTimer]);
+
+  useEffect(() => {
+    if (isDiagramPristine && resetArmed) disarmReset();
+  }, [isDiagramPristine, resetArmed, disarmReset]);
+
+  const handleResetClick = useCallback(() => {
+    if (isDiagramPristine) return;
+    if (!resetArmed) {
+      setResetArmed(true);
+      clearResetArmTimer();
+      resetArmTimerRef.current = window.setTimeout(() => setResetArmed(false), 3500);
+      return;
+    }
+    clearResetArmTimer();
+    pushUndo();
+    setNodes(makeMotorNodes(robotLayout));
+    setConnections(START_CONNECTIONS);
+    setConfigTarget(null);
+    setResetArmed(false);
+    resetButtonRef.current?.blur();
+  }, [isDiagramPristine, resetArmed, clearResetArmTimer, pushUndo, robotLayout]);
+
+  const handleResetKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'Escape' && resetArmed) {
+        event.preventDefault();
+        disarmReset();
+      }
+    },
+    [resetArmed, disarmReset],
+  );
 
   const handleGenerate = useCallback(() => {
     const errors = validateGraph(nodes, connections);
@@ -212,6 +303,32 @@ export function BraitenbergDiagram() {
     a.click();
     URL.revokeObjectURL(url);
   }, [generatedCode]);
+
+  const handleUploadToArduino = useCallback(async () => {
+    const errors = validateGraph(nodes, connections);
+    const hasErrors = errors.some((e) => e.severity === 'error');
+    if (hasErrors) {
+      setCodeGenErrors(errors);
+      setGeneratedCode(null);
+      setShowCodeDialog(true);
+      return;
+    }
+    if (!selectedBoard || !selectedBoard.fqbn) {
+      setCodeGenErrors([
+        {
+          severity: 'error',
+          message: 'No board selected. Plug in an Arduino and click Refresh.',
+        },
+      ]);
+      setGeneratedCode(null);
+      setShowCodeDialog(true);
+      return;
+    }
+    const graph = buildGraph(nodes, connections, loopPeriodMs);
+    const code = generateSketch(graph);
+    setGeneratedCode(code);
+    await compileAndUpload(code, selectedBoard.fqbn, selectedBoard.port);
+  }, [nodes, connections, loopPeriodMs, selectedBoard, compileAndUpload]);
 
   useEffect(() => {
     const dialog = codeDialogRef.current;
@@ -276,9 +393,41 @@ export function BraitenbergDiagram() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const applyLayout = (layout: RobotOverlayLayout) => {
+      const prev = lastAppliedLayoutRef.current;
+      lastAppliedLayoutRef.current = layout;
+      setRobotLayout(layout);
+
+      const snapMotor = (node: DiagramNode): DiagramNode => {
+        if (node.id === 'motor-left') {
+          return { ...node, x: layout.leftWheelCx - NODE_W / 2, y: layout.leftWheelCy - NODE_H / 2 };
+        }
+        if (node.id === 'motor-right') {
+          return { ...node, x: layout.rightWheelCx - NODE_W / 2, y: layout.rightWheelCy - NODE_H / 2 };
+        }
+        return node;
+      };
+
+      if (prev === null) {
+        setNodes((nodes) => nodes.map(snapMotor));
+        return;
+      }
+
+      const dx = layout.bodyCx - prev.bodyCx;
+      const dy = layout.bodyCy - prev.bodyCy;
+      if (dx === 0 && dy === 0) return;
+
+      setNodes((nodes) =>
+        nodes.map((node) => {
+          if (node.id === 'motor-left' || node.id === 'motor-right') return snapMotor(node);
+          return { ...node, x: node.x + dx, y: node.y + dy };
+        }),
+      );
+    };
+
     const updateLayout = () => {
       const rect = canvas.getBoundingClientRect();
-      setRobotLayout(calculateRobotOverlay(rect.width, rect.height));
+      applyLayout(calculateRobotOverlay(rect.width, rect.height));
     };
 
     updateLayout();
@@ -286,20 +435,6 @@ export function BraitenbergDiagram() {
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    setNodes((prev) =>
-      prev.map((node) => {
-        if (node.id === 'motor-left') {
-          return { ...node, x: robotLayout.leftWheelCx - NODE_W / 2, y: robotLayout.leftWheelCy - NODE_H / 2 };
-        }
-        if (node.id === 'motor-right') {
-          return { ...node, x: robotLayout.rightWheelCx - NODE_W / 2, y: robotLayout.rightWheelCy - NODE_H / 2 };
-        }
-        return node;
-      }),
-    );
-  }, [robotLayout]);
 
   useEffect(() => {
     if (!configTarget) return;
@@ -397,8 +532,8 @@ export function BraitenbergDiagram() {
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
           threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
-          comparatorOp: nodeType.mode === 'comparator' ? '>' : undefined,
           constantValue: nodeType.kind === 'constant' ? 512 : undefined,
+          servoPin: nodeTypeId === 'servo' ? '' : undefined,
         },
       ];
     });
@@ -444,62 +579,198 @@ export function BraitenbergDiagram() {
   return (
     <section className="diagram-layout">
       <aside className="node-palette">
-        <h2>Nodes</h2>
-        {NODE_TYPES.map((nodeType) => (
-          <div
-            key={nodeType.id}
-            className="palette-item"
-            draggable
-            onDragStart={(event) => event.dataTransfer.setData('application/x-node-type', nodeType.id)}
-          >
-            <span>{nodeType.displayName}</span>
-            <small>{nodeType.kind}</small>
-          </div>
-        ))}
-        <h2>Tools</h2>
-        <button
-          className={`palette-trace ${traceMode ? 'active' : ''}`}
-          onClick={() => setTraceMode((v) => !v)}
-        >
-          {traceMode ? 'Exit Trace Mode' : 'Trace Signal Flow'}
-        </button>
-        <h2>Output</h2>
-        <label className="palette-setting">
-          Loop Period (ms)
-          <input
-            type="number"
-            min="1"
-            max="1000"
-            step="1"
-            value={loopPeriodMs}
-            onChange={(e) => {
-              const v = Number.parseInt(e.target.value, 10);
-              if (Number.isFinite(v) && v >= 1) setLoopPeriodMs(Math.min(1000, v));
-            }}
-          />
-        </label>
-        <button
-          className="palette-generate"
-          onClick={handleGenerate}
-        >
-          Generate Arduino Code
-        </button>
-        <button
-          className="palette-reset"
-          onClick={() => {
-            pushUndo();
-            setNodes(makeMotorNodes(robotLayout));
-            setConnections(START_CONNECTIONS);
-            setConfigTarget(null);
-          }}
-        >
-          Reset diagram
-        </button>
+        {(['sensor', 'compute', 'motor'] as const).map((kind) => {
+          const nodesOfKind = kind === 'compute'
+            ? NODE_TYPES.filter((n) => n.kind === 'compute' || n.kind === 'constant')
+            : NODE_TYPES.filter((n) => n.kind === kind);
+          if (nodesOfKind.length === 0) return null;
+          const kindLabels: Record<string, string> = {
+            sensor: 'Sensors',
+            compute: 'Compute',
+            motor: 'Motors',
+          };
+          return (
+            <div key={kind} className="palette-group">
+              <h2 className={`palette-category palette-category-${kind}`}>
+                <span className={`palette-category-dot palette-dot-${kind}`} />
+                {kindLabels[kind]}
+              </h2>
+              {nodesOfKind.map((nodeType) => (
+                <div
+                  key={nodeType.id}
+                  className={`palette-item palette-item-${nodeType.kind}`}
+                  draggable
+                  onDragStart={(event) => event.dataTransfer.setData('application/x-node-type', nodeType.id)}
+                >
+                  <span>{nodeType.displayName}</span>
+                  <small>{nodeType.kind === 'constant' ? 'compute' : nodeType.kind}</small>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </aside>
+
+      <div className="canvas-toolbar">
+        <div className="toolbar-group">
+          <span className="toolbar-group-label">Simulate</span>
+          <button
+            className={`toolbar-btn toolbar-secondary toolbar-trace ${traceMode ? 'active' : ''}`}
+            onClick={() => setTraceMode((v) => !v)}
+          >
+            {traceMode ? 'Exit Trace' : 'Trace Signal Flow'}
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group">
+          <span className="toolbar-group-label">Code</span>
+          <label className="toolbar-setting">
+            <span className="toolbar-setting-label">Loop</span>
+            <input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              value={loopPeriodMs}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                if (Number.isFinite(v) && v >= 1) setLoopPeriodMs(Math.min(1000, v));
+              }}
+            />
+            <span className="toolbar-setting-unit">ms</span>
+          </label>
+          <button
+            className="toolbar-btn toolbar-primary toolbar-generate"
+            onClick={handleGenerate}
+          >
+            Generate
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group toolbar-serial">
+          <span className="toolbar-group-label">Device</span>
+          {!tauriAvailable ? (
+            <span className="serial-unsupported" title="Launch the desktop build with `npm run tauri:dev`">
+              Desktop app required
+            </span>
+          ) : !cliAvailable ? (
+            <span className="serial-error-msg" title={cliError ?? undefined}>
+              arduino-cli not found
+            </span>
+          ) : (
+            <>
+              <span
+                className="serial-status-dot"
+                data-status={selectedBoard ? 'connected' : 'disconnected'}
+                title={cliVersion ?? undefined}
+              />
+              <select
+                className="toolbar-board-select"
+                value={selectedBoard?.port ?? ''}
+                onChange={(e) => {
+                  const board = boards.find((b) => b.port === e.target.value);
+                  setSelectedBoard(board ?? null);
+                }}
+              >
+                {boards.length === 0 && <option value="">No boards detected</option>}
+                {boards.map((b) => (
+                  <option key={b.port} value={b.port}>
+                    {b.name ?? 'Unknown'} — {b.port}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="toolbar-btn toolbar-tertiary"
+                onClick={refreshBoards}
+                title="Rescan for connected Arduinos"
+              >
+                Refresh
+              </button>
+              <button
+                className="toolbar-btn toolbar-primary toolbar-upload"
+                onClick={handleUploadToArduino}
+                disabled={
+                  !selectedBoard ||
+                  !selectedBoard.fqbn ||
+                  uploadStatus === 'compiling' ||
+                  uploadStatus === 'uploading'
+                }
+              >
+                {uploadStatus === 'compiling'
+                  ? 'Compiling…'
+                  : uploadStatus === 'uploading'
+                    ? 'Uploading…'
+                    : uploadStatus === 'success'
+                      ? 'Uploaded!'
+                      : uploadStatus === 'error'
+                        ? 'Upload failed'
+                        : 'Upload to Arduino'}
+              </button>
+              {lastResult && !lastResult.success && (
+                <span
+                  className="serial-error-msg"
+                  title={lastResult.uploadOutput || lastResult.compileOutput}
+                >
+                  ⓘ details
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="toolbar-spacer" />
+
+        <button
+          ref={resetButtonRef}
+          type="button"
+          className={`toolbar-btn toolbar-tertiary toolbar-reset${resetArmed ? ' is-armed' : ''}`}
+          onClick={handleResetClick}
+          onKeyDown={handleResetKeyDown}
+          onBlur={disarmReset}
+          disabled={isDiagramPristine}
+          aria-live="polite"
+          aria-label={
+            resetArmed
+              ? 'Confirm clearing the diagram'
+              : 'Clear the diagram and restore defaults'
+          }
+          title={
+            isDiagramPristine
+              ? 'Diagram is already empty'
+              : resetArmed
+                ? 'Click again to confirm — Esc to cancel'
+                : 'Clear all nodes and connections'
+          }
+        >
+          <svg
+            className="toolbar-reset-icon"
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.75" />
+            <path d="M2.3 2.6v3.4h3.4" />
+          </svg>
+          <span className="toolbar-reset-label">
+            {resetArmed ? 'Confirm reset' : 'Reset'}
+          </span>
+        </button>
+      </div>
 
       <div
         ref={canvasRef}
-        className={`diagram-canvas ${traceMode ? 'trace-active' : ''}`}
+        className={`diagram-canvas ${traceMode ? 'trace-active' : ''} ${linkDraftSource ? 'linking' : ''}`.trim()}
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDropNode}
         onMouseMove={handleCanvasMove}
@@ -603,11 +874,11 @@ export function BraitenbergDiagram() {
             nodeMeta = `${nodeType.metaLabel} • ${node.threshold}`;
           } else if (nodeType.mode === 'delay' && node.delayMs !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.delayMs}ms`;
-          } else if (nodeType.mode === 'comparator' && node.comparatorOp) {
-            nodeMeta = `${nodeType.metaLabel} • ${node.comparatorOp}`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
-          } else if (nodeType.kind === 'motor' && node.motorPinFwd?.trim()) {
+          } else if (nodeType.id === 'servo' && node.servoPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
+          } else if (nodeType.id === 'motor' && node.motorPinFwd?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pins ${node.motorPinFwd.trim()}/${node.motorPinRev?.trim() || '?'}`;
           } else {
             nodeMeta = nodeType.metaLabel;
@@ -699,20 +970,22 @@ export function BraitenbergDiagram() {
                   'Reads input from a physical sensor on the robot and outputs a signal to connected nodes.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
                   TYPE_BY_ID[selectedNode.type].mode === 'threshold' &&
-                  'Passes the input signal through only if it exceeds the configured threshold value.'}
-                {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
-                  TYPE_BY_ID[selectedNode.type].mode === 'comparator' &&
-                  'Compares two input signals using the selected operator and outputs the result.'}
+                  'Outputs 1 when the combined input exceeds the threshold, otherwise 0. Acts as an on/off switch.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
                   TYPE_BY_ID[selectedNode.type].mode === 'delay' &&
                   'Delays the input signal by the configured number of milliseconds before passing it on.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
                   TYPE_BY_ID[selectedNode.type].mode === 'summation' &&
                   'Sums all weighted input signals and outputs the total.'}
+                {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+                  TYPE_BY_ID[selectedNode.type].mode === 'multiply' &&
+                  'Multiplies all incoming signals together. When one input is 0 or 1, it acts as a gate: the other signal passes through when the gate is on, and zero when the gate is off.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'constant' &&
                   'Emits a fixed constant value to all connected nodes.'}
-                {TYPE_BY_ID[selectedNode.type].kind === 'motor' &&
+                {selectedNode.type === 'motor' &&
                   'Drives a wheel motor on the robot. Speed and direction are determined by incoming connection weights.'}
+                {selectedNode.type === 'servo' &&
+                  'Controls a servo motor. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
               </p>
               <label>
                 Node Label
@@ -771,29 +1044,6 @@ export function BraitenbergDiagram() {
                 </label>
               )}
 
-              {TYPE_BY_ID[selectedNode.type].mode === 'comparator' && (
-                <label>
-                  Comparison Operator
-                  <select
-                    value={selectedNode.comparatorOp ?? '>'}
-                    onChange={(event) =>
-                      setNodes((prev) =>
-                        prev.map((node) =>
-                          node.id === selectedNode.id ? { ...node, comparatorOp: event.target.value } : node,
-                        ),
-                      )
-                    }
-                  >
-                    <option value=">">&gt; Greater than</option>
-                    <option value="<">&lt; Less than</option>
-                    <option value=">=">&gt;= Greater or equal</option>
-                    <option value="<=">&lt;= Less or equal</option>
-                    <option value="==">== Equal</option>
-                    <option value="!=">!= Not equal</option>
-                  </select>
-                </label>
-              )}
-
               {TYPE_BY_ID[selectedNode.type].mode === 'delay' && (
                 <label>
                   Delay (ms)
@@ -838,7 +1088,7 @@ export function BraitenbergDiagram() {
                 </label>
               )}
 
-              {TYPE_BY_ID[selectedNode.type].kind === 'motor' && (
+              {selectedNode.type === 'motor' && (
                 <>
                   <label>
                     Forward Pin
@@ -875,6 +1125,26 @@ export function BraitenbergDiagram() {
                     />
                   </label>
                 </>
+              )}
+
+              {selectedNode.type === 'servo' && (
+                <label>
+                  Servo Pin
+                  <input
+                    type="text"
+                    value={selectedNode.servoPin ?? ''}
+                    placeholder={SERVO_PIN_PLACEHOLDER}
+                    onChange={(event) =>
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id
+                            ? { ...node, servoPin: event.target.value.trimStart() }
+                            : node,
+                        ),
+                      )
+                    }
+                  />
+                </label>
               )}
               {selectedNode.type !== 'motor' && (
                 <button

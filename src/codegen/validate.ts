@@ -14,6 +14,25 @@ export function validateGraph(
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
+  // 0. Duplicate node labels
+  const labelCounts = new Map<string, DiagramNode[]>();
+  for (const node of nodes) {
+    const existing = labelCounts.get(node.label) ?? [];
+    existing.push(node);
+    labelCounts.set(node.label, existing);
+  }
+  for (const [label, dupes] of labelCounts) {
+    if (dupes.length > 1) {
+      for (const node of dupes) {
+        errors.push({
+          nodeId: node.id,
+          message: `Duplicate node name '${label}' — each node must have a unique name`,
+          severity: 'error',
+        });
+      }
+    }
+  }
+
   const sensors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'sensor');
   const constants = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'constant');
   const motors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'motor');
@@ -40,12 +59,23 @@ export function validateGraph(
 
   // 3. Motor missing pins
   for (const motor of motors) {
-    if (!motor.motorPinFwd?.trim() || !motor.motorPinRev?.trim()) {
-      errors.push({
-        nodeId: motor.id,
-        message: `Motor '${motor.label}' has no pin configured for forward/reverse`,
-        severity: 'error',
-      });
+    const motorType = TYPE_BY_ID[motor.type];
+    if (motorType.id === 'motor') {
+      if (!motor.motorPinFwd?.trim() || !motor.motorPinRev?.trim()) {
+        errors.push({
+          nodeId: motor.id,
+          message: `Motor '${motor.label}' has no pin configured for forward/reverse`,
+          severity: 'error',
+        });
+      }
+    } else if (motorType.id === 'servo') {
+      if (!motor.servoPin?.trim()) {
+        errors.push({
+          nodeId: motor.id,
+          message: `Servo '${motor.label}' has no pin configured`,
+          severity: 'error',
+        });
+      }
     }
   }
 
@@ -93,20 +123,7 @@ export function validateGraph(
     }
   }
 
-  // 6. Comparator with fewer than 2 inputs
-  const comparators = nodes.filter((n) => TYPE_BY_ID[n.type].mode === 'comparator');
-  for (const comp of comparators) {
-    const inputCount = connections.filter((c) => c.to === comp.id).length;
-    if (inputCount < 2) {
-      errors.push({
-        nodeId: comp.id,
-        message: `Comparator '${comp.label}' requires exactly 2 inputs (has ${inputCount})`,
-        severity: 'error',
-      });
-    }
-  }
-
-  // 7. Orphan compute nodes
+  // 6. Orphan compute nodes
   const computeNodes = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'compute');
   for (const compute of computeNodes) {
     const hasInputs = connections.some((c) => c.to === compute.id);
@@ -120,7 +137,7 @@ export function validateGraph(
     }
   }
 
-  // 8. I2C sensor warning
+  // 7. I2C sensor warning
   const i2cSensors = nodes.filter((n) => n.type === 'sensor-i2c');
   for (const sensor of i2cSensors) {
     errors.push({

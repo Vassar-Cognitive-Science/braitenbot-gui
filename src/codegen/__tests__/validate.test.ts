@@ -78,24 +78,6 @@ describe('validateGraph', () => {
     expect(errors.some((e) => e.message.includes('Right Motor') && e.message.includes('not connected'))).toBe(true);
   });
 
-  it('reports comparator with fewer than 2 inputs', () => {
-    const comp: DiagramNode = {
-      id: 'comp-1',
-      type: 'compute-comparator',
-      label: 'Comp 1',
-      x: 0,
-      y: 0,
-      comparatorOp: '>',
-    };
-    const nodes = [makeSensor(), comp, makeMotor()];
-    const connections = [
-      makeConnection({ id: 'c1', from: 'sensor-1', to: 'comp-1' }),
-      makeConnection({ id: 'c2', from: 'comp-1', to: 'motor-left' }),
-    ];
-    const errors = validateGraph(nodes, connections);
-    expect(errors.some((e) => e.message.includes('requires exactly 2 inputs'))).toBe(true);
-  });
-
   it('reports orphan compute node as warning', () => {
     const compute: DiagramNode = {
       id: 'thresh-1',
