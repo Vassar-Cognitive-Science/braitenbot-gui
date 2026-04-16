@@ -1,7 +1,8 @@
 # BraitenBot GUI
 
-A **Progressive Web Application** for building Braitenberg-style robot wiring
-diagrams. Built with TypeScript, React, and Vite.
+A **Tauri desktop application** for designing Braitenberg-style robot wiring
+diagrams and uploading them to Arduino-compatible hardware. A web build for
+GitHub Pages is also available for demo/classroom use.
 
 ---
 
@@ -15,11 +16,13 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 
 | Feature | Details |
 |---|---|
-| **Diagram-first editor** | Main interface is a drag-and-drop vehicle circuit diagram |
-| **Extensible sensors** | Analog and digital sensor nodes now, schema supports protocol-specific types (for example I2C) |
+| **Diagram-first editor** | Drag-and-drop vehicle circuit diagram |
+| **Extensible sensors** | Analog, digital, and I2C sensor nodes |
 | **Connections by dragging** | Drag links from node outputs to valid node inputs |
-| **Intermediate compute nodes** | Threshold, comparator, and delay nodes can be inserted between sensors and motors |
-| **PWA** | Installable, offline-capable via Workbox service worker |
+| **Intermediate compute nodes** | Threshold, delay, summation, and multiply nodes |
+| **Arduino code generation** | Emit a `.ino` sketch from the diagram |
+| **Desktop upload** | Upload to the robot via bundled `arduino-cli` (Tauri build) |
+| **Web fallback** | Installable PWA build for browsers with Web Serial support |
 
 ## Getting Started
 
@@ -27,57 +30,51 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 
 - Node.js ≥ 18
 - npm ≥ 9
-- Google Chrome or Microsoft Edge (for Web Serial API)
+- Rust toolchain (for the Tauri desktop build — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/))
 
-### Development
+### Desktop (primary)
 
 ```bash
 npm install
-npm run dev
+npm run tauri:dev     # run the desktop app in development
+npm run tauri:build   # produce a distributable desktop bundle
 ```
 
-Open <http://localhost:5173> in Chrome or Edge.
+`npm run tauri:dev` automatically runs the frontend dev server via Vite; you do
+not need to run `npm run dev` separately.
 
-### Build (production)
-
-```bash
-npm run build
-```
-
-The output in `dist/` is a static site that can be served from any web host.
-
-### Preview build
+### Web build (secondary, for GitHub Pages)
 
 ```bash
-npm run preview
+npm run dev:web       # Vite dev server with the PWA plugin enabled
+npm run build:web     # static site output in dist/ (base path /braitenbot-gui/)
+npm run preview       # preview the built site locally
 ```
 
 ## Project Structure
 
 ```
 src/
-├── main.tsx                     # React entry point + PWA service worker
+├── main.tsx                     # React entry point
 ├── App.tsx                      # Root layout
 ├── App.css                      # Global styles
-├── vite-env.d.ts                # Vite / PWA virtual module types
+├── vite-env.d.ts                # Vite client type reference
 ├── types/
-│   ├── index.ts                 # Core TypeScript interfaces
-│   └── serial.d.ts              # Web Serial API type declarations
-├── serial/
-│   └── ArduinoSerial.ts         # Web Serial API wrapper
+│   └── diagram.ts               # Core diagram types (nodes, connections, transfer curves)
+├── components/
+│   ├── BraitenbergDiagram.tsx   # Drag-and-drop node and connection editor
+│   ├── SetupModal.tsx           # First-run Arduino setup dialog
+│   └── TransferCurveEditor.tsx  # Per-connection transfer curve editor
 ├── hooks/
-│   ├── useSerial.ts             # Serial connection lifecycle hook
-│   └── useVehicle.ts            # Legacy weight/preset hook
-└── components/
-    ├── BraitenbergDiagram.tsx   # Drag-and-drop node and connection editor
-    ├── Header.tsx               # Legacy serial connection header
-    ├── ConnectionControls.tsx   # Legacy four-weight control panel
-    └── ArduinoPanel.tsx         # Legacy upload UI
+│   ├── useArduino.ts            # Arduino detect/compile/upload via Tauri
+│   ├── useDiagramPersistence.ts # Local-storage persistence for the diagram
+│   └── useTraceSimulation.ts    # Signal-flow simulation/tracing
+├── codegen/                     # Diagram → .ino sketch emitter + validation
+├── lib/
+│   ├── diagramFile.ts           # Diagram import/export helpers
+│   └── tauri.ts                 # Tauri environment detection + invoke helpers
+src-tauri/                       # Rust Tauri shell (bundles arduino-cli)
 ```
-
-## Browser Compatibility
-
-All editor features work in modern browsers.
 
 ## License
 
