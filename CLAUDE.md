@@ -26,7 +26,6 @@ npm run dev          # frontend-only Vite dev server (Tauri mode, no shell)
 npm run build        # frontend-only production build for Tauri
 npm run dev:web      # PWA/web build dev server
 npm run build:web    # PWA/web production build for GitHub Pages
-npm run lint         # ESLint with strict TypeScript rules (zero warnings)
 ```
 
 ## Architecture

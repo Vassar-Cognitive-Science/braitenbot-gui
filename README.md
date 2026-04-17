@@ -22,7 +22,7 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 | **Intermediate compute nodes** | Threshold, delay, summation, and multiply nodes |
 | **Arduino code generation** | Emit a `.ino` sketch from the diagram |
 | **Desktop upload** | Upload to the robot via bundled `arduino-cli` (Tauri build) |
-| **Web fallback** | Installable PWA build for browsers with Web Serial support |
+| **Web fallback** | Installable PWA for demo/classroom use — diagram editing and code generation only (no device upload) |
 
 ## Getting Started
 

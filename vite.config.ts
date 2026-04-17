@@ -14,10 +14,6 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      host: process.env.TAURI_DEV_HOST || false,
-      hmr: process.env.TAURI_DEV_HOST
-        ? { protocol: 'ws', host: process.env.TAURI_DEV_HOST, port: 1421 }
-        : undefined,
     },
     plugins: [
       react(),
