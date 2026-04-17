@@ -81,11 +81,19 @@ jobs:
 
       - run: npm ci
 
-      # tauri-action runs `beforeBuildCommand` from tauri.conf.json, which
-      # in turn invokes `npm run fetch:arduino-cli` to pull the sidecar for
-      # this platform before the Tauri bundler runs. With no releaseId set,
-      # the action just builds without publishing, leaving installers under
-      # `src-tauri/target/**/release/bundle/`.
+      # Pre-fetch every arduino-cli sidecar before tauri-action runs. The
+      # host-only fetch inside `beforeBuildCommand` picks the sidecar for the
+      # *runner's* architecture, which is wrong when cross-compiling (e.g.
+      # macos-latest is Apple Silicon but we also build x86_64-apple-darwin).
+      # Pre-populating all platform sidecars makes the inner fetch a no-op and
+      # ensures Tauri can locate `arduino-cli-<target-triple>` for every
+      # target in the matrix.
+      - name: Fetch arduino-cli sidecars for all platforms
+        run: npm run fetch:arduino-cli:all
+
+      # tauri-action runs `beforeBuildCommand` from tauri.conf.json. With no
+      # releaseId set, the action just builds without publishing, leaving
+      # installers under `src-tauri/target/**/release/bundle/`.
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
