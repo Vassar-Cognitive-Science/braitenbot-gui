@@ -16,3 +16,8 @@ dist-ssr
 
 # PWA generated files
 dev-dist
+
+# TypeScript composite build output (from `tsc -b`)
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
