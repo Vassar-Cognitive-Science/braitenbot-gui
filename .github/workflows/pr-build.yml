@@ -1,0 +1,94 @@
+name: PR build (Tauri desktop)
+
+# Builds the BraitenBot GUI desktop app for macOS (Apple Silicon + Intel)
+# and Windows on pull requests against main, and uploads the resulting
+# installers/bundles as GitHub Actions artifacts for reviewers to download.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+            artifact-name: macos-aarch64
+          - platform: macos-latest
+            rust-target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+            artifact-name: macos-x86_64
+          - platform: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            args: ''
+            artifact-name: windows-x86_64
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.rust-target }}
+
+      - run: npm ci
+
+      # Pre-fetch every arduino-cli sidecar before tauri-action runs. The
+      # host-only fetch inside `beforeBuildCommand` picks the sidecar for the
+      # *runner's* architecture, which is wrong when cross-compiling (e.g.
+      # macos-latest is Apple Silicon but we also build x86_64-apple-darwin).
+      # Pre-populating all platform sidecars makes the inner fetch a no-op and
+      # ensures Tauri can locate `arduino-cli-<target-triple>` for every
+      # target in the matrix.
+      - name: Fetch arduino-cli sidecars for all platforms
+        run: npm run fetch:arduino-cli:all
+
+      # tauri-action runs `beforeBuildCommand` from tauri.conf.json. With no
+      # releaseId set, the action just builds without publishing, leaving
+      # installers under `src-tauri/target/**/release/bundle/`.
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: braitenbot-gui-${{ matrix.artifact-name }}
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/${{ matrix.rust-target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.rust-target }}/release/bundle/nsis/*.exe
+            src-tauri/target/${{ matrix.rust-target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.rust-target }}/release/bundle/macos/*.app.tar.gz
+          if-no-files-found: error
+          retention-days: 14
