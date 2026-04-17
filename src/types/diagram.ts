@@ -31,8 +31,7 @@ export interface DiagramNode {
   arduinoPort?: string;
   threshold?: number;
   delayMs?: number;
-  motorPinFwd?: string;
-  motorPinRev?: string;
+  motorPin?: string;
   servoPin?: string;
   constantValue?: number;
 }

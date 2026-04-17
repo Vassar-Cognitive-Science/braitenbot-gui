@@ -61,10 +61,10 @@ export function validateGraph(
   for (const motor of motors) {
     const motorType = TYPE_BY_ID[motor.type];
     if (motorType.id === 'motor') {
-      if (!motor.motorPinFwd?.trim() || !motor.motorPinRev?.trim()) {
+      if (!motor.motorPin?.trim()) {
         errors.push({
           nodeId: motor.id,
-          message: `Motor '${motor.label}' has no pin configured for forward/reverse`,
+          message: `Motor '${motor.label}' has no pin configured`,
           severity: 'error',
         });
       }

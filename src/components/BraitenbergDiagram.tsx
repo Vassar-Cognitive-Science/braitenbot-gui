@@ -14,9 +14,8 @@ const NODE_H = 64;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 const ANALOG_PORT_PLACEHOLDER = 'A0';
 const DIGITAL_PORT_PLACEHOLDER = '2';
-const MOTOR_PIN_FWD_PLACEHOLDER = '5';
-const MOTOR_PIN_REV_PLACEHOLDER = '6';
-const SERVO_PIN_PLACEHOLDER = '9';
+const MOTOR_PIN_PLACEHOLDER = '9';
+const SERVO_PIN_PLACEHOLDER = '10';
 
 interface RobotOverlayLayout {
   bodyCx: number;
@@ -130,8 +129,7 @@ function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
       label: 'Left Motor',
       x: layout.leftWheelCx - NODE_W / 2,
       y: layout.leftWheelCy - NODE_H / 2,
-      motorPinFwd: '',
-      motorPinRev: '',
+      motorPin: '',
     },
     {
       id: 'motor-right',
@@ -139,8 +137,7 @@ function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
       label: 'Right Motor',
       x: layout.rightWheelCx - NODE_W / 2,
       y: layout.rightWheelCy - NODE_H / 2,
-      motorPinFwd: '',
-      motorPinRev: '',
+      motorPin: '',
     },
   ];
 }
@@ -878,8 +875,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
           } else if (nodeType.id === 'servo' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
-          } else if (nodeType.id === 'motor' && node.motorPinFwd?.trim()) {
-            nodeMeta = `${nodeType.metaLabel} • pins ${node.motorPinFwd.trim()}/${node.motorPinRev?.trim() || '?'}`;
+          } else if (nodeType.id === 'motor' && node.motorPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • pin ${node.motorPin.trim()}`;
           } else {
             nodeMeta = nodeType.metaLabel;
           }
@@ -983,7 +980,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 {TYPE_BY_ID[selectedNode.type].kind === 'constant' &&
                   'Emits a fixed constant value to all connected nodes.'}
                 {selectedNode.type === 'motor' &&
-                  'Drives a wheel motor on the robot. Speed and direction are determined by incoming connection weights.'}
+                  'Drives a wheel of the robot as a continuous-rotation servo on a single PWM pin. Speed and direction are determined by incoming connection weights; the right wheel is inverted automatically to account for mirrored mounting.'}
                 {selectedNode.type === 'servo' &&
                   'Controls a servo motor. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
               </p>
@@ -1089,42 +1086,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               )}
 
               {selectedNode.type === 'motor' && (
-                <>
-                  <label>
-                    Forward Pin
-                    <input
-                      type="text"
-                      value={selectedNode.motorPinFwd ?? ''}
-                      placeholder={MOTOR_PIN_FWD_PLACEHOLDER}
-                      onChange={(event) =>
-                        setNodes((prev) =>
-                          prev.map((node) =>
-                            node.id === selectedNode.id
-                              ? { ...node, motorPinFwd: event.target.value.trimStart() }
-                              : node,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-                  <label>
-                    Reverse Pin
-                    <input
-                      type="text"
-                      value={selectedNode.motorPinRev ?? ''}
-                      placeholder={MOTOR_PIN_REV_PLACEHOLDER}
-                      onChange={(event) =>
-                        setNodes((prev) =>
-                          prev.map((node) =>
-                            node.id === selectedNode.id
-                              ? { ...node, motorPinRev: event.target.value.trimStart() }
-                              : node,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-                </>
+                <label>
+                  Servo PWM Pin
+                  <input
+                    type="text"
+                    value={selectedNode.motorPin ?? ''}
+                    placeholder={MOTOR_PIN_PLACEHOLDER}
+                    onChange={(event) =>
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id
+                            ? { ...node, motorPin: event.target.value.trimStart() }
+                            : node,
+                        ),
+                      )
+                    }
+                  />
+                </label>
               )}
 
               {selectedNode.type === 'servo' && (

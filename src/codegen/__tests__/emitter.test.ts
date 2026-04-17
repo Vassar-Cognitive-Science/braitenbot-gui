@@ -22,8 +22,19 @@ function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
     label: 'Left Motor',
     x: 0,
     y: 0,
-    motorPinFwd: '5',
-    motorPinRev: '6',
+    motorPin: '9',
+    ...overrides,
+  };
+}
+
+function makeRightMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
+  return {
+    id: 'motor-right',
+    type: 'motor',
+    label: 'Right Motor',
+    x: 0,
+    y: 0,
+    motorPin: '10',
     ...overrides,
   };
 }
@@ -38,9 +49,10 @@ function conn(c: Omit<DiagramConnection, 'transferMode' | 'transferPoints'> & Pa
 
 describe('generateSketch', () => {
   it('generates a minimal sketch with float signals', () => {
-    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [
       conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 0.8 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 0.8 }),
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
@@ -49,23 +61,51 @@ describe('generateSketch', () => {
     // Analog sensor normalized to 0–1, using label-based names
     expect(code).toContain('analogRead(SENSOR_Sensor_1) / 1023.0');
     expect(code).toContain('float sig_Sensor_1');
-    expect(code).toContain('analogWrite');
+    // Servo.h is included, and wheels are declared as Servo objects.
+    expect(code).toContain('#include <Servo.h>');
+    expect(code).toContain('Servo motor_Left_Motor;');
+    expect(code).toContain('Servo motor_Right_Motor;');
+    // drive() helper present and called at the end of loop().
+    expect(code).toContain('void drive(float left, float right)');
+    expect(code).toContain('drive(input_Left_Motor, input_Right_Motor)');
     expect(code).toContain('0.8000');
     expect(code).toContain('delay(20)');
   });
 
-  it('handles negative weight with reverse pin logic', () => {
-    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+  it('inverts the right servo inside the drive() helper', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [
-      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: -0.5 }),
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 1 }),
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
+    // Left wheel: +left * 500. Right wheel: -right * 500 (inverted mounting).
+    expect(code).toMatch(/motor_Left_Motor\.writeMicroseconds\(1500 \+ \(int\)\(left\s+\* 500\.0\)\)/);
+    expect(code).toMatch(/motor_Right_Motor\.writeMicroseconds\(1500 - \(int\)\(right \* 500\.0\)\)/);
+    // Old H-bridge style output must not appear.
+    expect(code).not.toContain('analogWrite(MOTOR_');
+    expect(code).not.toContain('fabs(');
+  });
+
+  it('passes negative weights straight through to drive()', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: -0.5 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: -0.5 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Motor nodes only aggregate inputs; the sign-handling now lives in drive().
     expect(code).toContain('-0.5000');
-    expect(code).toContain('if (input_Left_Motor >= 0)');
-    expect(code).toContain('fabs(');
-    expect(code).toContain('* 255.0');
+    expect(code).toContain('float input_Left_Motor = 0.0;');
+    expect(code).toContain('input_Left_Motor += sig_Sensor_1 * -0.5000;');
+    expect(code).not.toContain('if (input_Left_Motor >= 0)');
+    // drive() clamps to [-1, 1] before writing microseconds.
+    expect(code).toContain('constrain(left,  -1.0, 1.0)');
+    expect(code).toContain('constrain(right, -1.0, 1.0)');
   });
 
   it('generates threshold node with float comparison', () => {

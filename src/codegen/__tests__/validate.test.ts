@@ -21,8 +21,7 @@ function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
     label: 'Left Motor',
     x: 0,
     y: 0,
-    motorPinFwd: '5',
-    motorPinRev: '6',
+    motorPin: '9',
     ...overrides,
   };
 }
@@ -61,7 +60,7 @@ describe('validateGraph', () => {
   });
 
   it('reports motor missing pins', () => {
-    const nodes = [makeSensor(), makeMotor({ motorPinFwd: '', motorPinRev: '' })];
+    const nodes = [makeSensor(), makeMotor({ motorPin: '' })];
     const connections = [makeConnection()];
     const errors = validateGraph(nodes, connections);
     expect(errors.some((e) => e.message.includes('no pin configured'))).toBe(true);

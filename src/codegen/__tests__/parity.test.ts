@@ -145,8 +145,9 @@ function simulateEmittedC(
     }
 
     if (node.kind === 'motor') {
-      // Both motor and servo aggregate inputs into a sum, then convert to
-      // PWM/angle via constrain(fabs(input)*255, 0, 255) or
+      // Wheel motors aggregate inputs into a sum and pass them to the emitted
+      // drive() helper, which clamps to [-1, 1] before writing microseconds.
+      // Servos aggregate into a sum then map to angle via
       // constrain((input+1)*0.5*180, 0, 180). In both cases the effective
       // signal at the node is clamp(sum, -1, 1) — that is what the trace
       // simulator stores, so that is what we compare here.
@@ -214,8 +215,7 @@ function leftMotor(): DiagramNode {
     label: 'Left',
     x: 0,
     y: 0,
-    motorPinFwd: '5',
-    motorPinRev: '6',
+    motorPin: '9',
   };
 }
 
