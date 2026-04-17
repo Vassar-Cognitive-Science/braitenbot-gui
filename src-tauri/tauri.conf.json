@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "edu.vassar.braitenbot-gui",
   "build": {
-    "beforeDevCommand": "npm run fetch:arduino-cli && npm run dev:web",
-    "beforeBuildCommand": "npm run fetch:arduino-cli && npm run build:web",
+    "beforeDevCommand": "npm run fetch:arduino-cli && npm run dev",
+    "beforeBuildCommand": "npm run fetch:arduino-cli && npm run build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },

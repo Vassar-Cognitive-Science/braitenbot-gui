@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:web": "vite --mode tauri",
+    "dev:web": "vite --mode web",
     "build": "tsc && vite build",
-    "build:web": "tsc && vite build --mode tauri",
+    "build:web": "tsc && vite build --mode web",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "fetch:arduino-cli": "node scripts/fetch-arduino-cli.mjs",
