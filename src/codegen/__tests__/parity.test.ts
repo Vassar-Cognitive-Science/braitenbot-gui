@@ -211,11 +211,11 @@ function sensor(id: string, overrides: Partial<DiagramNode> = {}): DiagramNode {
 function leftMotor(): DiagramNode {
   return {
     id: 'motor-L',
-    type: 'motor',
+    type: 'servo-cr',
     label: 'Left',
     x: 0,
     y: 0,
-    motorPin: '9',
+    servoPin: '9',
   };
 }
 
@@ -473,7 +473,7 @@ describe('node parity (trace vs emitted C)', () => {
     it('agrees on the underlying signal', () => {
       const servo: DiagramNode = {
         id: 'srv',
-        type: 'servo',
+        type: 'servo-positional',
         label: 'srv',
         x: 0,
         y: 0,
@@ -590,18 +590,5 @@ describe('known divergences (documented, not parity)', () => {
     expect(trace.nodeValues.d1).toBeCloseTo(0.7, 9);
   });
 
-  it('i2c sensor: C emits stub 0.0, trace honors user input', () => {
-    // Pin the asymmetry rather than hide it. If the i2c stub is ever
-    // replaced with a real read, update both sides and add to parity.
-    const nodes = [
-      sensor('i', { type: 'sensor-i2c', arduinoPort: '0x68' }),
-      leftMotor(),
-    ];
-    const connections = [makeConn({ id: 'c1', from: 'i', to: 'motor-L' })];
-    const trace = simulateGraph(nodes, connections, { i: 0.7 });
-    const c = simulateEmittedC(buildGraph(nodes, connections), { i: 0.7 });
-    expect(trace.nodeValues.i).toBeCloseTo(0.7, 9);
-    expect(c.nodeValues.i).toBe(0);
-  });
 });
 

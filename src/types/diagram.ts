@@ -11,15 +11,14 @@ export type OutputPortId = ColorChannel;
 export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
-  | 'sensor-i2c'
   | 'sensor-color'
   | 'compute-threshold'
   | 'compute-delay'
   | 'compute-summation'
   | 'compute-multiply'
   | 'constant'
-  | 'motor'
-  | 'servo';
+  | 'servo-cr'
+  | 'servo-positional';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -39,7 +38,6 @@ export interface DiagramNode {
   arduinoPort?: string;
   threshold?: number;
   delayMs?: number;
-  motorPin?: string;
   servoPin?: string;
   constantValue?: number;
 }
@@ -84,15 +82,14 @@ export function isValidOutputPort(
 export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
   { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital' },
-  { id: 'sensor-i2c', kind: 'sensor', displayName: 'I2C Sensor', metaLabel: 'i2c', protocol: 'i2c' },
   { id: 'sensor-color', kind: 'sensor', displayName: 'Color Sensor', metaLabel: 'TCS34725', protocol: 'i2c' },
   { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },
   { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
-  { id: 'motor', kind: 'motor', displayName: 'Motor', metaLabel: 'actuator' },
-  { id: 'servo', kind: 'motor', displayName: 'Servo', metaLabel: 'servo' },
+  { id: 'servo-cr', kind: 'motor', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
+  { id: 'servo-positional', kind: 'motor', displayName: 'Positional Servo', metaLabel: 'positional servo' },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

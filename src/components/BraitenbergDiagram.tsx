@@ -130,28 +130,32 @@ function calculateRobotOverlay(canvasWidth: number, canvasHeight: number): Robot
 
 const INITIAL_ROBOT_LAYOUT = calculateRobotOverlay(960, 620);
 
-function makeMotorNodes(layout: RobotOverlayLayout): DiagramNode[] {
+function isWheelNode(id: string): boolean {
+  return id === 'motor-left' || id === 'motor-right';
+}
+
+function makeWheelNodes(layout: RobotOverlayLayout): DiagramNode[] {
   return [
     {
       id: 'motor-left',
-      type: 'motor',
-      label: 'Left Motor',
+      type: 'servo-cr',
+      label: 'Left Wheel',
       x: layout.leftWheelCx - NODE_W / 2,
       y: layout.leftWheelCy - NODE_H / 2,
-      motorPin: '',
+      servoPin: '',
     },
     {
       id: 'motor-right',
-      type: 'motor',
-      label: 'Right Motor',
+      type: 'servo-cr',
+      label: 'Right Wheel',
       x: layout.rightWheelCx - NODE_W / 2,
       y: layout.rightWheelCy - NODE_H / 2,
-      motorPin: '',
+      servoPin: '',
     },
   ];
 }
 
-const START_NODES: DiagramNode[] = makeMotorNodes(INITIAL_ROBOT_LAYOUT);
+const START_NODES: DiagramNode[] = makeWheelNodes(INITIAL_ROBOT_LAYOUT);
 
 interface BraitenbergDiagramProps {
   arduino: ReturnType<typeof useArduino>;
@@ -216,12 +220,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const isDiagramPristine = useMemo(
     () =>
       connections.length === 0 &&
-      nodes.every((node) => TYPE_BY_ID[node.type]?.kind === 'motor'),
+      nodes.length === 2 &&
+      nodes.every((node) => isWheelNode(node.id)),
     [nodes, connections],
   );
 
   const resetToDefault = useCallback(() => {
-    setNodes(makeMotorNodes(robotLayout));
+    setNodes(makeWheelNodes(robotLayout));
     setConnections(START_CONNECTIONS);
     setLoopPeriodMs(20);
     setConfigTarget(null);
@@ -262,7 +267,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
     clearResetArmTimer();
     pushUndo();
-    setNodes(makeMotorNodes(robotLayout));
+    setNodes(makeWheelNodes(robotLayout));
     setConnections(START_CONNECTIONS);
     setConfigTarget(null);
     setResetArmed(false);
@@ -361,7 +366,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
   const deleteNode = useCallback((nodeId: string) => {
     const node = nodeMap[nodeId];
-    if (!node || node.type === 'motor') return;
+    if (!node || isWheelNode(node.id)) return;
     pushUndo();
     setNodes((prev) => prev.filter((n) => n.id !== nodeId));
     setConnections((prev) => prev.filter((c) => c.from !== nodeId && c.to !== nodeId));
@@ -516,8 +521,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     if (!canvasRef.current) return;
     const nodeTypeId = event.dataTransfer.getData('application/x-node-type') as NodeTypeId;
     if (!nodeTypeId || !(nodeTypeId in TYPE_BY_ID)) return;
-    // Wheel motors are fixed — new actuators must be servos.
-    if (nodeTypeId === 'motor') return;
     pushUndo();
 
     const rect = canvasRef.current.getBoundingClientRect();
@@ -541,7 +544,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
           constantValue: nodeType.kind === 'constant' ? 512 : undefined,
-          servoPin: nodeTypeId === 'servo' ? '' : undefined,
+          servoPin: nodeType.kind === 'motor' ? '' : undefined,
         },
       ];
     });
@@ -600,15 +603,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {(['sensor', 'compute', 'motor'] as const).map((kind) => {
           const nodesOfKind = kind === 'compute'
             ? NODE_TYPES.filter((n) => n.kind === 'compute' || n.kind === 'constant')
-            : kind === 'motor'
-              // The two wheel motors are fixed — extra actuators use servos.
-              ? NODE_TYPES.filter((n) => n.id === 'servo')
-              : NODE_TYPES.filter((n) => n.kind === kind);
+            : NODE_TYPES.filter((n) => n.kind === kind);
           if (nodesOfKind.length === 0) return null;
           const kindLabels: Record<string, string> = {
             sensor: 'Sensors',
             compute: 'Compute',
-            motor: 'Motors',
+            motor: 'Actuators',
           };
           return (
             <div key={kind} className="palette-group">
@@ -898,10 +898,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ${node.delayMs}ms`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
-          } else if (nodeType.id === 'servo' && node.servoPin?.trim()) {
+          } else if (nodeType.kind === 'motor' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
-          } else if (nodeType.id === 'motor' && node.motorPin?.trim()) {
-            nodeMeta = `${nodeType.metaLabel} • pin ${node.motorPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
             nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
           } else {
@@ -1033,10 +1031,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   'Multiplies all incoming signals together. When one input is 0 or 1, it acts as a gate: the other signal passes through when the gate is on, and zero when the gate is off.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'constant' &&
                   'Emits a fixed constant value to all connected nodes.'}
-                {selectedNode.type === 'motor' &&
+                {selectedNode.type === 'servo-cr' && isWheelNode(selectedNode.id) &&
                   'Drives a wheel of the robot as a continuous-rotation servo on a single PWM pin. Speed and direction are determined by incoming connection weights; the right wheel is inverted automatically to account for mirrored mounting.'}
-                {selectedNode.type === 'servo' &&
-                  'Controls a servo motor. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
+                {selectedNode.type === 'servo-cr' && !isWheelNode(selectedNode.id) &&
+                  'Continuous-rotation servo. The input signal (-1 to 1) is mapped to signed speed via writeMicroseconds (1500 ± 500 µs).'}
+                {selectedNode.type === 'servo-positional' &&
+                  'Positional servo. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
               </p>
               <label>
                 Node Label
@@ -1146,33 +1146,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </label>
               )}
 
-              {selectedNode.type === 'motor' && (
-                <label>
-                  Servo PWM Pin
-                  <input
-                    type="text"
-                    value={selectedNode.motorPin ?? ''}
-                    placeholder={MOTOR_PIN_PLACEHOLDER}
-                    onChange={(event) =>
-                      setNodes((prev) =>
-                        prev.map((node) =>
-                          node.id === selectedNode.id
-                            ? { ...node, motorPin: event.target.value.trimStart() }
-                            : node,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-              )}
-
-              {selectedNode.type === 'servo' && (
+              {TYPE_BY_ID[selectedNode.type].kind === 'motor' && (
                 <label>
                   Servo Pin
                   <input
                     type="text"
                     value={selectedNode.servoPin ?? ''}
-                    placeholder={SERVO_PIN_PLACEHOLDER}
+                    placeholder={
+                      selectedNode.type === 'servo-cr' ? MOTOR_PIN_PLACEHOLDER : SERVO_PIN_PLACEHOLDER
+                    }
                     onChange={(event) =>
                       setNodes((prev) =>
                         prev.map((node) =>
@@ -1185,7 +1167,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   />
                 </label>
               )}
-              {selectedNode.type !== 'motor' && (
+              {!isWheelNode(selectedNode.id) && (
                 <button
                   className="config-delete"
                   onClick={() => deleteNode(selectedNode.id)}

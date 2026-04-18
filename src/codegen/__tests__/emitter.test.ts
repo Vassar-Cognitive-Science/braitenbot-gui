@@ -18,11 +18,11 @@ function makeSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
 function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
     id: 'motor-left',
-    type: 'motor',
-    label: 'Left Motor',
+    type: 'servo-cr',
+    label: 'Left Wheel',
     x: 0,
     y: 0,
-    motorPin: '9',
+    servoPin: '9',
     ...overrides,
   };
 }
@@ -30,11 +30,11 @@ function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
 function makeRightMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
     id: 'motor-right',
-    type: 'motor',
-    label: 'Right Motor',
+    type: 'servo-cr',
+    label: 'Right Wheel',
     x: 0,
     y: 0,
-    motorPin: '10',
+    servoPin: '10',
     ...overrides,
   };
 }
@@ -63,11 +63,11 @@ describe('generateSketch', () => {
     expect(code).toContain('float sig_Sensor_1');
     // Servo.h is included, and wheels are declared as Servo objects.
     expect(code).toContain('#include <Servo.h>');
-    expect(code).toContain('Servo motor_Left_Motor;');
-    expect(code).toContain('Servo motor_Right_Motor;');
+    expect(code).toContain('Servo servo_Left_Wheel;');
+    expect(code).toContain('Servo servo_Right_Wheel;');
     // drive() helper present and called at the end of loop().
     expect(code).toContain('void drive(float left, float right)');
-    expect(code).toContain('drive(input_Left_Motor, input_Right_Motor)');
+    expect(code).toContain('drive(input_Left_Wheel, input_Right_Wheel)');
     expect(code).toContain('0.8000');
     expect(code).toContain('delay(20)');
   });
@@ -82,8 +82,8 @@ describe('generateSketch', () => {
     const code = generateSketch(graph);
 
     // Left wheel: +left * 500. Right wheel: -right * 500 (inverted mounting).
-    expect(code).toMatch(/motor_Left_Motor\.writeMicroseconds\(1500 \+ \(int\)\(left\s+\* 500\.0\)\)/);
-    expect(code).toMatch(/motor_Right_Motor\.writeMicroseconds\(1500 - \(int\)\(right \* 500\.0\)\)/);
+    expect(code).toMatch(/servo_Left_Wheel\.writeMicroseconds\(1500 \+ \(int\)\(left\s+\* 500\.0\)\)/);
+    expect(code).toMatch(/servo_Right_Wheel\.writeMicroseconds\(1500 - \(int\)\(right \* 500\.0\)\)/);
     // Old H-bridge style output must not appear.
     expect(code).not.toContain('analogWrite(MOTOR_');
     expect(code).not.toContain('fabs(');
@@ -100,9 +100,9 @@ describe('generateSketch', () => {
 
     // Motor nodes only aggregate inputs; the sign-handling now lives in drive().
     expect(code).toContain('-0.5000');
-    expect(code).toContain('float input_Left_Motor = 0.0;');
-    expect(code).toContain('input_Left_Motor += sig_Sensor_1 * -0.5000;');
-    expect(code).not.toContain('if (input_Left_Motor >= 0)');
+    expect(code).toContain('float input_Left_Wheel = 0.0;');
+    expect(code).toContain('input_Left_Wheel += sig_Sensor_1 * -0.5000;');
+    expect(code).not.toContain('if (input_Left_Wheel >= 0)');
     // drive() clamps to [-1, 1] before writing microseconds.
     expect(code).toContain('constrain(left,  -1.0, 1.0)');
     expect(code).toContain('constrain(right, -1.0, 1.0)');
@@ -192,22 +192,6 @@ describe('generateSketch', () => {
     expect(code).toContain('pinMode');
   });
 
-  it('includes Wire.h for I2C sensors', () => {
-    const nodes: DiagramNode[] = [
-      makeSensor({ id: 'i2c-1', type: 'sensor-i2c', label: 'I2C' }),
-      makeMotor(),
-    ];
-    const connections: DiagramConnection[] = [
-      conn({ id: 'c1', from: 'i2c-1', to: 'motor-left', weight: 1 }),
-    ];
-    const graph = buildGraph(nodes, connections);
-    const code = generateSketch(graph);
-
-    expect(code).toContain('#include <Wire.h>');
-    expect(code).toContain('Wire.begin()');
-    expect(code).toContain('float sig_I2C = 0.0');
-  });
-
   it('emits a TCS34725 driver and one variable per channel for color sensors', () => {
     const nodes: DiagramNode[] = [
       makeSensor({
@@ -241,13 +225,11 @@ describe('generateSketch', () => {
     expect(code).toContain('float sig_Front_Color_green = tcs34725_read16(0x18) / 65535.0;');
     expect(code).toContain('float sig_Front_Color_blue  = tcs34725_read16(0x1A) / 65535.0;');
     // Edges resolve to the port-specific variable, not a single sig_Front_Color.
-    expect(code).toContain('input_Left_Motor += sig_Front_Color_red * 1.0000;');
-    expect(code).toContain('input_Right_Motor += sig_Front_Color_clear * 0.5000;');
+    expect(code).toContain('input_Left_Wheel += sig_Front_Color_red * 1.0000;');
+    expect(code).toContain('input_Right_Wheel += sig_Front_Color_clear * 0.5000;');
     // No bare `sig_Front_Color` without a port suffix — every reference must
     // go through one of the four channel-suffixed variables.
     expect(code).not.toMatch(/sig_Front_Color[^_a-zA-Z0-9]/);
-    // The generic I2C stub must not leak in when only color sensors are used.
-    expect(code).not.toContain('TODO: read I2C sensor');
   });
 
   it('falls back to a declared channel when fromPort is unknown', () => {
@@ -275,7 +257,7 @@ describe('generateSketch', () => {
     // Emitter must not reference sig_Front_Color_ultraviolet (never declared).
     expect(code).not.toContain('sig_Front_Color_ultraviolet');
     // And must fall back to a variable that *is* declared — clear is first.
-    expect(code).toContain('input_Left_Motor += sig_Front_Color_clear * 1.0000;');
+    expect(code).toContain('input_Left_Wheel += sig_Front_Color_clear * 1.0000;');
   });
 
   it('checks Wire.endTransmission and requestFrom in tcs34725_read16', () => {
@@ -323,7 +305,7 @@ describe('generateSketch', () => {
 
     expect(code).toContain('float transfer_');
     expect(code).toContain('float x)');
-    expect(code).toContain('transfer_Sensor_1_Left_Motor_0');
+    expect(code).toContain('transfer_Sensor_1_Left_Wheel_0');
     // No * 1023.0 scaling — output is already in -1 to 1 signal domain
     expect(code).not.toContain('* 1023.0');
   });
