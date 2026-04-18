@@ -4,7 +4,6 @@ import type {
   NodeKind,
   NodeTypeId,
   SensorProtocol,
-  ColorChannel,
 } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
 import { toposort } from './toposort';
@@ -21,11 +20,12 @@ export interface GraphNode {
   motorPin?: string;
   servoPin?: string;
   constantValue?: number;
-  colorChannel?: ColorChannel;
 }
 
 export interface GraphEdge {
   from: string;
+  /** Optional output-port id on the source node — see DiagramConnection.fromPort. */
+  fromPort?: string;
   to: string;
   weight: number;
   transferMode: 'linear' | 'nonlinear';
@@ -58,12 +58,12 @@ export function buildGraph(
       motorPin: node.motorPin,
       servoPin: node.servoPin,
       constantValue: node.constantValue,
-      colorChannel: node.colorChannel,
     };
   });
 
   const graphEdges: GraphEdge[] = connections.map((conn) => ({
     from: conn.from,
+    fromPort: conn.fromPort,
     to: conn.to,
     weight: conn.weight,
     transferMode: conn.transferMode,

@@ -41,6 +41,19 @@ function varName(node: GraphNode): string {
   return `sig_${readableId(node)}`;
 }
 
+/**
+ * The variable a downstream consumer reads for a given source node + port.
+ * Multi-output nodes (currently only the TCS34725 color sensor) expose one
+ * variable per channel suffixed with the port name; single-output nodes
+ * fall back to the canonical `sig_` variable.
+ */
+function srcVarName(node: GraphNode, fromPort?: string): string {
+  if (node.typeId === 'sensor-color') {
+    return `sig_${readableId(node)}_${fromPort ?? 'clear'}`;
+  }
+  return varName(node);
+}
+
 function inputVar(node: GraphNode): string {
   return `input_${readableId(node)}`;
 }
@@ -90,12 +103,13 @@ function emitTransferFunction(edge: GraphEdge, idx: number): string {
 
 /** Produce a C expression for a single edge's contribution. */
 function emitEdgeTerm(graph: WiringGraph, edge: GraphEdge, src: GraphNode): string {
+  const sv = srcVarName(src, edge.fromPort);
   if (edge.transferMode === 'nonlinear' && edge.transferPoints.length >= 2) {
     const fnIdx = graph.edges.indexOf(edge);
     const fname = `transfer_${readableEdgeId(edge.from)}_${readableEdgeId(edge.to)}_${fnIdx}`;
-    return `${fname}(${varName(src)})`;
+    return `${fname}(${sv})`;
   }
-  return `${varName(src)} * ${edge.weight.toFixed(4)}`;
+  return `${sv} * ${edge.weight.toFixed(4)}`;
 }
 
 function emitInputAggregation(
@@ -188,13 +202,6 @@ function emitSetup(graph: WiringGraph): string {
   return lines.join('\n');
 }
 
-const TCS34725_CHANNEL_REG: Record<string, string> = {
-  clear: '0x14',
-  red: '0x16',
-  green: '0x18',
-  blue: '0x1A',
-};
-
 function emitSensorRead(node: GraphNode, indent: string): string {
   const name = varName(node);
   if (node.protocol === 'analog') {
@@ -204,9 +211,15 @@ function emitSensorRead(node: GraphNode, indent: string): string {
     return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
   }
   if (node.typeId === 'sensor-color') {
-    const channel = node.colorChannel ?? 'clear';
-    const reg = TCS34725_CHANNEL_REG[channel];
-    return `${indent}float ${name} = tcs34725_read16(${reg}) / 65535.0; // ${channel} channel`;
+    // One sig_*_<channel> variable per output port — downstream edges pick
+    // the channel they care about via their fromPort.
+    const rid = readableId(node);
+    return [
+      `${indent}float sig_${rid}_clear = tcs34725_read16(0x14) / 65535.0;`,
+      `${indent}float sig_${rid}_red   = tcs34725_read16(0x16) / 65535.0;`,
+      `${indent}float sig_${rid}_green = tcs34725_read16(0x18) / 65535.0;`,
+      `${indent}float sig_${rid}_blue  = tcs34725_read16(0x1A) / 65535.0;`,
+    ].join('\n');
   }
   // Generic I2C stub
   return `${indent}float ${name} = 0.0; // TODO: read I2C sensor (Wire.requestFrom)`;

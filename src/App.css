@@ -375,6 +375,33 @@ body {
   border-color: var(--motor-color);
 }
 
+/* Multi-output port anchors: positioned along the bottom edge via inline `left`. */
+.output-handle-port {
+  width: 12px;
+  height: 12px;
+  bottom: -7px;
+}
+
+.output-handle-clear {
+  color: #d8d4c4;
+  border-color: #d8d4c4;
+}
+
+.output-handle-red {
+  color: #d26a5e;
+  border-color: #d26a5e;
+}
+
+.output-handle-green {
+  color: #6eb87a;
+  border-color: #6eb87a;
+}
+
+.output-handle-blue {
+  color: #5e90d2;
+  border-color: #5e90d2;
+}
+
 /* While dragging a new connection, draw attention to input targets */
 .diagram-canvas.linking .input-handle {
   animation: input-pulse 1.4s ease-in-out infinite;

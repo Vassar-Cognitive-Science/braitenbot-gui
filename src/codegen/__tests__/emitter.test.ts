@@ -208,27 +208,21 @@ describe('generateSketch', () => {
     expect(code).toContain('float sig_I2C = 0.0');
   });
 
-  it('emits a TCS34725 driver and per-channel reads for color sensors', () => {
+  it('emits a TCS34725 driver and one variable per channel for color sensors', () => {
     const nodes: DiagramNode[] = [
       makeSensor({
         id: 'color-1',
         type: 'sensor-color',
         label: 'Front Color',
         arduinoPort: undefined,
-        colorChannel: 'red',
-      }),
-      makeSensor({
-        id: 'color-2',
-        type: 'sensor-color',
-        label: 'Front Brightness',
-        arduinoPort: undefined,
-        colorChannel: 'clear',
       }),
       makeMotor(),
+      makeRightMotor(),
     ];
     const connections: DiagramConnection[] = [
-      conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }),
-      conn({ id: 'c2', from: 'color-2', to: 'motor-left', weight: 0.5 }),
+      // Two edges from the same sensor but different output ports.
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+      { ...conn({ id: 'c2', from: 'color-1', to: 'motor-right', weight: 0.5 }), fromPort: 'clear' },
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
@@ -241,9 +235,17 @@ describe('generateSketch', () => {
     expect(code).toContain('void tcs34725_begin()');
     // setup() initializes the chip.
     expect(code).toContain('tcs34725_begin();');
-    // Each color sensor reads its selected channel (red=0x16, clear=0x14).
-    expect(code).toContain('float sig_Front_Color = tcs34725_read16(0x16) / 65535.0;');
-    expect(code).toContain('float sig_Front_Brightness = tcs34725_read16(0x14) / 65535.0;');
+    // All four channel variables are emitted each loop, one per port.
+    expect(code).toContain('float sig_Front_Color_clear = tcs34725_read16(0x14) / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_red   = tcs34725_read16(0x16) / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_green = tcs34725_read16(0x18) / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_blue  = tcs34725_read16(0x1A) / 65535.0;');
+    // Edges resolve to the port-specific variable, not a single sig_Front_Color.
+    expect(code).toContain('input_Left_Motor += sig_Front_Color_red * 1.0000;');
+    expect(code).toContain('input_Right_Motor += sig_Front_Color_clear * 0.5000;');
+    // No bare `sig_Front_Color` without a port suffix — every reference must
+    // go through one of the four channel-suffixed variables.
+    expect(code).not.toMatch(/sig_Front_Color[^_a-zA-Z0-9]/);
     // The generic I2C stub must not leak in when only color sensors are used.
     expect(code).not.toContain('TODO: read I2C sensor');
   });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
-import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint, ColorChannel } from '../types/diagram';
-import { NODE_TYPES, TYPE_BY_ID } from '../types/diagram';
+import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint } from '../types/diagram';
+import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
@@ -44,6 +44,15 @@ function makePath(x1: number, y1: number, x2: number, y2: number): string {
   const c1 = y1 + 60;
   const c2 = y2 - 60;
   return `M ${x1} ${y1} C ${x1} ${c1}, ${x2} ${c2}, ${x2} ${y2}`;
+}
+
+/** Horizontal offset (px, local to the node) of the output anchor for a given port. */
+function portOffsetX(typeId: NodeTypeId, fromPort?: string): number {
+  const ports = getOutputPorts(typeId);
+  if (!ports) return NODE_W / 2;
+  const idx = fromPort ? ports.indexOf(fromPort as (typeof ports)[number]) : -1;
+  const i = idx >= 0 ? idx : 0;
+  return ((i + 0.5) / ports.length) * NODE_W;
 }
 
 function supportsArduinoPort(nodeType: NodeTypeDefinition): boolean {
@@ -166,7 +175,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [connections, setConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
-  const [linkDraftSource, setLinkDraftSource] = useState<string | null>(null);
+  const [linkDraftSource, setLinkDraftSource] = useState<{ id: string; port?: string } | null>(null);
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
@@ -371,7 +380,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         const from = nodeMap[connection.from];
         const to = nodeMap[connection.to];
         if (!from || !to) return null;
-        const x1 = from.x + NODE_W / 2;
+        const x1 = from.x + portOffsetX(from.type, connection.fromPort);
         const y1 = from.y + NODE_H;
         const x2 = to.x + NODE_W / 2;
         const y2 = to.y;
@@ -468,11 +477,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setNodeDragOffset({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
-  const beginLinkDrag = (event: MouseEvent, nodeId: string) => {
+  const beginLinkDrag = (event: MouseEvent, nodeId: string, port?: string) => {
     event.stopPropagation();
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    setLinkDraftSource(nodeId);
+    setLinkDraftSource({ id: nodeId, port });
     setLinkDraftPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
@@ -531,13 +540,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
           constantValue: nodeType.kind === 'constant' ? 512 : undefined,
           servoPin: nodeTypeId === 'servo' ? '' : undefined,
-          colorChannel: nodeTypeId === 'sensor-color' ? 'clear' : undefined,
         },
       ];
     });
   };
 
-  const canConnect = (fromId: string, toId: string): boolean => {
+  const canConnect = (fromId: string, toId: string, fromPort?: string): boolean => {
     if (fromId === toId) return false;
     const from = nodeMap[fromId];
     const to = nodeMap[toId];
@@ -545,20 +553,30 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const fromType = TYPE_BY_ID[from.type];
     const toType = TYPE_BY_ID[to.type];
     if (!canOutput(fromType) || !canInput(toType)) return false;
-    return !connections.some((connection) => connection.from === fromId && connection.to === toId);
+    return !connections.some(
+      (connection) =>
+        connection.from === fromId &&
+        connection.to === toId &&
+        (connection.fromPort ?? undefined) === fromPort,
+    );
   };
 
   const completeLink = (toId: string) => {
-    if (!linkDraftSource || !canConnect(linkDraftSource, toId)) {
+    if (
+      !linkDraftSource ||
+      !canConnect(linkDraftSource.id, toId, linkDraftSource.port)
+    ) {
       setLinkDraftSource(null);
       return;
     }
     pushUndo();
+    const { id: fromId, port: fromPort } = linkDraftSource;
     setConnections((prev) => [
       ...prev,
       {
         id: makeId('link'),
-        from: linkDraftSource,
+        from: fromId,
+        ...(fromPort ? { fromPort } : {}),
         to: toId,
         weight: DEFAULT_CONNECTION_WEIGHT,
         transferMode: 'linear',
@@ -827,12 +845,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               />
             );
           })}
-          {linkDraftSource && nodeMap[linkDraftSource] && (
+          {linkDraftSource && nodeMap[linkDraftSource.id] && (
             <path
               className="draft-link"
               d={makePath(
-                nodeMap[linkDraftSource].x + NODE_W / 2,
-                nodeMap[linkDraftSource].y + NODE_H,
+                nodeMap[linkDraftSource.id].x +
+                  portOffsetX(nodeMap[linkDraftSource.id].type, linkDraftSource.port),
+                nodeMap[linkDraftSource.id].y + NODE_H,
                 linkDraftPoint.x,
                 linkDraftPoint.y,
               )}
@@ -879,7 +898,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           } else if (nodeType.id === 'motor' && node.motorPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.motorPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
-            nodeMeta = `${nodeType.metaLabel} • ${node.colorChannel ?? 'clear'}`;
+            nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
           } else {
             nodeMeta = nodeType.metaLabel;
           }
@@ -930,13 +949,31 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   <span className="trace-slider-label">1</span>
                 </div>
               )}
-              {canOutput(nodeType) && (
-                <button
-                  className="node-handle output-handle"
-                  aria-label={`Start connection from ${node.label}`}
-                  onMouseDown={(event) => beginLinkDrag(event, node.id)}
-                />
-              )}
+              {canOutput(nodeType) && (() => {
+                const ports = getOutputPorts(nodeType.id);
+                if (!ports) {
+                  return (
+                    <button
+                      className="node-handle output-handle"
+                      aria-label={`Start connection from ${node.label}`}
+                      onMouseDown={(event) => beginLinkDrag(event, node.id)}
+                    />
+                  );
+                }
+                return ports.map((port, i) => {
+                  const leftPct = ((i + 0.5) / ports.length) * 100;
+                  return (
+                    <button
+                      key={port}
+                      className={`node-handle output-handle output-handle-port output-handle-${port}`}
+                      style={{ left: `${leftPct}%` }}
+                      title={port}
+                      aria-label={`Start ${port} connection from ${node.label}`}
+                      onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
+                    />
+                  );
+                });
+              })()}
               {canInput(nodeType) && (
                 <button
                   className="node-handle input-handle"
@@ -1023,25 +1060,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               )}
 
               {selectedNode.type === 'sensor-color' && (
-                <label>
-                  Color Channel
-                  <select
-                    value={selectedNode.colorChannel ?? 'clear'}
-                    onChange={(event) => {
-                      const value = event.target.value as ColorChannel;
-                      setNodes((prev) =>
-                        prev.map((node) =>
-                          node.id === selectedNode.id ? { ...node, colorChannel: value } : node,
-                        ),
-                      );
-                    }}
-                  >
-                    <option value="clear">Clear (overall brightness)</option>
-                    <option value="red">Red</option>
-                    <option value="green">Green</option>
-                    <option value="blue">Blue</option>
-                  </select>
-                </label>
+                <p className="config-description">
+                  This sensor exposes four output anchors — clear, red, green, blue.
+                  Drag from the specific anchor to wire that channel.
+                </p>
               )}
 
               {TYPE_BY_ID[selectedNode.type].mode === 'threshold' && (

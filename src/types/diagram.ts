@@ -36,7 +36,6 @@ export interface DiagramNode {
   motorPin?: string;
   servoPin?: string;
   constantValue?: number;
-  colorChannel?: ColorChannel;
 }
 
 export type TransferMode = 'linear' | 'nonlinear';
@@ -49,10 +48,22 @@ export interface TransferPoint {
 export interface DiagramConnection {
   id: string;
   from: string;
+  /** Optional output-port id on the source node; used by multi-output nodes (e.g. color sensors). */
+  fromPort?: string;
   to: string;
   weight: number;
   transferMode: TransferMode;
   transferPoints: TransferPoint[];
+}
+
+/**
+ * Output ports for node types that expose more than one signal.
+ * Undefined means the node has a single default output — edges leaving such
+ * nodes don't carry a `fromPort` field.
+ */
+export function getOutputPorts(typeId: NodeTypeId): ColorChannel[] | undefined {
+  if (typeId === 'sensor-color') return ['clear', 'red', 'green', 'blue'];
+  return undefined;
 }
 
 export const NODE_TYPES: NodeTypeDefinition[] = [
