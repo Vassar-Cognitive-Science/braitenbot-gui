@@ -1,4 +1,11 @@
-import type { DiagramNode, DiagramConnection, NodeKind, NodeTypeId, SensorProtocol } from '../types/diagram';
+import type {
+  DiagramNode,
+  DiagramConnection,
+  NodeKind,
+  NodeTypeId,
+  SensorProtocol,
+  ColorChannel,
+} from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
 import { toposort } from './toposort';
 
@@ -14,6 +21,7 @@ export interface GraphNode {
   motorPin?: string;
   servoPin?: string;
   constantValue?: number;
+  colorChannel?: ColorChannel;
 }
 
 export interface GraphEdge {
@@ -50,6 +58,7 @@ export function buildGraph(
       motorPin: node.motorPin,
       servoPin: node.servoPin,
       constantValue: node.constantValue,
+      colorChannel: node.colorChannel,
     };
   });
 

@@ -163,8 +163,13 @@ function emitSetup(graph: WiringGraph): string {
   lines.push('void setup() {');
   lines.push('  Serial.begin(115200);');
 
+  const hasColor = graph.nodes.some((n) => n.typeId === 'sensor-color');
+
   if (hasI2C) {
     lines.push('  Wire.begin();');
+  }
+  if (hasColor) {
+    lines.push('  tcs34725_begin();');
   }
 
   for (const node of graph.nodes) {
@@ -183,6 +188,13 @@ function emitSetup(graph: WiringGraph): string {
   return lines.join('\n');
 }
 
+const TCS34725_CHANNEL_REG: Record<string, string> = {
+  clear: '0x14',
+  red: '0x16',
+  green: '0x18',
+  blue: '0x1A',
+};
+
 function emitSensorRead(node: GraphNode, indent: string): string {
   const name = varName(node);
   if (node.protocol === 'analog') {
@@ -191,8 +203,45 @@ function emitSensorRead(node: GraphNode, indent: string): string {
   if (node.protocol === 'digital') {
     return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
   }
-  // I2C stub
+  if (node.typeId === 'sensor-color') {
+    const channel = node.colorChannel ?? 'clear';
+    const reg = TCS34725_CHANNEL_REG[channel];
+    return `${indent}float ${name} = tcs34725_read16(${reg}) / 65535.0; // ${channel} channel`;
+  }
+  // Generic I2C stub
   return `${indent}float ${name} = 0.0; // TODO: read I2C sensor (Wire.requestFrom)`;
+}
+
+function emitTcs34725Driver(): string {
+  return [
+    '// --- TCS34725 color sensor driver (I2C, address 0x29) ---',
+    'const uint8_t TCS34725_ADDR = 0x29;',
+    '',
+    'void tcs34725_write8(uint8_t reg, uint8_t value) {',
+    '  Wire.beginTransmission(TCS34725_ADDR);',
+    '  Wire.write(0x80 | reg); // command bit + register',
+    '  Wire.write(value);',
+    '  Wire.endTransmission();',
+    '}',
+    '',
+    'uint16_t tcs34725_read16(uint8_t reg) {',
+    '  Wire.beginTransmission(TCS34725_ADDR);',
+    '  Wire.write(0x80 | reg);',
+    '  Wire.endTransmission();',
+    '  Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);',
+    '  uint8_t lo = Wire.read();',
+    '  uint8_t hi = Wire.read();',
+    '  return ((uint16_t)hi << 8) | lo;',
+    '}',
+    '',
+    'void tcs34725_begin() {',
+    '  tcs34725_write8(0x01, 0xD5); // ATIME: ~101 ms integration',
+    '  tcs34725_write8(0x0F, 0x01); // CONTROL: gain = 4x',
+    '  tcs34725_write8(0x00, 0x01); // ENABLE: PON',
+    '  delay(3);',
+    '  tcs34725_write8(0x00, 0x03); // ENABLE: PON | AEN (RGBC enable)',
+    '}',
+  ].join('\n');
 }
 
 function emitComputeNode(
@@ -279,6 +328,7 @@ export function generateSketch(graph: WiringGraph): string {
   setLabelMap(buildLabelMap(graph));
   const sections: string[] = [];
   const hasI2C = graph.nodes.some((n) => n.protocol === 'i2c');
+  const hasColor = graph.nodes.some((n) => n.typeId === 'sensor-color');
   const servoNodes = graph.nodes.filter((n) => n.typeId === 'servo');
   const motorNodes = graph.nodes.filter((n) => n.typeId === 'motor');
   const leftMotor = graph.nodes.find((n) => n.id === 'motor-left');
@@ -302,6 +352,12 @@ export function generateSketch(graph: WiringGraph): string {
   const pins = emitPinDeclarations(graph);
   if (pins) {
     sections.push(pins);
+    sections.push('');
+  }
+
+  // TCS34725 driver — emitted once when any color sensor is used.
+  if (hasColor) {
+    sections.push(emitTcs34725Driver());
     sections.push('');
   }
 

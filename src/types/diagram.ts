@@ -1,10 +1,12 @@
 export type NodeKind = 'sensor' | 'compute' | 'motor' | 'constant';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply';
+export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
 export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
   | 'sensor-i2c'
+  | 'sensor-color'
   | 'compute-threshold'
   | 'compute-delay'
   | 'compute-summation'
@@ -34,6 +36,7 @@ export interface DiagramNode {
   motorPin?: string;
   servoPin?: string;
   constantValue?: number;
+  colorChannel?: ColorChannel;
 }
 
 export type TransferMode = 'linear' | 'nonlinear';
@@ -56,6 +59,7 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
   { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital' },
   { id: 'sensor-i2c', kind: 'sensor', displayName: 'I2C Sensor', metaLabel: 'i2c', protocol: 'i2c' },
+  { id: 'sensor-color', kind: 'sensor', displayName: 'Color Sensor', metaLabel: 'TCS34725', protocol: 'i2c' },
   { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },

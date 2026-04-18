@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
-import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint } from '../types/diagram';
+import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint, ColorChannel } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
@@ -531,6 +531,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
           constantValue: nodeType.kind === 'constant' ? 512 : undefined,
           servoPin: nodeTypeId === 'servo' ? '' : undefined,
+          colorChannel: nodeTypeId === 'sensor-color' ? 'clear' : undefined,
         },
       ];
     });
@@ -877,6 +878,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'motor' && node.motorPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.motorPin.trim()}`;
+          } else if (nodeType.id === 'sensor-color') {
+            nodeMeta = `${nodeType.metaLabel} • ${node.colorChannel ?? 'clear'}`;
           } else {
             nodeMeta = nodeType.metaLabel;
           }
@@ -1016,6 +1019,28 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       )
                     }
                   />
+                </label>
+              )}
+
+              {selectedNode.type === 'sensor-color' && (
+                <label>
+                  Color Channel
+                  <select
+                    value={selectedNode.colorChannel ?? 'clear'}
+                    onChange={(event) => {
+                      const value = event.target.value as ColorChannel;
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id ? { ...node, colorChannel: value } : node,
+                        ),
+                      );
+                    }}
+                  >
+                    <option value="clear">Clear (overall brightness)</option>
+                    <option value="red">Red</option>
+                    <option value="green">Green</option>
+                    <option value="blue">Blue</option>
+                  </select>
                 </label>
               )}
 
