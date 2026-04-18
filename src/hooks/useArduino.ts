@@ -135,6 +135,10 @@ export function useArduino() {
     }
   }, [tauriAvailable]);
 
+  const dismissCoreInstall = useCallback(() => {
+    setCoreInstallStatus('idle');
+  }, []);
+
   const installCore = useCallback(async () => {
     if (!tauriAvailable) return;
     setCoreInstallStatus('installing');
@@ -187,5 +191,6 @@ export function useArduino() {
     coreError,
     checkCore,
     installCore,
+    dismissCoreInstall,
   };
 }
