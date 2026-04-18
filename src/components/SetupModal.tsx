@@ -13,7 +13,7 @@ interface SetupModalProps {
  * installed — we need it before we can compile sketches for an Uno/Nano.
  */
 export function SetupModal({ arduino }: SetupModalProps) {
-  const { coreInstalled, coreInstallStatus, installLog, coreError, installCore } = arduino;
+  const { coreInstalled, coreInstallStatus, installLog, coreError, installCore, dismissCoreInstall } = arduino;
   const logRef = useRef<HTMLPreElement>(null);
 
   // Auto-scroll the log to the bottom as new lines stream in.
@@ -72,6 +72,11 @@ export function SetupModal({ arduino }: SetupModalProps) {
                 {installLog}
               </pre>
             )}
+            <div className="setup-actions">
+              <button type="button" className="primary" onClick={dismissCoreInstall}>
+                Continue
+              </button>
+            </div>
           </>
         )}
         {isError && (
