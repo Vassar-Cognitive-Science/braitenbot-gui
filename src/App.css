@@ -402,6 +402,25 @@ body {
   border-color: #5e90d2;
 }
 
+/* Abbreviated channel label (C/R/G/B) shown under each port handle.
+   Decorative — the button still carries the full name via `title` and `aria-label`. */
+.output-port-label {
+  position: absolute;
+  bottom: -22px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+  color: var(--muted);
+}
+
+.output-port-label-clear { color: #d8d4c4; }
+.output-port-label-red   { color: #d26a5e; }
+.output-port-label-green { color: #6eb87a; }
+.output-port-label-blue  { color: #5e90d2; }
+
 /* While dragging a new connection, draw attention to input targets */
 .diagram-canvas.linking .input-handle {
   animation: input-pulse 1.4s ease-in-out infinite;

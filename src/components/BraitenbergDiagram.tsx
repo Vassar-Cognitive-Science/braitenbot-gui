@@ -967,15 +967,24 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 }
                 return ports.map((port, i) => {
                   const leftPct = ((i + 0.5) / ports.length) * 100;
+                  const abbr = port[0].toUpperCase();
                   return (
-                    <button
-                      key={port}
-                      className={`node-handle output-handle output-handle-port output-handle-${port}`}
-                      style={{ left: `${leftPct}%` }}
-                      title={port}
-                      aria-label={`Start ${port} connection from ${node.label}`}
-                      onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
-                    />
+                    <span key={port}>
+                      <button
+                        className={`node-handle output-handle output-handle-port output-handle-${port}`}
+                        style={{ left: `${leftPct}%` }}
+                        title={port}
+                        aria-label={`Start ${port} connection from ${node.label}`}
+                        onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
+                      />
+                      <span
+                        className={`output-port-label output-port-label-${port}`}
+                        style={{ left: `${leftPct}%` }}
+                        aria-hidden="true"
+                      >
+                        {abbr}
+                      </span>
+                    </span>
                   );
                 });
               })()}
