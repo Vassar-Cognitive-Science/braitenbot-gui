@@ -1,3 +1,4 @@
+import { getOutputPorts } from '../types/diagram';
 import type { WiringGraph, GraphNode, GraphEdge } from './graph';
 
 function sanitizeId(id: string): string {
@@ -42,14 +43,28 @@ function varName(node: GraphNode): string {
 }
 
 /**
+ * Resolve the emitted source-variable suffix for a node's output port.
+ * Unknown or missing ports fall back to the first declared port, which is
+ * guaranteed to correspond to an emitted variable — this keeps the generated
+ * sketch compilable even if a persisted diagram contains a stale `fromPort`.
+ */
+function srcPortSuffix(node: GraphNode, fromPort?: string): string | undefined {
+  const ports = getOutputPorts(node.typeId);
+  if (!ports) return undefined;
+  if (fromPort && (ports as string[]).includes(fromPort)) return fromPort;
+  return ports[0];
+}
+
+/**
  * The variable a downstream consumer reads for a given source node + port.
  * Multi-output nodes (currently only the TCS34725 color sensor) expose one
  * variable per channel suffixed with the port name; single-output nodes
  * fall back to the canonical `sig_` variable.
  */
 function srcVarName(node: GraphNode, fromPort?: string): string {
-  if (node.typeId === 'sensor-color') {
-    return `sig_${readableId(node)}_${fromPort ?? 'clear'}`;
+  const suffix = srcPortSuffix(node, fromPort);
+  if (suffix !== undefined) {
+    return `sig_${readableId(node)}_${suffix}`;
   }
   return varName(node);
 }
@@ -240,8 +255,13 @@ function emitTcs34725Driver(): string {
     'uint16_t tcs34725_read16(uint8_t reg) {',
     '  Wire.beginTransmission(TCS34725_ADDR);',
     '  Wire.write(0x80 | reg);',
-    '  Wire.endTransmission();',
-    '  Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);',
+    '  if (Wire.endTransmission() != 0) {',
+    '    return 0;',
+    '  }',
+    '  uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);',
+    '  if (bytesRead != 2) {',
+    '    return 0;',
+    '  }',
     '  uint8_t lo = Wire.read();',
     '  uint8_t hi = Wire.read();',
     '  return ((uint16_t)hi << 8) | lo;',

@@ -3,6 +3,7 @@ import type {
   DiagramConnection,
   NodeKind,
   NodeTypeId,
+  OutputPortId,
   SensorProtocol,
 } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
@@ -25,7 +26,7 @@ export interface GraphNode {
 export interface GraphEdge {
   from: string;
   /** Optional output-port id on the source node — see DiagramConnection.fromPort. */
-  fromPort?: string;
+  fromPort?: OutputPortId;
   to: string;
   weight: number;
   transferMode: 'linear' | 'nonlinear';

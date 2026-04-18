@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
-import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, SensorProtocol, TransferPoint } from '../types/diagram';
+import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
@@ -47,10 +47,10 @@ function makePath(x1: number, y1: number, x2: number, y2: number): string {
 }
 
 /** Horizontal offset (px, local to the node) of the output anchor for a given port. */
-function portOffsetX(typeId: NodeTypeId, fromPort?: string): number {
+function portOffsetX(typeId: NodeTypeId, fromPort?: OutputPortId): number {
   const ports = getOutputPorts(typeId);
   if (!ports) return NODE_W / 2;
-  const idx = fromPort ? ports.indexOf(fromPort as (typeof ports)[number]) : -1;
+  const idx = fromPort ? ports.indexOf(fromPort) : -1;
   const i = idx >= 0 ? idx : 0;
   return ((i + 0.5) / ports.length) * NODE_W;
 }
@@ -175,7 +175,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [connections, setConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
-  const [linkDraftSource, setLinkDraftSource] = useState<{ id: string; port?: string } | null>(null);
+  const [linkDraftSource, setLinkDraftSource] = useState<{ id: string; port?: OutputPortId } | null>(null);
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
@@ -477,7 +477,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setNodeDragOffset({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
 
-  const beginLinkDrag = (event: MouseEvent, nodeId: string, port?: string) => {
+  const beginLinkDrag = (event: MouseEvent, nodeId: string, port?: OutputPortId) => {
     event.stopPropagation();
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -516,6 +516,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     if (!canvasRef.current) return;
     const nodeTypeId = event.dataTransfer.getData('application/x-node-type') as NodeTypeId;
     if (!nodeTypeId || !(nodeTypeId in TYPE_BY_ID)) return;
+    // Wheel motors are fixed — new actuators must be servos.
+    if (nodeTypeId === 'motor') return;
     pushUndo();
 
     const rect = canvasRef.current.getBoundingClientRect();
@@ -545,7 +547,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     });
   };
 
-  const canConnect = (fromId: string, toId: string, fromPort?: string): boolean => {
+  const canConnect = (fromId: string, toId: string, fromPort?: OutputPortId): boolean => {
     if (fromId === toId) return false;
     const from = nodeMap[fromId];
     const to = nodeMap[toId];
@@ -598,7 +600,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {(['sensor', 'compute', 'motor'] as const).map((kind) => {
           const nodesOfKind = kind === 'compute'
             ? NODE_TYPES.filter((n) => n.kind === 'compute' || n.kind === 'constant')
-            : NODE_TYPES.filter((n) => n.kind === kind);
+            : kind === 'motor'
+              // The two wheel motors are fixed — extra actuators use servos.
+              ? NODE_TYPES.filter((n) => n.id === 'servo')
+              : NODE_TYPES.filter((n) => n.kind === kind);
           if (nodesOfKind.length === 0) return null;
           const kindLabels: Record<string, string> = {
             sensor: 'Sensors',

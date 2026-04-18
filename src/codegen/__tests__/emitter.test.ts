@@ -250,6 +250,58 @@ describe('generateSketch', () => {
     expect(code).not.toContain('TODO: read I2C sensor');
   });
 
+  it('falls back to a declared channel when fromPort is unknown', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'color-1',
+        type: 'sensor-color',
+        label: 'Front Color',
+        arduinoPort: undefined,
+      }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      // `fromPort: 'ultraviolet'` — never declared. Force a raw cast to
+      // simulate a persisted diagram authored against an older schema.
+      {
+        ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }),
+        fromPort: 'ultraviolet' as unknown as 'clear',
+      },
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Emitter must not reference sig_Front_Color_ultraviolet (never declared).
+    expect(code).not.toContain('sig_Front_Color_ultraviolet');
+    // And must fall back to a variable that *is* declared — clear is first.
+    expect(code).toContain('input_Left_Motor += sig_Front_Color_clear * 1.0000;');
+  });
+
+  it('checks Wire.endTransmission and requestFrom in tcs34725_read16', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'color-1',
+        type: 'sensor-color',
+        label: 'Front Color',
+        arduinoPort: undefined,
+      }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Driver must bail out on I2C error — endTransmission != 0 returns 0.
+    expect(code).toContain('if (Wire.endTransmission() != 0) {');
+    // And must also check requestFrom's returned byte count.
+    expect(code).toContain('uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);');
+    expect(code).toContain('if (bytesRead != 2) {');
+  });
+
   it('generates non-linear transfer function', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
     const connections: DiagramConnection[] = [
