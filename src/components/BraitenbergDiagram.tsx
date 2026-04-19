@@ -16,6 +16,13 @@ const ANALOG_PORT_PLACEHOLDER = 'A0';
 const DIGITAL_PORT_PLACEHOLDER = '2';
 const MOTOR_PIN_PLACEHOLDER = '9';
 const SERVO_PIN_PLACEHOLDER = '10';
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = 1.25;
+
+function clampZoom(z: number): number {
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+}
 
 interface RobotOverlayLayout {
   bodyCx: number;
@@ -197,6 +204,54 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [resetArmed, setResetArmed] = useState(false);
   const resetArmTimerRef = useRef<number | null>(null);
   const resetButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panStateRef = useRef<{ startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+
+  const nodeScreenPos = useCallback(
+    (node: DiagramNode): { x: number; y: number } => {
+      if (node.id === 'motor-left') {
+        return {
+          x: pan.x + robotLayout.leftWheelCx * zoom - NODE_W / 2,
+          y: pan.y + robotLayout.leftWheelCy * zoom - NODE_H / 2,
+        };
+      }
+      if (node.id === 'motor-right') {
+        return {
+          x: pan.x + robotLayout.rightWheelCx * zoom - NODE_W / 2,
+          y: pan.y + robotLayout.rightWheelCy * zoom - NODE_H / 2,
+        };
+      }
+      return { x: pan.x + node.x * zoom, y: pan.y + node.y * zoom };
+    },
+    [pan.x, pan.y, zoom, robotLayout],
+  );
+
+  const zoomAtPoint = useCallback((nextZoom: number, screenX: number, screenY: number) => {
+    setZoom((prev) => {
+      const clamped = clampZoom(nextZoom);
+      if (clamped === prev) return prev;
+      setPan((p) => {
+        const worldX = (screenX - p.x) / prev;
+        const worldY = (screenY - p.y) / prev;
+        return { x: screenX - worldX * clamped, y: screenY - worldY * clamped };
+      });
+      return clamped;
+    });
+  }, []);
+
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  const zoomByStep = useCallback((factor: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    zoomAtPoint(zoom * factor, rect.width / 2, rect.height / 2);
+  }, [zoom, zoomAtPoint]);
 
 
   const traceResult = useTraceSimulation(
@@ -385,10 +440,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         const from = nodeMap[connection.from];
         const to = nodeMap[connection.to];
         if (!from || !to) return null;
-        const x1 = from.x + portOffsetX(from.type, connection.fromPort);
-        const y1 = from.y + NODE_H;
-        const x2 = to.x + NODE_W / 2;
-        const y2 = to.y;
+        const fromScreen = nodeScreenPos(from);
+        const toScreen = nodeScreenPos(to);
+        const x1 = fromScreen.x + portOffsetX(from.type, connection.fromPort);
+        const y1 = fromScreen.y + NODE_H;
+        const x2 = toScreen.x + NODE_W / 2;
+        const y2 = toScreen.y;
         return {
           id: connection.id,
           d: makePath(x1, y1, x2, y2),
@@ -398,7 +455,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         };
       })
       .filter((item): item is { id: string; d: string; weight: number; midX: number; midY: number } => item !== null);
-  }, [connections, nodeMap]);
+  }, [connections, nodeMap, nodeScreenPos]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -476,11 +533,45 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   }, [configTarget, deleteNode, deleteConnection, undo]);
 
   const beginNodeDrag = (event: MouseEvent, nodeId: string) => {
+    if (event.button !== 0) return;
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     setDraggingNodeId(nodeId);
     setNodeDragOffset({ x: event.clientX - rect.left, y: event.clientY - rect.top });
   };
+
+  const handleCanvasMouseDown = (event: MouseEvent) => {
+    const isBackground = event.target === event.currentTarget;
+    const shouldPan = event.button === 1 || (event.button === 0 && isBackground);
+    if (!shouldPan) return;
+    event.preventDefault();
+    panStateRef.current = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPanX: pan.x,
+      startPanY: pan.y,
+    };
+    setIsPanning(true);
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const cursorX = event.clientX - rect.left;
+        const cursorY = event.clientY - rect.top;
+        zoomAtPoint(zoom * Math.exp(-event.deltaY * 0.0015), cursorX, cursorY);
+      } else {
+        event.preventDefault();
+        setPan((p) => ({ x: p.x - event.deltaX, y: p.y - event.deltaY }));
+      }
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', onWheel);
+  }, [zoom, zoomAtPoint]);
 
   const beginLinkDrag = (event: MouseEvent, nodeId: string, port?: OutputPortId) => {
     event.stopPropagation();
@@ -496,12 +587,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const pointerX = event.clientX - rect.left;
     const pointerY = event.clientY - rect.top;
 
+    if (panStateRef.current) {
+      const s = panStateRef.current;
+      setPan({
+        x: s.startPanX + (event.clientX - s.startClientX),
+        y: s.startPanY + (event.clientY - s.startClientY),
+      });
+      return;
+    }
+
     if (draggingNodeId) {
+      const screenLeft = pointerX - nodeDragOffset.x;
+      const screenTop = pointerY - nodeDragOffset.y;
+      const worldX = (screenLeft - pan.x) / zoom;
+      const worldY = (screenTop - pan.y) / zoom;
       setNodes((prev) =>
         prev.map((node) =>
-          node.id === draggingNodeId
-            ? { ...node, x: pointerX - nodeDragOffset.x, y: pointerY - nodeDragOffset.y }
-            : node,
+          node.id === draggingNodeId ? { ...node, x: worldX, y: worldY } : node,
         ),
       );
     }
@@ -514,6 +616,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const handleCanvasMouseUp = () => {
     setDraggingNodeId(null);
     setLinkDraftSource(null);
+    if (panStateRef.current) {
+      panStateRef.current = null;
+      setIsPanning(false);
+    }
   };
 
   const handleDropNode = (event: DragEvent) => {
@@ -524,8 +630,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     pushUndo();
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left - NODE_W / 2;
-    const y = event.clientY - rect.top - NODE_H / 2;
+    const screenX = event.clientX - rect.left - NODE_W / 2;
+    const screenY = event.clientY - rect.top - NODE_H / 2;
+    const x = (screenX - pan.x) / zoom;
+    const y = (screenY - pan.y) / zoom;
 
     const id = makeId(nodeTypeId);
     const baseLabel = TYPE_BY_ID[nodeTypeId].displayName;
@@ -633,6 +741,74 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       </aside>
 
       <div className="canvas-toolbar">
+        <div className="toolbar-group toolbar-view">
+          <span className="toolbar-group-label">View</span>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
+            onClick={() => zoomByStep(1 / ZOOM_STEP)}
+            disabled={zoom <= MIN_ZOOM + 1e-6}
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <svg
+              className="toolbar-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.3 10.3 l3.2 3.2" />
+              <path d="M5 7 h4" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-level"
+            onClick={resetView}
+            title="Reset view (100%)"
+            aria-label={`Current zoom ${Math.round(zoom * 100)}%. Click to reset.`}
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
+            onClick={() => zoomByStep(ZOOM_STEP)}
+            disabled={zoom >= MAX_ZOOM - 1e-6}
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <svg
+              className="toolbar-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.3 10.3 l3.2 3.2" />
+              <path d="M5 7 h4" />
+              <path d="M7 5 v4" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
         <div className="toolbar-group">
           <span className="toolbar-group-label">Simulate</span>
           <button
@@ -791,11 +967,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
       <div
         ref={canvasRef}
-        className={`diagram-canvas ${traceMode ? 'trace-active' : ''} ${linkDraftSource ? 'linking' : ''}`.trim()}
+        className={`diagram-canvas ${traceMode ? 'trace-active' : ''} ${linkDraftSource ? 'linking' : ''} ${isPanning ? 'panning' : ''}`.trim()}
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDropNode}
+        onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseUp}
       >
         {traceMode && (
           <div className="trace-banner">
@@ -806,30 +984,30 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div
           className="robot-overlay robot-body"
           style={{
-            left: `${robotLayout.bodyCx}px`,
-            top: `${robotLayout.bodyCy}px`,
-            width: `${robotLayout.bodyRadius * 2}px`,
-            height: `${robotLayout.bodyRadius * 2}px`,
+            left: `${pan.x + robotLayout.bodyCx * zoom}px`,
+            top: `${pan.y + robotLayout.bodyCy * zoom}px`,
+            width: `${robotLayout.bodyRadius * 2 * zoom}px`,
+            height: `${robotLayout.bodyRadius * 2 * zoom}px`,
           }}
           aria-hidden="true"
         />
         <div
           className="robot-overlay robot-wheel"
           style={{
-            left: `${robotLayout.leftWheelCx}px`,
-            top: `${robotLayout.leftWheelCy}px`,
-            width: `${robotLayout.wheelWidth}px`,
-            height: `${robotLayout.wheelHeight}px`,
+            left: `${pan.x + robotLayout.leftWheelCx * zoom}px`,
+            top: `${pan.y + robotLayout.leftWheelCy * zoom}px`,
+            width: `${robotLayout.wheelWidth * zoom}px`,
+            height: `${robotLayout.wheelHeight * zoom}px`,
           }}
           aria-hidden="true"
         />
         <div
           className="robot-overlay robot-wheel"
           style={{
-            left: `${robotLayout.rightWheelCx}px`,
-            top: `${robotLayout.rightWheelCy}px`,
-            width: `${robotLayout.wheelWidth}px`,
-            height: `${robotLayout.wheelHeight}px`,
+            left: `${pan.x + robotLayout.rightWheelCx * zoom}px`,
+            top: `${pan.y + robotLayout.rightWheelCy * zoom}px`,
+            width: `${robotLayout.wheelWidth * zoom}px`,
+            height: `${robotLayout.wheelHeight * zoom}px`,
           }}
           aria-hidden="true"
         />
@@ -850,18 +1028,21 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               />
             );
           })}
-          {linkDraftSource && nodeMap[linkDraftSource.id] && (
-            <path
-              className="draft-link"
-              d={makePath(
-                nodeMap[linkDraftSource.id].x +
-                  portOffsetX(nodeMap[linkDraftSource.id].type, linkDraftSource.port),
-                nodeMap[linkDraftSource.id].y + NODE_H,
-                linkDraftPoint.x,
-                linkDraftPoint.y,
-              )}
-            />
-          )}
+          {linkDraftSource && nodeMap[linkDraftSource.id] && (() => {
+            const src = nodeMap[linkDraftSource.id];
+            const srcScreen = nodeScreenPos(src);
+            return (
+              <path
+                className="draft-link"
+                d={makePath(
+                  srcScreen.x + portOffsetX(src.type, linkDraftSource.port),
+                  srcScreen.y + NODE_H,
+                  linkDraftPoint.x,
+                  linkDraftPoint.y,
+                )}
+              />
+            );
+          })()}
         </svg>
 
         {connectionPaths.map((connection) => {
@@ -906,6 +1087,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = nodeType.metaLabel;
           }
 
+          const screenPos = nodeScreenPos(node);
           return (
             <div
               key={node.id}
@@ -916,7 +1098,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 isDisconnected ? 'trace-disconnected' : '',
                 hasSlider ? 'trace-expanded' : '',
               ].filter(Boolean).join(' ')}
-              style={{ left: `${node.x}px`, top: `${node.y}px` }}
+              style={{ left: `${screenPos.x}px`, top: `${screenPos.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
               onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
             >
