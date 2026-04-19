@@ -218,14 +218,15 @@ function emitSensorRead(node: GraphNode, indent: string): string {
     return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
   }
   if (node.typeId === 'sensor-color') {
-    // One sig_*_<channel> variable per output port — downstream edges pick
-    // the channel they care about via their fromPort.
+    // One bulk I2C read per loop; each channel is exposed as its own
+    // variable so downstream edges can pick via their fromPort.
     const rid = readableId(node);
     return [
-      `${indent}float sig_${rid}_clear = tcs34725_read16(0x14) / 65535.0;`,
-      `${indent}float sig_${rid}_red   = tcs34725_read16(0x16) / 65535.0;`,
-      `${indent}float sig_${rid}_green = tcs34725_read16(0x18) / 65535.0;`,
-      `${indent}float sig_${rid}_blue  = tcs34725_read16(0x1A) / 65535.0;`,
+      `${indent}TCS34725Sample sample_${rid} = tcs34725_read_all();`,
+      `${indent}float sig_${rid}_clear = sample_${rid}.c / 65535.0;`,
+      `${indent}float sig_${rid}_red   = sample_${rid}.r / 65535.0;`,
+      `${indent}float sig_${rid}_green = sample_${rid}.g / 65535.0;`,
+      `${indent}float sig_${rid}_blue  = sample_${rid}.b / 65535.0;`,
     ].join('\n');
   }
   return `${indent}float ${name} = 0.0;`;
@@ -236,6 +237,8 @@ function emitTcs34725Driver(): string {
     '// --- TCS34725 color sensor driver (I2C, address 0x29) ---',
     'const uint8_t TCS34725_ADDR = 0x29;',
     '',
+    'struct TCS34725Sample { uint16_t c, r, g, b; };',
+    '',
     'void tcs34725_write8(uint8_t reg, uint8_t value) {',
     '  Wire.beginTransmission(TCS34725_ADDR);',
     '  Wire.write(0x80 | reg); // command bit + register',
@@ -243,19 +246,28 @@ function emitTcs34725Driver(): string {
     '  Wire.endTransmission();',
     '}',
     '',
-    'uint16_t tcs34725_read16(uint8_t reg) {',
+    '// Read CDATA/RDATA/GDATA/BDATA (8 bytes starting at 0x14) in a single',
+    '// I2C transaction using the command register\'s auto-increment bit (0x20).',
+    'TCS34725Sample tcs34725_read_all() {',
+    '  TCS34725Sample s = {0, 0, 0, 0};',
     '  Wire.beginTransmission(TCS34725_ADDR);',
-    '  Wire.write(0x80 | reg);',
+    '  Wire.write(0xA0 | 0x14); // command + auto-increment, starting at CDATAL',
     '  if (Wire.endTransmission() != 0) {',
-    '    return 0;',
+    '    return s;',
     '  }',
-    '  uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);',
-    '  if (bytesRead != 2) {',
-    '    return 0;',
+    '  uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)8);',
+    '  if (bytesRead != 8) {',
+    '    return s;',
     '  }',
-    '  uint8_t lo = Wire.read();',
-    '  uint8_t hi = Wire.read();',
-    '  return ((uint16_t)hi << 8) | lo;',
+    '  uint8_t cl = Wire.read(); uint8_t ch = Wire.read();',
+    '  uint8_t rl = Wire.read(); uint8_t rh = Wire.read();',
+    '  uint8_t gl = Wire.read(); uint8_t gh = Wire.read();',
+    '  uint8_t bl = Wire.read(); uint8_t bh = Wire.read();',
+    '  s.c = ((uint16_t)ch << 8) | cl;',
+    '  s.r = ((uint16_t)rh << 8) | rl;',
+    '  s.g = ((uint16_t)gh << 8) | gl;',
+    '  s.b = ((uint16_t)bh << 8) | bl;',
+    '  return s;',
     '}',
     '',
     'void tcs34725_begin() {',

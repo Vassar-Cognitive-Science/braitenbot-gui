@@ -215,15 +215,17 @@ describe('generateSketch', () => {
     expect(code).toContain('#include <Wire.h>');
     expect(code).toContain('Wire.begin()');
     expect(code).toContain('TCS34725_ADDR = 0x29');
-    expect(code).toContain('uint16_t tcs34725_read16(uint8_t reg)');
+    expect(code).toContain('struct TCS34725Sample { uint16_t c, r, g, b; };');
+    expect(code).toContain('TCS34725Sample tcs34725_read_all()');
     expect(code).toContain('void tcs34725_begin()');
     // setup() initializes the chip.
     expect(code).toContain('tcs34725_begin();');
-    // All four channel variables are emitted each loop, one per port.
-    expect(code).toContain('float sig_Front_Color_clear = tcs34725_read16(0x14) / 65535.0;');
-    expect(code).toContain('float sig_Front_Color_red   = tcs34725_read16(0x16) / 65535.0;');
-    expect(code).toContain('float sig_Front_Color_green = tcs34725_read16(0x18) / 65535.0;');
-    expect(code).toContain('float sig_Front_Color_blue  = tcs34725_read16(0x1A) / 65535.0;');
+    // Single bulk read per loop, then four derived channel variables.
+    expect(code).toContain('TCS34725Sample sample_Front_Color = tcs34725_read_all();');
+    expect(code).toContain('float sig_Front_Color_clear = sample_Front_Color.c / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_red   = sample_Front_Color.r / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_green = sample_Front_Color.g / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_blue  = sample_Front_Color.b / 65535.0;');
     // Edges resolve to the port-specific variable, not a single sig_Front_Color.
     expect(code).toContain('input_Left_Wheel += sig_Front_Color_red * 1.0000;');
     expect(code).toContain('input_Right_Wheel += sig_Front_Color_clear * 0.5000;');
@@ -260,7 +262,7 @@ describe('generateSketch', () => {
     expect(code).toContain('input_Left_Wheel += sig_Front_Color_clear * 1.0000;');
   });
 
-  it('checks Wire.endTransmission and requestFrom in tcs34725_read16', () => {
+  it('checks Wire.endTransmission and requestFrom in tcs34725_read_all', () => {
     const nodes: DiagramNode[] = [
       makeSensor({
         id: 'color-1',
@@ -277,11 +279,12 @@ describe('generateSketch', () => {
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
-    // Driver must bail out on I2C error — endTransmission != 0 returns 0.
+    // Driver must bail out on I2C error — endTransmission != 0 returns a zero sample.
     expect(code).toContain('if (Wire.endTransmission() != 0) {');
-    // And must also check requestFrom's returned byte count.
-    expect(code).toContain('uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)2);');
-    expect(code).toContain('if (bytesRead != 2) {');
+    // Single 8-byte read covers all four channels via auto-increment.
+    expect(code).toContain('Wire.write(0xA0 | 0x14);');
+    expect(code).toContain('uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)8);');
+    expect(code).toContain('if (bytesRead != 8) {');
   });
 
   it('generates non-linear transfer function', () => {
