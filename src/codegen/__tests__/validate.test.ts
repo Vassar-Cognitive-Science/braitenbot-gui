@@ -17,12 +17,11 @@ function makeSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
 function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
     id: 'motor-left',
-    type: 'motor',
-    label: 'Left Motor',
+    type: 'servo-cr',
+    label: 'Left Wheel',
     x: 0,
     y: 0,
-    motorPinFwd: '5',
-    motorPinRev: '6',
+    servoPin: '9',
     ...overrides,
   };
 }
@@ -60,22 +59,22 @@ describe('validateGraph', () => {
     expect(errors.some((e) => e.message.includes('no Arduino port'))).toBe(true);
   });
 
-  it('reports motor missing pins', () => {
-    const nodes = [makeSensor(), makeMotor({ motorPinFwd: '', motorPinRev: '' })];
+  it('reports actuator missing pins', () => {
+    const nodes = [makeSensor(), makeMotor({ servoPin: '' })];
     const connections = [makeConnection()];
     const errors = validateGraph(nodes, connections);
     expect(errors.some((e) => e.message.includes('no pin configured'))).toBe(true);
   });
 
-  it('reports unreachable motor', () => {
+  it('reports unreachable actuator', () => {
     const nodes = [
       makeSensor(),
       makeMotor(),
-      makeMotor({ id: 'motor-right', label: 'Right Motor' }),
+      makeMotor({ id: 'motor-right', label: 'Right Wheel' }),
     ];
     const connections = [makeConnection()]; // only connects to motor-left
     const errors = validateGraph(nodes, connections);
-    expect(errors.some((e) => e.message.includes('Right Motor') && e.message.includes('not connected'))).toBe(true);
+    expect(errors.some((e) => e.message.includes('Right Wheel') && e.message.includes('not connected'))).toBe(true);
   });
 
   it('reports orphan compute node as warning', () => {
@@ -96,13 +95,4 @@ describe('validateGraph', () => {
     expect(orphanWarning).toBeDefined();
   });
 
-  it('reports I2C sensor as warning', () => {
-    const nodes = [
-      makeSensor({ id: 'i2c-1', type: 'sensor-i2c', label: 'I2C Sensor' }),
-      makeMotor(),
-    ];
-    const connections = [makeConnection({ from: 'i2c-1' })];
-    const errors = validateGraph(nodes, connections);
-    expect(errors.some((e) => e.severity === 'warning' && e.message.includes('stub code'))).toBe(true);
-  });
 });

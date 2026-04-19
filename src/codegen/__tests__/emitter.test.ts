@@ -18,12 +18,23 @@ function makeSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
 function makeMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
     id: 'motor-left',
-    type: 'motor',
-    label: 'Left Motor',
+    type: 'servo-cr',
+    label: 'Left Wheel',
     x: 0,
     y: 0,
-    motorPinFwd: '5',
-    motorPinRev: '6',
+    servoPin: '9',
+    ...overrides,
+  };
+}
+
+function makeRightMotor(overrides: Partial<DiagramNode> = {}): DiagramNode {
+  return {
+    id: 'motor-right',
+    type: 'servo-cr',
+    label: 'Right Wheel',
+    x: 0,
+    y: 0,
+    servoPin: '10',
     ...overrides,
   };
 }
@@ -38,9 +49,10 @@ function conn(c: Omit<DiagramConnection, 'transferMode' | 'transferPoints'> & Pa
 
 describe('generateSketch', () => {
   it('generates a minimal sketch with float signals', () => {
-    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [
       conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 0.8 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 0.8 }),
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
@@ -49,23 +61,51 @@ describe('generateSketch', () => {
     // Analog sensor normalized to 0–1, using label-based names
     expect(code).toContain('analogRead(SENSOR_Sensor_1) / 1023.0');
     expect(code).toContain('float sig_Sensor_1');
-    expect(code).toContain('analogWrite');
+    // Servo.h is included, and wheels are declared as Servo objects.
+    expect(code).toContain('#include <Servo.h>');
+    expect(code).toContain('Servo servo_Left_Wheel;');
+    expect(code).toContain('Servo servo_Right_Wheel;');
+    // drive() helper present and called at the end of loop().
+    expect(code).toContain('void drive(float left, float right)');
+    expect(code).toContain('drive(input_Left_Wheel, input_Right_Wheel)');
     expect(code).toContain('0.8000');
     expect(code).toContain('delay(20)');
   });
 
-  it('handles negative weight with reverse pin logic', () => {
-    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+  it('inverts the right servo inside the drive() helper', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [
-      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: -0.5 }),
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 1 }),
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
+    // Left wheel: +left * 500. Right wheel: -right * 500 (inverted mounting).
+    expect(code).toMatch(/servo_Left_Wheel\.writeMicroseconds\(1500 \+ \(int\)\(left\s+\* 500\.0\)\)/);
+    expect(code).toMatch(/servo_Right_Wheel\.writeMicroseconds\(1500 - \(int\)\(right \* 500\.0\)\)/);
+    // Old H-bridge style output must not appear.
+    expect(code).not.toContain('analogWrite(MOTOR_');
+    expect(code).not.toContain('fabs(');
+  });
+
+  it('passes negative weights straight through to drive()', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: -0.5 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: -0.5 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Motor nodes only aggregate inputs; the sign-handling now lives in drive().
     expect(code).toContain('-0.5000');
-    expect(code).toContain('if (input_Left_Motor >= 0)');
-    expect(code).toContain('fabs(');
-    expect(code).toContain('* 255.0');
+    expect(code).toContain('float input_Left_Wheel = 0.0;');
+    expect(code).toContain('input_Left_Wheel += sig_Sensor_1 * -0.5000;');
+    expect(code).not.toContain('if (input_Left_Wheel >= 0)');
+    // drive() clamps to [-1, 1] before writing microseconds.
+    expect(code).toContain('constrain(left,  -1.0, 1.0)');
+    expect(code).toContain('constrain(right, -1.0, 1.0)');
   });
 
   it('generates threshold node with float comparison', () => {
@@ -152,20 +192,99 @@ describe('generateSketch', () => {
     expect(code).toContain('pinMode');
   });
 
-  it('includes Wire.h for I2C sensors', () => {
+  it('emits a TCS34725 driver and one variable per channel for color sensors', () => {
     const nodes: DiagramNode[] = [
-      makeSensor({ id: 'i2c-1', type: 'sensor-i2c', label: 'I2C' }),
+      makeSensor({
+        id: 'color-1',
+        type: 'sensor-color',
+        label: 'Front Color',
+        arduinoPort: undefined,
+      }),
       makeMotor(),
+      makeRightMotor(),
     ];
     const connections: DiagramConnection[] = [
-      conn({ id: 'c1', from: 'i2c-1', to: 'motor-left', weight: 1 }),
+      // Two edges from the same sensor but different output ports.
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+      { ...conn({ id: 'c2', from: 'color-1', to: 'motor-right', weight: 0.5 }), fromPort: 'clear' },
     ];
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
+    // Driver pulled in alongside Wire.h plumbing.
     expect(code).toContain('#include <Wire.h>');
     expect(code).toContain('Wire.begin()');
-    expect(code).toContain('float sig_I2C = 0.0');
+    expect(code).toContain('TCS34725_ADDR = 0x29');
+    expect(code).toContain('struct TCS34725Sample { uint16_t c, r, g, b; };');
+    expect(code).toContain('TCS34725Sample tcs34725_read_all()');
+    expect(code).toContain('void tcs34725_begin()');
+    // setup() initializes the chip.
+    expect(code).toContain('tcs34725_begin();');
+    // Single bulk read per loop, then four derived channel variables.
+    expect(code).toContain('TCS34725Sample sample_Front_Color = tcs34725_read_all();');
+    expect(code).toContain('float sig_Front_Color_clear = sample_Front_Color.c / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_red   = sample_Front_Color.r / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_green = sample_Front_Color.g / 65535.0;');
+    expect(code).toContain('float sig_Front_Color_blue  = sample_Front_Color.b / 65535.0;');
+    // Edges resolve to the port-specific variable, not a single sig_Front_Color.
+    expect(code).toContain('input_Left_Wheel += sig_Front_Color_red * 1.0000;');
+    expect(code).toContain('input_Right_Wheel += sig_Front_Color_clear * 0.5000;');
+    // No bare `sig_Front_Color` without a port suffix — every reference must
+    // go through one of the four channel-suffixed variables.
+    expect(code).not.toMatch(/sig_Front_Color[^_a-zA-Z0-9]/);
+  });
+
+  it('falls back to a declared channel when fromPort is unknown', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'color-1',
+        type: 'sensor-color',
+        label: 'Front Color',
+        arduinoPort: undefined,
+      }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      // `fromPort: 'ultraviolet'` — never declared. Force a raw cast to
+      // simulate a persisted diagram authored against an older schema.
+      {
+        ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }),
+        fromPort: 'ultraviolet' as unknown as 'clear',
+      },
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Emitter must not reference sig_Front_Color_ultraviolet (never declared).
+    expect(code).not.toContain('sig_Front_Color_ultraviolet');
+    // And must fall back to a variable that *is* declared — clear is first.
+    expect(code).toContain('input_Left_Wheel += sig_Front_Color_clear * 1.0000;');
+  });
+
+  it('checks Wire.endTransmission and requestFrom in tcs34725_read_all', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'color-1',
+        type: 'sensor-color',
+        label: 'Front Color',
+        arduinoPort: undefined,
+      }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Driver must bail out on I2C error — endTransmission != 0 returns a zero sample.
+    expect(code).toContain('if (Wire.endTransmission() != 0) {');
+    // Single 8-byte read covers all four channels via auto-increment.
+    expect(code).toContain('Wire.write(0xA0 | 0x14);');
+    expect(code).toContain('uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)8);');
+    expect(code).toContain('if (bytesRead != 8) {');
   });
 
   it('generates non-linear transfer function', () => {
@@ -189,7 +308,7 @@ describe('generateSketch', () => {
 
     expect(code).toContain('float transfer_');
     expect(code).toContain('float x)');
-    expect(code).toContain('transfer_Sensor_1_Left_Motor_0');
+    expect(code).toContain('transfer_Sensor_1_Left_Wheel_0');
     // No * 1023.0 scaling — output is already in -1 to 1 signal domain
     expect(code).not.toContain('* 1023.0');
   });

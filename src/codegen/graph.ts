@@ -1,4 +1,11 @@
-import type { DiagramNode, DiagramConnection, NodeKind, NodeTypeId, SensorProtocol } from '../types/diagram';
+import type {
+  DiagramNode,
+  DiagramConnection,
+  NodeKind,
+  NodeTypeId,
+  OutputPortId,
+  SensorProtocol,
+} from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
 import { toposort } from './toposort';
 
@@ -11,14 +18,14 @@ export interface GraphNode {
   protocol?: SensorProtocol;
   threshold?: number;
   delayMs?: number;
-  motorPinFwd?: string;
-  motorPinRev?: string;
   servoPin?: string;
   constantValue?: number;
 }
 
 export interface GraphEdge {
   from: string;
+  /** Optional output-port id on the source node — see DiagramConnection.fromPort. */
+  fromPort?: OutputPortId;
   to: string;
   weight: number;
   transferMode: 'linear' | 'nonlinear';
@@ -48,8 +55,6 @@ export function buildGraph(
       protocol: typeDef.protocol,
       threshold: node.threshold,
       delayMs: node.delayMs,
-      motorPinFwd: node.motorPinFwd,
-      motorPinRev: node.motorPinRev,
       servoPin: node.servoPin,
       constantValue: node.constantValue,
     };
@@ -57,6 +62,7 @@ export function buildGraph(
 
   const graphEdges: GraphEdge[] = connections.map((conn) => ({
     from: conn.from,
+    fromPort: conn.fromPort,
     to: conn.to,
     weight: conn.weight,
     transferMode: conn.transferMode,

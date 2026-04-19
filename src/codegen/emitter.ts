@@ -1,3 +1,4 @@
+import { getOutputPorts } from '../types/diagram';
 import type { WiringGraph, GraphNode, GraphEdge } from './graph';
 
 function sanitizeId(id: string): string {
@@ -39,6 +40,33 @@ function readableId(node: GraphNode): string {
 
 function varName(node: GraphNode): string {
   return `sig_${readableId(node)}`;
+}
+
+/**
+ * Resolve the emitted source-variable suffix for a node's output port.
+ * Unknown or missing ports fall back to the first declared port, which is
+ * guaranteed to correspond to an emitted variable — this keeps the generated
+ * sketch compilable even if a persisted diagram contains a stale `fromPort`.
+ */
+function srcPortSuffix(node: GraphNode, fromPort?: string): string | undefined {
+  const ports = getOutputPorts(node.typeId);
+  if (!ports) return undefined;
+  if (fromPort && (ports as string[]).includes(fromPort)) return fromPort;
+  return ports[0];
+}
+
+/**
+ * The variable a downstream consumer reads for a given source node + port.
+ * Multi-output nodes (currently only the TCS34725 color sensor) expose one
+ * variable per channel suffixed with the port name; single-output nodes
+ * fall back to the canonical `sig_` variable.
+ */
+function srcVarName(node: GraphNode, fromPort?: string): string {
+  const suffix = srcPortSuffix(node, fromPort);
+  if (suffix !== undefined) {
+    return `sig_${readableId(node)}_${suffix}`;
+  }
+  return varName(node);
 }
 
 function inputVar(node: GraphNode): string {
@@ -90,12 +118,13 @@ function emitTransferFunction(edge: GraphEdge, idx: number): string {
 
 /** Produce a C expression for a single edge's contribution. */
 function emitEdgeTerm(graph: WiringGraph, edge: GraphEdge, src: GraphNode): string {
+  const sv = srcVarName(src, edge.fromPort);
   if (edge.transferMode === 'nonlinear' && edge.transferPoints.length >= 2) {
     const fnIdx = graph.edges.indexOf(edge);
     const fname = `transfer_${readableEdgeId(edge.from)}_${readableEdgeId(edge.to)}_${fnIdx}`;
-    return `${fname}(${varName(src)})`;
+    return `${fname}(${sv})`;
   }
-  return `${varName(src)} * ${edge.weight.toFixed(4)}`;
+  return `${sv} * ${edge.weight.toFixed(4)}`;
 }
 
 function emitInputAggregation(
@@ -142,19 +171,7 @@ function emitPinDeclarations(graph: WiringGraph): string {
         `const int SENSOR_${readableId(node)} = ${node.arduinoPort.trim()};`,
       );
     }
-    if (node.kind === 'motor' && node.typeId === 'motor') {
-      if (node.motorPinFwd?.trim()) {
-        lines.push(
-          `const int MOTOR_${readableId(node)}_FWD = ${node.motorPinFwd.trim()};`,
-        );
-      }
-      if (node.motorPinRev?.trim()) {
-        lines.push(
-          `const int MOTOR_${readableId(node)}_REV = ${node.motorPinRev.trim()};`,
-        );
-      }
-    }
-    if (node.typeId === 'servo' && node.servoPin?.trim()) {
+    if (node.kind === 'motor' && node.servoPin?.trim()) {
       lines.push(
         `const int SERVO_${readableId(node)}_PIN = ${node.servoPin.trim()};`,
       );
@@ -170,23 +187,20 @@ function emitSetup(graph: WiringGraph): string {
   lines.push('void setup() {');
   lines.push('  Serial.begin(115200);');
 
+  const hasColor = graph.nodes.some((n) => n.typeId === 'sensor-color');
+
   if (hasI2C) {
     lines.push('  Wire.begin();');
+  }
+  if (hasColor) {
+    lines.push('  tcs34725_begin();');
   }
 
   for (const node of graph.nodes) {
     if (node.kind === 'sensor' && node.protocol === 'digital' && node.arduinoPort?.trim()) {
       lines.push(`  pinMode(SENSOR_${readableId(node)}, INPUT);`);
     }
-    if (node.kind === 'motor' && node.typeId === 'motor') {
-      if (node.motorPinFwd?.trim()) {
-        lines.push(`  pinMode(MOTOR_${readableId(node)}_FWD, OUTPUT);`);
-      }
-      if (node.motorPinRev?.trim()) {
-        lines.push(`  pinMode(MOTOR_${readableId(node)}_REV, OUTPUT);`);
-      }
-    }
-    if (node.typeId === 'servo' && node.servoPin?.trim()) {
+    if (node.kind === 'motor' && node.servoPin?.trim()) {
       lines.push(`  servo_${readableId(node)}.attach(SERVO_${readableId(node)}_PIN);`);
     }
   }
@@ -203,8 +217,67 @@ function emitSensorRead(node: GraphNode, indent: string): string {
   if (node.protocol === 'digital') {
     return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
   }
-  // I2C stub
-  return `${indent}float ${name} = 0.0; // TODO: read I2C sensor (Wire.requestFrom)`;
+  if (node.typeId === 'sensor-color') {
+    // One bulk I2C read per loop; each channel is exposed as its own
+    // variable so downstream edges can pick via their fromPort.
+    const rid = readableId(node);
+    return [
+      `${indent}TCS34725Sample sample_${rid} = tcs34725_read_all();`,
+      `${indent}float sig_${rid}_clear = sample_${rid}.c / 65535.0;`,
+      `${indent}float sig_${rid}_red   = sample_${rid}.r / 65535.0;`,
+      `${indent}float sig_${rid}_green = sample_${rid}.g / 65535.0;`,
+      `${indent}float sig_${rid}_blue  = sample_${rid}.b / 65535.0;`,
+    ].join('\n');
+  }
+  return `${indent}float ${name} = 0.0;`;
+}
+
+function emitTcs34725Driver(): string {
+  return [
+    '// --- TCS34725 color sensor driver (I2C, address 0x29) ---',
+    'const uint8_t TCS34725_ADDR = 0x29;',
+    '',
+    'struct TCS34725Sample { uint16_t c, r, g, b; };',
+    '',
+    'void tcs34725_write8(uint8_t reg, uint8_t value) {',
+    '  Wire.beginTransmission(TCS34725_ADDR);',
+    '  Wire.write(0x80 | reg); // command bit + register',
+    '  Wire.write(value);',
+    '  Wire.endTransmission();',
+    '}',
+    '',
+    '// Read CDATA/RDATA/GDATA/BDATA (8 bytes starting at 0x14) in a single',
+    '// I2C transaction using the command register\'s auto-increment bit (0x20).',
+    'TCS34725Sample tcs34725_read_all() {',
+    '  TCS34725Sample s = {0, 0, 0, 0};',
+    '  Wire.beginTransmission(TCS34725_ADDR);',
+    '  Wire.write(0xA0 | 0x14); // command + auto-increment, starting at CDATAL',
+    '  if (Wire.endTransmission() != 0) {',
+    '    return s;',
+    '  }',
+    '  uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)8);',
+    '  if (bytesRead != 8) {',
+    '    return s;',
+    '  }',
+    '  uint8_t cl = Wire.read(); uint8_t ch = Wire.read();',
+    '  uint8_t rl = Wire.read(); uint8_t rh = Wire.read();',
+    '  uint8_t gl = Wire.read(); uint8_t gh = Wire.read();',
+    '  uint8_t bl = Wire.read(); uint8_t bh = Wire.read();',
+    '  s.c = ((uint16_t)ch << 8) | cl;',
+    '  s.r = ((uint16_t)rh << 8) | rl;',
+    '  s.g = ((uint16_t)gh << 8) | gl;',
+    '  s.b = ((uint16_t)bh << 8) | bl;',
+    '  return s;',
+    '}',
+    '',
+    'void tcs34725_begin() {',
+    '  tcs34725_write8(0x01, 0xD5); // ATIME: ~101 ms integration',
+    '  tcs34725_write8(0x0F, 0x01); // CONTROL: gain = 4x',
+    '  tcs34725_write8(0x00, 0x01); // ENABLE: PON',
+    '  delay(3);',
+    '  tcs34725_write8(0x00, 0x03); // ENABLE: PON | AEN (RGBC enable)',
+    '}',
+  ].join('\n');
 }
 
 function emitComputeNode(
@@ -244,30 +317,47 @@ function emitComputeNode(
   return lines.join('\n');
 }
 
-function emitMotorWrite(
+function emitWheelWrite(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  // Wheels aggregate their weighted inputs; drive() below consumes both
+  // aggregated signals once per loop with right-wheel inversion.
+  return emitInputAggregation(graph, node, indent);
+}
+
+function emitCrServoWrite(
   graph: WiringGraph,
   node: GraphNode,
   indent: string,
 ): string {
   const lines: string[] = [];
   const sid = readableId(node);
-
   lines.push(emitInputAggregation(graph, node, indent));
   lines.push(
-    `${indent}int pwm_${sid} = constrain((int)(fabs(${inputVar(node)}) * 255.0), 0, 255);`,
+    `${indent}int us_${sid} = 1500 + (int)(constrain(${inputVar(node)}, -1.0, 1.0) * 500.0);`,
   );
-  lines.push(`${indent}if (${inputVar(node)} >= 0) {`);
-  lines.push(`${indent}  analogWrite(MOTOR_${sid}_FWD, pwm_${sid});`);
-  lines.push(`${indent}  analogWrite(MOTOR_${sid}_REV, 0);`);
-  lines.push(`${indent}} else {`);
-  lines.push(`${indent}  analogWrite(MOTOR_${sid}_FWD, 0);`);
-  lines.push(`${indent}  analogWrite(MOTOR_${sid}_REV, pwm_${sid});`);
-  lines.push(`${indent}}`);
-
+  lines.push(`${indent}servo_${sid}.writeMicroseconds(us_${sid});`);
   return lines.join('\n');
 }
 
-function emitServoWrite(
+function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
+  const left = readableId(leftWheel);
+  const right = readableId(rightWheel);
+  return [
+    '// Drive both wheel continuous servos. left/right are -1.0..1.0 (signed speed).',
+    '// The right servo is mounted mirrored, so its direction is inverted.',
+    'void drive(float left, float right) {',
+    '  left  = constrain(left,  -1.0, 1.0);',
+    '  right = constrain(right, -1.0, 1.0);',
+    `  servo_${left}.writeMicroseconds(1500 + (int)(left  * 500.0));`,
+    `  servo_${right}.writeMicroseconds(1500 - (int)(right * 500.0));`,
+    '}',
+  ].join('\n');
+}
+
+function emitPositionalServoWrite(
   graph: WiringGraph,
   node: GraphNode,
   indent: string,
@@ -288,8 +378,12 @@ export function generateSketch(graph: WiringGraph): string {
   setLabelMap(buildLabelMap(graph));
   const sections: string[] = [];
   const hasI2C = graph.nodes.some((n) => n.protocol === 'i2c');
-  const servoNodes = graph.nodes.filter((n) => n.typeId === 'servo');
-  const hasServo = servoNodes.length > 0;
+  const hasColor = graph.nodes.some((n) => n.typeId === 'sensor-color');
+  const actuatorNodes = graph.nodes.filter((n) => n.kind === 'motor');
+  const leftWheel = graph.nodes.find((n) => n.id === 'motor-left');
+  const rightWheel = graph.nodes.find((n) => n.id === 'motor-right');
+  const hasActuator = actuatorNodes.length > 0;
+  const hasDrive = !!(leftWheel && rightWheel);
 
   // Header
   sections.push('// --- Auto-generated by BraitenBot GUI ---');
@@ -297,7 +391,7 @@ export function generateSketch(graph: WiringGraph): string {
   if (hasI2C) {
     sections.push('#include <Wire.h>');
   }
-  if (hasServo) {
+  if (hasActuator) {
     sections.push('#include <Servo.h>');
   }
   sections.push('');
@@ -309,11 +403,24 @@ export function generateSketch(graph: WiringGraph): string {
     sections.push('');
   }
 
-  // Servo objects
-  if (hasServo) {
-    for (const node of servoNodes) {
+  // TCS34725 driver — emitted once when any color sensor is used.
+  if (hasColor) {
+    sections.push(emitTcs34725Driver());
+    sections.push('');
+  }
+
+  // Servo objects — every actuator (wheels, continuous servos, positional
+  // servos) is driven through Servo.h.
+  if (hasActuator) {
+    for (const node of actuatorNodes) {
       sections.push(`Servo servo_${readableId(node)};`);
     }
+    sections.push('');
+  }
+
+  // drive() helper — only emitted when both wheel nodes are present.
+  if (hasDrive) {
+    sections.push(emitDriveHelper(leftWheel!, rightWheel!));
     sections.push('');
   }
 
@@ -349,13 +456,22 @@ export function generateSketch(graph: WiringGraph): string {
     } else if (node.kind === 'compute') {
       loopLines.push('');
       loopLines.push(emitComputeNode(graph, node, '  ', graph.loopPeriodMs));
-    } else if (node.typeId === 'servo') {
+    } else if (node.typeId === 'servo-positional') {
       loopLines.push('');
-      loopLines.push(emitServoWrite(graph, node, '  '));
-    } else if (node.kind === 'motor') {
+      loopLines.push(emitPositionalServoWrite(graph, node, '  '));
+    } else if (node.typeId === 'servo-cr') {
       loopLines.push('');
-      loopLines.push(emitMotorWrite(graph, node, '  '));
+      if (node.id === 'motor-left' || node.id === 'motor-right') {
+        loopLines.push(emitWheelWrite(graph, node, '  '));
+      } else {
+        loopLines.push(emitCrServoWrite(graph, node, '  '));
+      }
     }
+  }
+
+  if (hasDrive) {
+    loopLines.push('');
+    loopLines.push(`  drive(${inputVar(leftWheel!)}, ${inputVar(rightWheel!)});`);
   }
 
   loopLines.push('');

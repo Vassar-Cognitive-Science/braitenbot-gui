@@ -8,9 +8,9 @@ interface SetupModalProps {
 }
 
 /**
- * First-run setup overlay. Shown when the bundled arduino-cli is reachable
- * but the `arduino:avr` core (avr-gcc + avrdude + avr-libc) has not yet been
- * installed — we need it before we can compile sketches for an Uno/Nano.
+ * First-run setup overlay. Shown when the bundled arduino-cli is reachable but
+ * one or more required board cores (`arduino:avr` for classic UNO/Nano,
+ * `arduino:renesas_uno` for UNO R4) have not yet been installed.
  */
 export function SetupModal({ arduino }: SetupModalProps) {
   const { coreInstalled, coreInstallStatus, installLog, coreError, installCore, dismissCoreInstall } = arduino;
@@ -44,21 +44,22 @@ export function SetupModal({ arduino }: SetupModalProps) {
         {!isInstalling && !isDone && !isError && (
           <>
             <p>
-              BraitenBot GUI needs the Arduino <code>arduino:avr</code> toolchain
-              (avr-gcc, avrdude, avr-libc) to compile and upload sketches to your
-              robot. This is a one-time download of roughly 200&nbsp;MB and will
-              be cached for future launches.
+              BraitenBot GUI needs the Arduino <code>arduino:avr</code> and{' '}
+              <code>arduino:renesas_uno</code> toolchains to compile and upload
+              sketches to your robot (the classic UNO/Nano and the UNO R4,
+              respectively). This is a one-time download and will be cached for
+              future launches.
             </p>
             <div className="setup-actions">
               <button type="button" className="primary" onClick={installCore}>
-                Install AVR toolchain
+                Install Arduino toolchains
               </button>
             </div>
           </>
         )}
         {isInstalling && (
           <>
-            <p>Installing the AVR toolchain — this may take a few minutes…</p>
+            <p>Installing the Arduino toolchains — this may take a few minutes…</p>
             <pre ref={logRef} className="setup-log">
               {installLog || 'Starting…'}
             </pre>
@@ -66,7 +67,7 @@ export function SetupModal({ arduino }: SetupModalProps) {
         )}
         {isDone && (
           <>
-            <p className="setup-success">AVR toolchain installed successfully.</p>
+            <p className="setup-success">Arduino toolchains installed successfully.</p>
             {installLog && (
               <pre ref={logRef} className="setup-log">
                 {installLog}

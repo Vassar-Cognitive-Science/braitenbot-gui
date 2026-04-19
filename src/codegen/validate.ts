@@ -57,25 +57,14 @@ export function validateGraph(
     }
   }
 
-  // 3. Motor missing pins
+  // 3. Actuator missing pin
   for (const motor of motors) {
-    const motorType = TYPE_BY_ID[motor.type];
-    if (motorType.id === 'motor') {
-      if (!motor.motorPinFwd?.trim() || !motor.motorPinRev?.trim()) {
-        errors.push({
-          nodeId: motor.id,
-          message: `Motor '${motor.label}' has no pin configured for forward/reverse`,
-          severity: 'error',
-        });
-      }
-    } else if (motorType.id === 'servo') {
-      if (!motor.servoPin?.trim()) {
-        errors.push({
-          nodeId: motor.id,
-          message: `Servo '${motor.label}' has no pin configured`,
-          severity: 'error',
-        });
-      }
+    if (!motor.servoPin?.trim()) {
+      errors.push({
+        nodeId: motor.id,
+        message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' has no pin configured`,
+        severity: 'error',
+      });
     }
   }
 
@@ -100,7 +89,7 @@ export function validateGraph(
     if (!reachable.has(motor.id)) {
       errors.push({
         nodeId: motor.id,
-        message: `Motor '${motor.label}' is not connected to any sensor`,
+        message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' is not connected to any sensor`,
         severity: 'error',
       });
     }
@@ -135,16 +124,6 @@ export function validateGraph(
         severity: 'warning',
       });
     }
-  }
-
-  // 7. I2C sensor warning
-  const i2cSensors = nodes.filter((n) => n.type === 'sensor-i2c');
-  for (const sensor of i2cSensors) {
-    errors.push({
-      nodeId: sensor.id,
-      message: `I2C sensor '${sensor.label}' will generate stub code — manual editing required`,
-      severity: 'warning',
-    });
   }
 
   return errors;

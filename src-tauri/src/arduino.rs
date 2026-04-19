@@ -186,8 +186,13 @@ pub async fn compile_and_upload(
     })
 }
 
-/// Returns true when the arduino:avr core (avr-gcc, avrdude, avr-libc) is
-/// installed. Required before we can compile/upload sketches for AVR boards.
+/// Cores we require to cover the supported boards:
+///   - arduino:avr         — classic UNO / Nano (AVR)
+///   - arduino:renesas_uno — UNO R4 Minima / WiFi (Renesas RA4M1)
+const REQUIRED_CORES: &[&str] = &["arduino:avr", "arduino:renesas_uno"];
+
+/// Returns true when every required board core is installed. Required before
+/// we can compile/upload sketches for the classic UNO or the UNO R4.
 #[tauri::command]
 pub async fn check_avr_core(app: AppHandle) -> ArduinoResult<bool> {
     let (stdout, stderr, success) =
@@ -208,11 +213,16 @@ pub async fn check_avr_core(app: AppHandle) -> ArduinoResult<bool> {
         .or_else(|| parsed.as_array())
         .unwrap_or(&empty);
 
-    let installed = platforms
+    let installed_ids: Vec<&str> = platforms
         .iter()
-        .any(|p| p.get("id").and_then(|v| v.as_str()) == Some("arduino:avr"));
+        .filter_map(|p| p.get("id").and_then(|v| v.as_str()))
+        .collect();
 
-    Ok(installed)
+    let all_installed = REQUIRED_CORES
+        .iter()
+        .all(|core| installed_ids.contains(core));
+
+    Ok(all_installed)
 }
 
 /// Runs arduino-cli with the given args and streams stdout/stderr to the
@@ -250,8 +260,9 @@ async fn stream_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<()> {
     Ok(())
 }
 
-/// Installs the arduino:avr core. Streams progress back to the frontend via
-/// `arduino-install-log` events. Blocks until installation completes or fails.
+/// Installs every core in REQUIRED_CORES (classic AVR + Renesas UNO R4).
+/// Streams progress back to the frontend via `arduino-install-log` events.
+/// Blocks until installation completes or fails.
 #[tauri::command]
 pub async fn install_avr_core(app: AppHandle) -> ArduinoResult<()> {
     let _ = app.emit(
@@ -260,15 +271,17 @@ pub async fn install_avr_core(app: AppHandle) -> ArduinoResult<()> {
     );
     stream_sidecar(&app, &["core", "update-index"]).await?;
 
-    let _ = app.emit(
-        INSTALL_LOG_EVENT,
-        "\n→ Installing arduino:avr core (this may take a few minutes)...\n".to_string(),
-    );
-    stream_sidecar(&app, &["core", "install", "arduino:avr"]).await?;
+    for core in REQUIRED_CORES {
+        let _ = app.emit(
+            INSTALL_LOG_EVENT,
+            format!("\n→ Installing {} core (this may take a few minutes)...\n", core),
+        );
+        stream_sidecar(&app, &["core", "install", core]).await?;
+    }
 
     let _ = app.emit(
         INSTALL_LOG_EVENT,
-        "\n✓ AVR toolchain ready.\n".to_string(),
+        "\n✓ Arduino toolchains ready.\n".to_string(),
     );
     Ok(())
 }
