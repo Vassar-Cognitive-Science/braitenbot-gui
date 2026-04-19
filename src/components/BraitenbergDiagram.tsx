@@ -534,6 +534,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
   const beginNodeDrag = (event: MouseEvent, nodeId: string) => {
     if (event.button !== 0) return;
+    if (isWheelNode(nodeId)) return;
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     setDraggingNodeId(nodeId);
