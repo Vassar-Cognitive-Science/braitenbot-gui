@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { isTauri } from '../lib/tauri';
 import { parse, serialize, type DiagramState } from '../lib/diagramFile';
-import { TYPE_BY_ID } from '../types/diagram';
 import type { DiagramConnection, DiagramNode } from '../types/diagram';
 
 const STORAGE_KEY = 'braitenbot-gui:diagram:v1';
@@ -22,49 +21,10 @@ export interface DiagramPersistenceOptions {
   resetToDefault: () => void;
 }
 
-// Migrate legacy node shapes: the old 'motor' (wheel CR) and 'servo'
-// (positional) types were unified into 'servo-cr' / 'servo-positional',
-// and 'motorPin' was folded into 'servoPin'.
-function migrate(node: DiagramNode): DiagramNode {
-  const raw = node as unknown as Omit<DiagramNode, 'type'> & { type: string; motorPin?: string };
-  if (raw.type === 'motor') {
-    const { motorPin, type: _t, ...rest } = raw;
-    return { ...rest, type: 'servo-cr', servoPin: rest.servoPin ?? motorPin ?? '' };
-  }
-  if (raw.type === 'servo') {
-    const { type: _t, ...rest } = raw;
-    return { ...rest, type: 'servo-positional' };
-  }
-  return node;
-}
-
-// Drop nodes whose type is unknown on this build (e.g., after a branch
-// switch or opening a file produced by a newer version), and drop any
-// connections that would be left dangling.
-function sanitize(file: DiagramState): DiagramState {
-  const migrated = file.nodes.map(migrate);
-  const validNodes = migrated.filter((node) => node.type in TYPE_BY_ID);
-  const dropped = migrated.length - validNodes.length;
-  if (dropped > 0) {
-    const unknownTypes = Array.from(
-      new Set(migrated.filter((n) => !(n.type in TYPE_BY_ID)).map((n) => n.type)),
-    );
-    console.warn(
-      `[diagram] dropped ${dropped} node(s) with unknown type(s): ${unknownTypes.join(', ')}`,
-    );
-  }
-  const validIds = new Set(validNodes.map((n) => n.id));
-  const validConnections = file.connections.filter(
-    (c) => validIds.has(c.from) && validIds.has(c.to),
-  );
-  return { nodes: validNodes, connections: validConnections, loopPeriodMs: file.loopPeriodMs };
-}
-
 function applyFile(file: DiagramState, setters: DiagramPersistenceSetters) {
-  const clean = sanitize(file);
-  setters.setNodes(clean.nodes);
-  setters.setConnections(clean.connections);
-  setters.setLoopPeriodMs(clean.loopPeriodMs);
+  setters.setNodes(file.nodes);
+  setters.setConnections(file.connections);
+  setters.setLoopPeriodMs(file.loopPeriodMs);
 }
 
 export function useDiagramPersistence({

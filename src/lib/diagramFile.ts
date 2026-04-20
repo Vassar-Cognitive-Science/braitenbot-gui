@@ -1,9 +1,6 @@
 import type { DiagramConnection, DiagramNode } from '../types/diagram';
 
-export const DIAGRAM_FILE_VERSION = 1;
-
 export interface DiagramFile {
-  version: typeof DIAGRAM_FILE_VERSION;
   loopPeriodMs: number;
   nodes: DiagramNode[];
   connections: DiagramConnection[];
@@ -17,7 +14,6 @@ export interface DiagramState {
 
 export function serialize(state: DiagramState): string {
   const file: DiagramFile = {
-    version: DIAGRAM_FILE_VERSION,
     loopPeriodMs: state.loopPeriodMs,
     nodes: state.nodes,
     connections: state.connections,
@@ -76,11 +72,6 @@ export function parse(text: string): DiagramFile {
   if (!isObject(raw)) {
     throw new Error('Diagram file must be a JSON object');
   }
-  if (raw.version !== DIAGRAM_FILE_VERSION) {
-    throw new Error(
-      `Unsupported diagram file version: expected ${DIAGRAM_FILE_VERSION}, got ${String(raw.version)}`,
-    );
-  }
   if (typeof raw.loopPeriodMs !== 'number' || !Number.isFinite(raw.loopPeriodMs)) {
     throw new Error('loopPeriodMs must be a finite number');
   }
@@ -93,7 +84,6 @@ export function parse(text: string): DiagramFile {
   const nodes = raw.nodes.map(validateNode);
   const connections = raw.connections.map(validateConnection);
   return {
-    version: DIAGRAM_FILE_VERSION,
     loopPeriodMs: raw.loopPeriodMs,
     nodes,
     connections,
