@@ -117,9 +117,7 @@ function simulateEmittedC(
     }
 
     if (node.kind === 'constant') {
-      // Mirrors emitter.ts:346-348 (loop body, constant branch):
-      //   float sig_X = node.constantValue ?? 0.5;
-      vals[nodeId] = node.constantValue ?? 0.5;
+      vals[nodeId] = node.constantValue ?? 0;
       continue;
     }
 
@@ -250,7 +248,7 @@ describe('node parity (trace vs emitted C)', () => {
   });
 
   describe('constant', () => {
-    for (const v of [0, 0.3, 0.5, 0.8, 1]) {
+    for (const v of [-1, -0.5, 0, 0.3, 0.5, 0.8, 1]) {
       it(`emits ${v} from both`, () => {
         const constant: DiagramNode = {
           id: 'k1',

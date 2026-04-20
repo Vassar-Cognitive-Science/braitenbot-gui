@@ -652,7 +652,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
           threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
-          constantValue: nodeType.kind === 'constant' ? 512 : undefined,
+          constantValue: nodeType.kind === 'constant' ? 0 : undefined,
           servoPin: nodeType.kind === 'motor' ? '' : undefined,
         },
       ];
@@ -1107,16 +1107,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
               {hasSlider && (
                 <div className="trace-slider-row">
-                  <span className="trace-slider-label">0</span>
+                  <span className="trace-slider-label">{nodeType.kind === 'constant' ? '-1' : '0'}</span>
                   <input
                     type="range"
                     className="trace-slider"
-                    min="0"
+                    min={nodeType.kind === 'constant' ? '-1' : '0'}
                     max="1"
                     step="0.01"
                     value={nodeType.kind === 'sensor'
                       ? (sensorValues[node.id] ?? 0.5)
-                      : (node.constantValue ?? 0.5)}
+                      : (node.constantValue ?? 0)}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
@@ -1312,13 +1312,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   Constant Value
                   <input
                     type="number"
-                    min="0"
+                    min="-1"
                     max="1"
                     step="0.01"
-                    value={selectedNode.constantValue ?? 0.5}
+                    value={selectedNode.constantValue ?? 0}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(-1, Math.min(1, parsed)) : 0;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, constantValue: value } : node,

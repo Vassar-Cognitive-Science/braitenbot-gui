@@ -451,7 +451,7 @@ export function generateSketch(graph: WiringGraph): string {
     if (node.kind === 'sensor') {
       loopLines.push(emitSensorRead(node, '  '));
     } else if (node.kind === 'constant') {
-      const val = node.constantValue ?? 0.5;
+      const val = node.constantValue ?? 0;
       loopLines.push(`  float ${varName(node)} = ${val.toFixed(4)};`);
     } else if (node.kind === 'compute') {
       loopLines.push('');

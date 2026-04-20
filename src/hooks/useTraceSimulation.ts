@@ -57,7 +57,7 @@ export function simulateGraph(
     }
 
     if (typeDef.kind === 'constant') {
-      nodeValues[nodeId] = node.constantValue ?? 0.5;
+      nodeValues[nodeId] = node.constantValue ?? 0;
       continue;
     }
 
