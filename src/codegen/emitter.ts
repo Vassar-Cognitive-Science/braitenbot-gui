@@ -171,7 +171,14 @@ function emitPinDeclarations(graph: WiringGraph): string {
         `const int SENSOR_${readableId(node)} = ${node.arduinoPort.trim()};`,
       );
     }
-    if (node.kind === 'motor' && node.servoPin?.trim()) {
+    if (node.typeId === 'display-tm1637') {
+      if (node.clkPin?.trim()) {
+        lines.push(`const int TM1637_${readableId(node)}_CLK = ${node.clkPin.trim()};`);
+      }
+      if (node.dioPin?.trim()) {
+        lines.push(`const int TM1637_${readableId(node)}_DIO = ${node.dioPin.trim()};`);
+      }
+    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
       const prefix = node.typeId === 'digital-out' ? 'OUTPUT' : 'SERVO';
       lines.push(
         `const int ${prefix}_${readableId(node)}_PIN = ${node.servoPin.trim()};`,
@@ -202,7 +209,11 @@ function emitSetup(graph: WiringGraph): string {
       const mode = node.pullup ? 'INPUT_PULLUP' : 'INPUT';
       lines.push(`  pinMode(SENSOR_${readableId(node)}, ${mode});`);
     }
-    if (node.kind === 'motor' && node.servoPin?.trim()) {
+    if (node.typeId === 'display-tm1637') {
+      const b = Math.max(0, Math.min(7, Math.round(node.brightness ?? 3)));
+      lines.push(`  display_${readableId(node)}.setBrightness(${b});`);
+      lines.push(`  display_${readableId(node)}.clear();`);
+    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
       if (node.typeId === 'digital-out') {
         lines.push(`  pinMode(OUTPUT_${readableId(node)}_PIN, OUTPUT);`);
       } else {
@@ -424,6 +435,23 @@ function emitDigitalOutputWrite(
   return lines.join('\n');
 }
 
+function emitTm1637DisplayWrite(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  const lines: string[] = [];
+  const sid = readableId(node);
+
+  lines.push(emitInputAggregation(graph, node, indent));
+  lines.push(
+    `${indent}int value_${sid} = constrain((int)lround(${inputVar(node)}), -999, 9999);`,
+  );
+  lines.push(`${indent}display_${sid}.showNumberDec(value_${sid}, false);`);
+
+  return lines.join('\n');
+}
+
 export function generateSketch(graph: WiringGraph): string {
   setLabelMap(buildLabelMap(graph));
   const sections: string[] = [];
@@ -432,9 +460,11 @@ export function generateSketch(graph: WiringGraph): string {
   const servoNodes = graph.nodes.filter(
     (n) => n.typeId === 'servo-cr' || n.typeId === 'servo-positional',
   );
+  const tm1637Nodes = graph.nodes.filter((n) => n.typeId === 'display-tm1637');
   const leftWheel = graph.nodes.find((n) => n.id === 'motor-left');
   const rightWheel = graph.nodes.find((n) => n.id === 'motor-right');
   const hasServo = servoNodes.length > 0;
+  const hasTm1637 = tm1637Nodes.length > 0;
   const hasDrive = !!(leftWheel && rightWheel);
 
   // Header
@@ -445,6 +475,9 @@ export function generateSketch(graph: WiringGraph): string {
   }
   if (hasServo) {
     sections.push('#include <Servo.h>');
+  }
+  if (hasTm1637) {
+    sections.push('#include <TM1637Display.h>');
   }
   sections.push('');
 
@@ -461,12 +494,24 @@ export function generateSketch(graph: WiringGraph): string {
     sections.push('');
   }
 
-  // Servo objects — every servo actuator (wheels, continuous servos,
-  // positional servos) is driven through Servo.h. Digital outputs use
-  // digitalWrite and don't need a Servo object.
+  // Servo objects — continuous and positional servos (including wheels)
+  // are driven through Servo.h. Digital outputs use digitalWrite and
+  // TM1637 displays use their own driver, so neither needs a Servo
+  // object.
   if (hasServo) {
     for (const node of servoNodes) {
       sections.push(`Servo servo_${readableId(node)};`);
+    }
+    sections.push('');
+  }
+
+  // TM1637 display instances — one per display node, constructed with its
+  // configured CLK/DIO pins.
+  if (hasTm1637) {
+    for (const node of tm1637Nodes) {
+      sections.push(
+        `TM1637Display display_${readableId(node)}(TM1637_${readableId(node)}_CLK, TM1637_${readableId(node)}_DIO);`,
+      );
     }
     sections.push('');
   }
@@ -522,6 +567,9 @@ export function generateSketch(graph: WiringGraph): string {
     } else if (node.typeId === 'digital-out') {
       loopLines.push('');
       loopLines.push(emitDigitalOutputWrite(graph, node, '  '));
+    } else if (node.typeId === 'display-tm1637') {
+      loopLines.push('');
+      loopLines.push(emitTm1637DisplayWrite(graph, node, '  '));
     }
   }
 

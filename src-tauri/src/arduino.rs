@@ -191,8 +191,45 @@ pub async fn compile_and_upload(
 ///   - arduino:renesas_uno — UNO R4 Minima / WiFi (Renesas RA4M1)
 const REQUIRED_CORES: &[&str] = &["arduino:avr", "arduino:renesas_uno"];
 
-/// Returns true when every required board core is installed. Required before
-/// we can compile/upload sketches for the classic UNO or the UNO R4.
+/// Third-party Arduino libraries we require for generated sketches:
+///   - TM1637 — Avishay Orpaz's driver for 4-digit 7-segment displays
+const REQUIRED_LIBS: &[&str] = &["TM1637"];
+
+async fn check_installed_libs(app: &AppHandle) -> ArduinoResult<bool> {
+    let (stdout, stderr, success) =
+        run_sidecar(app, &["lib", "list", "--format", "json"]).await?;
+    if !success {
+        return Err(ArduinoError::CliFailed(stderr));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| ArduinoError::Parse(format!("{}: {}", e, stdout)))?;
+
+    let empty = vec![];
+    let entries = parsed
+        .get("installed_libraries")
+        .and_then(|v| v.as_array())
+        .or_else(|| parsed.as_array())
+        .unwrap_or(&empty);
+
+    let installed_names: Vec<&str> = entries
+        .iter()
+        .filter_map(|entry| {
+            entry
+                .get("library")
+                .and_then(|lib| lib.get("name"))
+                .and_then(|n| n.as_str())
+        })
+        .collect();
+
+    Ok(REQUIRED_LIBS
+        .iter()
+        .all(|name| installed_names.contains(name)))
+}
+
+/// Returns true when every required board core and third-party library is
+/// installed. The name is kept for frontend compatibility even though the
+/// check now also covers user libraries (TM1637, etc.).
 #[tauri::command]
 pub async fn check_avr_core(app: AppHandle) -> ArduinoResult<bool> {
     let (stdout, stderr, success) =
@@ -218,11 +255,15 @@ pub async fn check_avr_core(app: AppHandle) -> ArduinoResult<bool> {
         .filter_map(|p| p.get("id").and_then(|v| v.as_str()))
         .collect();
 
-    let all_installed = REQUIRED_CORES
+    let cores_installed = REQUIRED_CORES
         .iter()
         .all(|core| installed_ids.contains(core));
 
-    Ok(all_installed)
+    if !cores_installed {
+        return Ok(false);
+    }
+
+    check_installed_libs(&app).await
 }
 
 /// Runs arduino-cli with the given args and streams stdout/stderr to the
@@ -277,6 +318,20 @@ pub async fn install_avr_core(app: AppHandle) -> ArduinoResult<()> {
             format!("\n→ Installing {} core (this may take a few minutes)...\n", core),
         );
         stream_sidecar(&app, &["core", "install", core]).await?;
+    }
+
+    let _ = app.emit(
+        INSTALL_LOG_EVENT,
+        "\n→ Updating library index...\n".to_string(),
+    );
+    stream_sidecar(&app, &["lib", "update-index"]).await?;
+
+    for lib in REQUIRED_LIBS {
+        let _ = app.emit(
+            INSTALL_LOG_EVENT,
+            format!("\n→ Installing {} library...\n", lib),
+        );
+        stream_sidecar(&app, &["lib", "install", lib]).await?;
     }
 
     let _ = app.emit(

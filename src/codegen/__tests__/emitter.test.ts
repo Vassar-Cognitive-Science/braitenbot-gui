@@ -359,6 +359,39 @@ describe('generateSketch', () => {
     expect(code).toContain('if (bytesRead != 8) {');
   });
 
+  it('emits TM1637 display include, declaration, brightness, and showNumberDec', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      {
+        id: 'disp-1',
+        type: 'display-tm1637',
+        label: 'Readout',
+        x: 0,
+        y: 0,
+        clkPin: '2',
+        dioPin: '3',
+        brightness: 5,
+      },
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'disp-1', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    expect(code).toContain('#include <TM1637Display.h>');
+    expect(code).toContain('const int TM1637_Readout_CLK = 2;');
+    expect(code).toContain('const int TM1637_Readout_DIO = 3;');
+    expect(code).toContain('TM1637Display display_Readout(TM1637_Readout_CLK, TM1637_Readout_DIO);');
+    expect(code).toContain('display_Readout.setBrightness(5);');
+    expect(code).toContain('display_Readout.clear();');
+    // Aggregated input rounded and clamped to 4-digit display range.
+    expect(code).toContain('int value_Readout = constrain((int)lround(input_Readout), -999, 9999);');
+    expect(code).toContain('display_Readout.showNumberDec(value_Readout, false);');
+    // Servo.h should not appear when the only actuator is the display.
+    expect(code).not.toContain('#include <Servo.h>');
+  });
+
   it('generates non-linear transfer function', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
     const connections: DiagramConnection[] = [
@@ -381,7 +414,7 @@ describe('generateSketch', () => {
     expect(code).toContain('float transfer_');
     expect(code).toContain('float x)');
     expect(code).toContain('transfer_Sensor_1_Left_Wheel_0');
-    // No * 1023.0 scaling — output is already in -1 to 1 signal domain
+    // No * 1023.0 scaling — output is already in -100 to 100 signal domain
     expect(code).not.toContain('* 1023.0');
   });
 });

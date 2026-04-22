@@ -588,7 +588,7 @@ describe('known divergences (documented, not parity)', () => {
       makeConn({ id: 'c1', from: 's1', to: 'd1' }),
       makeConn({ id: 'c2', from: 'd1', to: 'motor-L' }),
     ];
-    const trace = simulateGraph(nodes, connections, { s1: 0.7 });
+    const trace = simulateGraph(nodes, connections, { s1: 70 });
     expect(trace.nodeValues.d1).toBe(0);
   });
 

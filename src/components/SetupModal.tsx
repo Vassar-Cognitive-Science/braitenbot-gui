@@ -47,8 +47,9 @@ export function SetupModal({ arduino }: SetupModalProps) {
               BraitenBot GUI needs the Arduino <code>arduino:avr</code> and{' '}
               <code>arduino:renesas_uno</code> toolchains to compile and upload
               sketches to your robot (the classic UNO/Nano and the UNO R4,
-              respectively). This is a one-time download and will be cached for
-              future launches.
+              respectively), plus a few user libraries (<code>TM1637</code>)
+              used by some node types. This is a one-time download and will be
+              cached for future launches.
             </p>
             <div className="setup-actions">
               <button type="button" className="primary" onClick={installCore}>

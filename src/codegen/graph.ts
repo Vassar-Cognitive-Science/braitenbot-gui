@@ -23,6 +23,9 @@ export interface GraphNode {
   constantValue?: number;
   frequencyHz?: number;
   amplitude?: number;
+  clkPin?: string;
+  dioPin?: string;
+  brightness?: number;
 }
 
 export interface GraphEdge {
@@ -63,6 +66,9 @@ export function buildGraph(
       constantValue: node.constantValue,
       frequencyHz: node.frequencyHz,
       amplitude: node.amplitude,
+      clkPin: node.clkPin,
+      dioPin: node.dioPin,
+      brightness: node.brightness,
     };
   });
 
