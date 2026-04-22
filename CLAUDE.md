@@ -74,3 +74,13 @@ The robot is rendered as a top-down view in the center of the canvas:
 - Node IDs use `{type}-{uuid}` format
 - No external UI library — all components are hand-rolled
 - Dark theme with CSS variables (`--bg`, `--surface`, `--accent`, etc.)
+
+## Alpha-stage policy: no migrations
+
+This is a pre-1.0 alpha. The diagram file format and localStorage schema are
+not stable, and there are no real users with persisted data to protect. Do
+**not** add migration code, version fields, legacy-shape adapters, or
+defensive clamps for "old" values when changing the data model. If a schema
+change breaks existing saved diagrams, the answer is to clear localStorage
+or re-export the file — not to write migration scaffolding. Revisit this
+policy when we cut a 1.0.

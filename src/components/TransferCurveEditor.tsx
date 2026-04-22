@@ -17,12 +17,11 @@ const PLOT_W = SVG_W - PAD_LEFT - PAD_RIGHT;
 const PLOT_H = SVG_H - PAD_TOP - PAD_BOTTOM;
 const POINT_R = 6;
 
-// Input domain: 0–1 (normalized sensor signal)
-const X_MIN = 0;
-const X_MAX = 1;
-// Output domain: -1 to 1
-const Y_MIN = -1;
-const Y_MAX = 1;
+// Signal domain: -100 to 100 on both axes.
+const X_MIN = -100;
+const X_MAX = 100;
+const Y_MIN = -100;
+const Y_MAX = 100;
 
 function toSvgX(val: number): number {
   return PAD_LEFT + ((val - X_MIN) / (X_MAX - X_MIN)) * PLOT_W;
@@ -34,23 +33,22 @@ function toSvgY(val: number): number {
 
 function fromSvgX(px: number): number {
   const raw = X_MIN + ((px - PAD_LEFT) / PLOT_W) * (X_MAX - X_MIN);
-  return Math.round(Math.max(X_MIN, Math.min(X_MAX, raw)) * 100) / 100;
+  return Math.round(Math.max(X_MIN, Math.min(X_MAX, raw)));
 }
 
 function fromSvgY(py: number): number {
   const raw = Y_MIN + ((PLOT_H - (py - PAD_TOP)) / PLOT_H) * (Y_MAX - Y_MIN);
-  // Round to 2 decimal places
-  return Math.round(Math.max(Y_MIN, Math.min(Y_MAX, raw)) * 100) / 100;
+  return Math.round(Math.max(Y_MIN, Math.min(Y_MAX, raw)));
 }
 
 function sortedPoints(pts: TransferPoint[]): TransferPoint[] {
   return [...pts].sort((a, b) => a.x - b.x);
 }
 
-/** Ensure we always have endpoint anchors at x=0 and x=1. */
+/** Ensure we always have endpoint anchors at x=X_MIN and x=X_MAX. */
 function ensureEndpoints(pts: TransferPoint[]): TransferPoint[] {
   const sorted = sortedPoints(pts);
-  if (sorted.length === 0) return [{ x: X_MIN, y: 0 }, { x: X_MAX, y: 1 }];
+  if (sorted.length === 0) return [{ x: X_MIN, y: Y_MIN }, { x: X_MAX, y: Y_MAX }];
   if (sorted[0].x !== X_MIN) sorted.unshift({ x: X_MIN, y: sorted[0].y });
   if (sorted[sorted.length - 1].x !== X_MAX) sorted.push({ x: X_MAX, y: sorted[sorted.length - 1].y });
   sorted[0] = { ...sorted[0], x: X_MIN };
@@ -87,7 +85,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
     const domainX = fromSvgX(x);
     const domainY = fromSvgY(y);
     const tooClose = sorted.some(
-      (p) => Math.abs(p.x - domainX) < 0.04 && Math.abs(p.y - domainY) < 0.06,
+      (p) => Math.abs(p.x - domainX) < 4 && Math.abs(p.y - domainY) < 6,
     );
     if (tooClose) return;
     if (domainX <= X_MIN || domainX >= X_MAX) return;
@@ -109,7 +107,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
     } else {
       const prevX = sorted[draggingIdx - 1].x;
       const nextX = sorted[draggingIdx + 1].x;
-      domainX = Math.max(prevX + 0.01, Math.min(nextX - 0.01, domainX));
+      domainX = Math.max(prevX + 1, Math.min(nextX - 1, domainX));
     }
     const updated = sorted.map((p, i) =>
       i === draggingIdx ? { x: domainX, y: domainY } : p,
@@ -128,8 +126,8 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
     onChange(sorted.filter((_, i) => i !== idx));
   }, [sorted, onChange]);
 
-  const xTicks = [0, 0.25, 0.5, 0.75, 1];
-  const yTicks = [-1, -0.5, 0, 0.5, 1];
+  const xTicks = [-100, -50, 0, 50, 100];
+  const yTicks = [-100, -50, 0, 50, 100];
 
   return (
     <div className="transfer-curve-editor">
@@ -152,7 +150,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
             key={`xg-${v}`}
             x1={toSvgX(v)} y1={PAD_TOP}
             x2={toSvgX(v)} y2={PAD_TOP + PLOT_H}
-            className="transfer-grid"
+            className={`transfer-grid ${v === 0 ? 'transfer-zero' : ''}`}
           />
         ))}
         {yTicks.slice(1, -1).map((v) => (
@@ -197,7 +195,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
           className="transfer-axis-label"
           textAnchor="middle"
         >
-          Input (0–1)
+          Input (-100 to 100)
         </text>
         <text
           x={8}
@@ -206,7 +204,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
           textAnchor="middle"
           transform={`rotate(-90, 8, ${PAD_TOP + PLOT_H / 2})`}
         >
-          Output (-1 to 1)
+          Output (-100 to 100)
         </text>
 
         {/* Curve */}

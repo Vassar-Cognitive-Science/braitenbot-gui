@@ -50,15 +50,17 @@ function applyEdgeTerm(
 
 function interpolate(input: number, points: TransferPoint[]): number {
   // Mirrors the piecewise-linear interpolation that the emitted C
-  // transfer function performs. The C function clamps x to [pts[0].x,
-  // pts[N-1].x] via its branch structure; we do the same here.
+  // transfer function performs between its declared knots. Inputs outside
+  // [pts[0].x, pts[N-1].x] are flatlined to the nearest endpoint — this
+  // matches the trace simulator. (The emitted C's branch structure will
+  // linearly extrapolate outside the declared domain, which is a known
+  // divergence not covered by this parity harness.)
   const sorted = [...points].sort((a, b) => a.x - b.x);
-  const x = clamp(input, 0, 1);
-  if (x <= sorted[0].x) return sorted[0].y;
-  if (x >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
+  if (input <= sorted[0].x) return sorted[0].y;
+  if (input >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (x >= sorted[i].x && x <= sorted[i + 1].x) {
-      const t = (x - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
+    if (input >= sorted[i].x && input <= sorted[i + 1].x) {
+      const t = (input - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
       return sorted[i].y + t * (sorted[i + 1].y - sorted[i].y);
     }
   }
@@ -104,31 +106,28 @@ function simulateEmittedC(
     if (!node) continue;
 
     if (node.kind === 'sensor') {
-      // Mirrors emitter.ts:178-188 (emitSensorRead):
-      //   analog: analogRead / 1023.0  →  caller supplies value in [0, 1]
-      //   digital: digitalRead         →  caller supplies 0 or 1
-      //   i2c:    stub returning 0.0    →  not exercised here
+      // Mirrors emitter.ts (emitSensorRead):
+      //   analog: analogRead * (100.0 / 1023.0)  →  caller supplies value in [0, 100]
+      //   digital: digitalRead * 100.0           →  caller supplies 0 or 100
+      //   i2c color: channel * (100.0 / 65535.0) →  caller supplies value in [0, 100]
       if (node.protocol === 'i2c') {
         vals[nodeId] = 0;
       } else {
-        vals[nodeId] = sensorValues[nodeId] ?? 0.5;
+        vals[nodeId] = sensorValues[nodeId] ?? 50;
       }
       continue;
     }
 
     if (node.kind === 'constant') {
-      // Mirrors emitter.ts:346-348 (loop body, constant branch):
-      //   float sig_X = node.constantValue ?? 0.5;
-      vals[nodeId] = node.constantValue ?? 0.5;
+      vals[nodeId] = node.constantValue ?? 0;
       continue;
     }
 
     if (node.kind === 'compute') {
       if (node.typeId === 'compute-threshold') {
-        // emitter.ts:200-205
         const sum = aggregateSum(graph, nodeId, vals);
-        const thresh = node.threshold ?? 0.5;
-        vals[nodeId] = sum > thresh ? 1 : 0;
+        const thresh = node.threshold ?? 50;
+        vals[nodeId] = sum > thresh ? 100 : 0;
       } else if (node.typeId === 'compute-summation') {
         // emitter.ts:223-225
         vals[nodeId] = aggregateSum(graph, nodeId, vals);
@@ -146,13 +145,13 @@ function simulateEmittedC(
 
     if (node.kind === 'motor') {
       // Wheel motors aggregate inputs into a sum and pass them to the emitted
-      // drive() helper, which clamps to [-1, 1] before writing microseconds.
-      // Servos aggregate into a sum then map to angle via
-      // constrain((input+1)*0.5*180, 0, 180). In both cases the effective
-      // signal at the node is clamp(sum, -1, 1) — that is what the trace
+      // drive() helper, which clamps to [-100, 100] before writing
+      // microseconds. Servos aggregate into a sum then map to angle via
+      // constrain((input+100)*0.9, 0, 180). In both cases the effective
+      // signal at the node is clamp(sum, -100, 100) — that is what the trace
       // simulator stores, so that is what we compare here.
       const sum = aggregateSum(graph, nodeId, vals);
-      vals[nodeId] = clamp(sum, -1, 1);
+      vals[nodeId] = clamp(sum, -100, 100);
       continue;
     }
   }
@@ -225,7 +224,7 @@ function leftMotor(): DiagramNode {
 
 describe('node parity (trace vs emitted C)', () => {
   describe('analog sensor', () => {
-    const cases = [0, 0.25, 0.5, 0.75, 1];
+    const cases = [0, 25, 50, 75, 100];
     for (const v of cases) {
       it(`returns ${v} from both`, () => {
         const nodes = [sensor('s1'), leftMotor()];
@@ -236,8 +235,9 @@ describe('node parity (trace vs emitted C)', () => {
   });
 
   describe('digital sensor', () => {
-    // Digital sensors: only 0 or 1 are physically meaningful.
-    for (const v of [0, 1]) {
+    // Digital sensors: only 0 or 100 are physically meaningful (0 or 1 from
+    // digitalRead, scaled by 100).
+    for (const v of [0, 100]) {
       it(`returns ${v} from both`, () => {
         const nodes = [
           sensor('s1', { type: 'sensor-digital', arduinoPort: '2' }),
@@ -250,7 +250,7 @@ describe('node parity (trace vs emitted C)', () => {
   });
 
   describe('constant', () => {
-    for (const v of [0, 0.3, 0.5, 0.8, 1]) {
+    for (const v of [-100, -50, 0, 30, 50, 80, 100]) {
       it(`emits ${v} from both`, () => {
         const constant: DiagramNode = {
           id: 'k1',
@@ -271,13 +271,13 @@ describe('node parity (trace vs emitted C)', () => {
     // Below, at, and above threshold. The strict ">" boundary case is the
     // exact spot where the original threshold bug lived — make sure both
     // sides agree on it.
-    const thresh = 0.5;
+    const thresh = 50;
     const cases = [
       { input: 0, label: 'below' },
-      { input: 0.49, label: 'just below' },
-      { input: 0.5, label: 'exactly at threshold' },
-      { input: 0.51, label: 'just above' },
-      { input: 1, label: 'above' },
+      { input: 49, label: 'just below' },
+      { input: 50, label: 'exactly at threshold' },
+      { input: 51, label: 'just above' },
+      { input: 100, label: 'above' },
     ];
     for (const { input, label } of cases) {
       it(`agrees ${label}`, () => {
@@ -314,7 +314,7 @@ describe('node parity (trace vs emitted C)', () => {
         makeConn({ id: 'c2', from: 's2', to: 'sum1', weight: -0.4 }),
         makeConn({ id: 'c3', from: 'sum1', to: 'motor-L' }),
       ];
-      expectParity(nodes, connections, { s1: 0.8, s2: 0.3 }, ['sum1', 'motor-L']);
+      expectParity(nodes, connections, { s1: 80, s2: 30 }, ['sum1', 'motor-L']);
     });
 
     it('agrees with three inputs of mixed sign', () => {
@@ -341,7 +341,7 @@ describe('node parity (trace vs emitted C)', () => {
       expectParity(
         nodes,
         connections,
-        { s1: 0.4, s2: 0.9, s3: 0.6 },
+        { s1: 40, s2: 90, s3: 60 },
         ['sum1', 'motor-L'],
       );
     });
@@ -362,10 +362,10 @@ describe('node parity (trace vs emitted C)', () => {
         makeConn({ id: 'c2', from: 's2', to: 'm1' }),
         makeConn({ id: 'c3', from: 'm1', to: 'motor-L' }),
       ];
-      expectParity(nodes, connections, { s1: 0.6, s2: 0.5 }, ['m1', 'motor-L']);
+      expectParity(nodes, connections, { s1: 60, s2: 50 }, ['m1', 'motor-L']);
     });
 
-    it('agrees when one input is a 0/1 gate', () => {
+    it('agrees when one input is a 0/100 gate', () => {
       // Threshold-driven gating: this is the canonical "use multiply as a
       // gate" pattern from the tutorial walkthrough. If either side gets
       // its arithmetic wrong, the gated output diverges here.
@@ -375,7 +375,7 @@ describe('node parity (trace vs emitted C)', () => {
         label: 'gate',
         x: 0,
         y: 0,
-        threshold: 0.5,
+        threshold: 50,
       };
       const mult: DiagramNode = {
         id: 'm1',
@@ -395,14 +395,14 @@ describe('node parity (trace vs emitted C)', () => {
       expectParity(
         nodes,
         connections,
-        { s_signal: 0.7, s_gate: 0.9 },
+        { s_signal: 70, s_gate: 90 },
         ['t1', 'm1', 'motor-L'],
       );
       // Gate closed
       expectParity(
         nodes,
         connections,
-        { s_signal: 0.7, s_gate: 0.1 },
+        { s_signal: 70, s_gate: 10 },
         ['t1', 'm1', 'motor-L'],
       );
     });
@@ -431,21 +431,21 @@ describe('node parity (trace vs emitted C)', () => {
       expectParity(
         nodes,
         connections,
-        { s1: 0.5, s2: 0.4, s3: 0.8 },
+        { s1: 50, s2: 40, s3: 80 },
         ['m1', 'motor-L'],
       );
     });
   });
 
   describe('motor', () => {
-    // Motor parity is the clamping behavior: anything beyond ±1 should be
-    // saturated to ±1 by both sides.
+    // Motor parity is the clamping behavior: anything beyond ±100 should be
+    // saturated to ±100 by both sides.
     it('agrees in the linear range', () => {
       const nodes = [sensor('s1'), leftMotor()];
       const connections = [
         makeConn({ id: 'c1', from: 's1', to: 'motor-L', weight: 0.7 }),
       ];
-      expectParity(nodes, connections, { s1: 0.5 }, ['motor-L']);
+      expectParity(nodes, connections, { s1: 50 }, ['motor-L']);
     });
 
     it('agrees when input saturates positive', () => {
@@ -454,8 +454,8 @@ describe('node parity (trace vs emitted C)', () => {
         makeConn({ id: 'c1', from: 's1', to: 'motor-L', weight: 1 }),
         makeConn({ id: 'c2', from: 's2', to: 'motor-L', weight: 1 }),
       ];
-      // sum = 1.7, both should clamp to 1.
-      expectParity(nodes, connections, { s1: 0.9, s2: 0.8 }, ['motor-L']);
+      // sum = 170, both should clamp to 100.
+      expectParity(nodes, connections, { s1: 90, s2: 80 }, ['motor-L']);
     });
 
     it('agrees when input saturates negative', () => {
@@ -464,8 +464,8 @@ describe('node parity (trace vs emitted C)', () => {
         makeConn({ id: 'c1', from: 's1', to: 'motor-L', weight: -1 }),
         makeConn({ id: 'c2', from: 's2', to: 'motor-L', weight: -1 }),
       ];
-      // sum = -1.7, both should clamp to -1.
-      expectParity(nodes, connections, { s1: 0.9, s2: 0.8 }, ['motor-L']);
+      // sum = -170, both should clamp to -100.
+      expectParity(nodes, connections, { s1: 90, s2: 80 }, ['motor-L']);
     });
   });
 
@@ -483,7 +483,7 @@ describe('node parity (trace vs emitted C)', () => {
       const connections = [
         makeConn({ id: 'c1', from: 's1', to: 'srv', weight: 1 }),
       ];
-      expectParity(nodes, connections, { s1: 0.4 }, ['srv']);
+      expectParity(nodes, connections, { s1: 40 }, ['srv']);
     });
   });
 
@@ -498,14 +498,14 @@ describe('node parity (trace vs emitted C)', () => {
           weight: 1,
           transferMode: 'nonlinear',
           transferPoints: [
-            { x: 0, y: -1 },
-            { x: 0.5, y: 0 },
-            { x: 1, y: 1 },
+            { x: -100, y: -100 },
+            { x: 0, y: 0 },
+            { x: 100, y: 100 },
           ],
         }),
       ];
       // Sample several points across the curve, including a knot.
-      for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+      for (const v of [-100, -50, 0, 25, 50, 100]) {
         expectParity(nodes, connections, { s1: v }, ['motor-L']);
       }
     });
@@ -528,7 +528,7 @@ describe('node parity (trace vs emitted C)', () => {
         label: 'thr',
         x: 0,
         y: 0,
-        threshold: 0.4,
+        threshold: 40,
       };
       const multNode: DiagramNode = {
         id: 'mul',
@@ -556,9 +556,9 @@ describe('node parity (trace vs emitted C)', () => {
       ];
       const ids = ['a', 'b', 'c', 'sum', 'thr', 'mul', 'motor-L'];
       // Cover gate-open and gate-closed regimes plus an edge case.
-      expectParity(nodes, connections, { a: 0.7, b: 0.6, c: 0.5 }, ids);
-      expectParity(nodes, connections, { a: 0.1, b: 0.1, c: 0.5 }, ids);
-      expectParity(nodes, connections, { a: 0.4, b: 0.4, c: 0.9 }, ids);
+      expectParity(nodes, connections, { a: 70, b: 60, c: 50 }, ids);
+      expectParity(nodes, connections, { a: 10, b: 10, c: 50 }, ids);
+      expectParity(nodes, connections, { a: 40, b: 40, c: 90 }, ids);
     });
   });
 });
@@ -586,8 +586,8 @@ describe('known divergences (documented, not parity)', () => {
       makeConn({ id: 'c1', from: 's1', to: 'd1' }),
       makeConn({ id: 'c2', from: 'd1', to: 'motor-L' }),
     ];
-    const trace = simulateGraph(nodes, connections, { s1: 0.7 });
-    expect(trace.nodeValues.d1).toBeCloseTo(0.7, 9);
+    const trace = simulateGraph(nodes, connections, { s1: 70 });
+    expect(trace.nodeValues.d1).toBeCloseTo(70, 9);
   });
 
 });

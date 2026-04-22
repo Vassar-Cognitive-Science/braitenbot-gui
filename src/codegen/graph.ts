@@ -20,6 +20,9 @@ export interface GraphNode {
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;
+  clkPin?: string;
+  dioPin?: string;
+  brightness?: number;
 }
 
 export interface GraphEdge {
@@ -57,6 +60,9 @@ export function buildGraph(
       delayMs: node.delayMs,
       servoPin: node.servoPin,
       constantValue: node.constantValue,
+      clkPin: node.clkPin,
+      dioPin: node.dioPin,
+      brightness: node.brightness,
     };
   });
 

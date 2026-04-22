@@ -16,6 +16,9 @@ const ANALOG_PORT_PLACEHOLDER = 'A0';
 const DIGITAL_PORT_PLACEHOLDER = '2';
 const MOTOR_PIN_PLACEHOLDER = '9';
 const SERVO_PIN_PLACEHOLDER = '10';
+const TM1637_CLK_PLACEHOLDER = '2';
+const TM1637_DIO_PLACEHOLDER = '3';
+const TM1637_DEFAULT_BRIGHTNESS = 3;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.25;
@@ -650,10 +653,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           x,
           y,
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
-          threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
+          threshold: nodeType.mode === 'threshold' ? 50 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
-          constantValue: nodeType.kind === 'constant' ? 512 : undefined,
-          servoPin: nodeType.kind === 'motor' ? '' : undefined,
+          constantValue: nodeType.kind === 'constant' ? 0 : undefined,
+          servoPin:
+            nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' ? '' : undefined,
+          clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          dioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          brightness:
+            nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
         },
       ];
     });
@@ -694,7 +702,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         to: toId,
         weight: DEFAULT_CONNECTION_WEIGHT,
         transferMode: 'linear',
-        transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
       },
     ]);
     setLinkDraftSource(null);
@@ -1080,7 +1088,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ${node.delayMs}ms`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
-          } else if (nodeType.kind === 'motor' && node.servoPin?.trim()) {
+          } else if (nodeType.id === 'display-tm1637' && node.clkPin?.trim() && node.dioPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • CLK ${node.clkPin.trim()} / DIO ${node.dioPin.trim()}`;
+          } else if (nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
             nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
@@ -1107,16 +1117,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
               {hasSlider && (
                 <div className="trace-slider-row">
-                  <span className="trace-slider-label">0</span>
+                  <span className="trace-slider-label">{nodeType.kind === 'constant' ? '-100' : '0'}</span>
                   <input
                     type="range"
                     className="trace-slider"
-                    min="0"
-                    max="1"
-                    step="0.01"
+                    min={nodeType.kind === 'constant' ? '-100' : '0'}
+                    max="100"
+                    step="1"
                     value={nodeType.kind === 'sensor'
-                      ? (sensorValues[node.id] ?? 0.5)
-                      : (node.constantValue ?? 0.5)}
+                      ? (sensorValues[node.id] ?? 50)
+                      : (node.constantValue ?? 0)}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
@@ -1132,7 +1142,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       }
                     }}
                   />
-                  <span className="trace-slider-label">1</span>
+                  <span className="trace-slider-label">100</span>
                 </div>
               )}
               {canOutput(nodeType) && (() => {
@@ -1217,9 +1227,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 {selectedNode.type === 'servo-cr' && isWheelNode(selectedNode.id) &&
                   'Drives a wheel of the robot as a continuous-rotation servo on a single PWM pin. Speed and direction are determined by incoming connection weights; the right wheel is inverted automatically to account for mirrored mounting.'}
                 {selectedNode.type === 'servo-cr' && !isWheelNode(selectedNode.id) &&
-                  'Continuous-rotation servo. The input signal (-1 to 1) is mapped to signed speed via writeMicroseconds (1500 ± 500 µs).'}
+                  'Continuous-rotation servo. The input signal (-100 to 100) is mapped to signed speed via writeMicroseconds (1500 ± 500 µs).'}
                 {selectedNode.type === 'servo-positional' &&
-                  'Positional servo. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
+                  'Positional servo. The input signal (-100 to 100) is mapped to an angle (0° to 180°).'}
+                {selectedNode.type === 'display-tm1637' &&
+                  'TM1637 4-digit 7-segment display. The aggregated input signal is rounded to the nearest integer, clamped to -999…9999, and shown on the display.'}
               </p>
               <label>
                 Node Label
@@ -1268,13 +1280,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   Threshold Value
                   <input
                     type="number"
-                    min="-1"
-                    max="1"
-                    step="0.01"
-                    value={selectedNode.threshold ?? 0.5}
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={selectedNode.threshold ?? 50}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(-1, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 50;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, threshold: value } : node,
@@ -1312,13 +1324,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   Constant Value
                   <input
                     type="number"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={selectedNode.constantValue ?? 0.5}
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={selectedNode.constantValue ?? 0}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 0;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, constantValue: value } : node,
@@ -1329,7 +1341,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </label>
               )}
 
-              {TYPE_BY_ID[selectedNode.type].kind === 'motor' && (
+              {TYPE_BY_ID[selectedNode.type].kind === 'motor' &&
+                selectedNode.type !== 'display-tm1637' && (
                 <label>
                   Servo Pin
                   <input
@@ -1349,6 +1362,66 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     }
                   />
                 </label>
+              )}
+
+              {selectedNode.type === 'display-tm1637' && (
+                <>
+                  <label>
+                    CLK Pin
+                    <input
+                      type="text"
+                      value={selectedNode.clkPin ?? ''}
+                      placeholder={TM1637_CLK_PLACEHOLDER}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, clkPin: event.target.value.trimStart() }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    DIO Pin
+                    <input
+                      type="text"
+                      value={selectedNode.dioPin ?? ''}
+                      placeholder={TM1637_DIO_PLACEHOLDER}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, dioPin: event.target.value.trimStart() }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Brightness (0–7)
+                    <input
+                      type="number"
+                      min="0"
+                      max="7"
+                      step="1"
+                      value={selectedNode.brightness ?? TM1637_DEFAULT_BRIGHTNESS}
+                      onChange={(event) => {
+                        const parsed = Number.parseInt(event.target.value, 10);
+                        const value = Number.isFinite(parsed)
+                          ? Math.max(0, Math.min(7, parsed))
+                          : TM1637_DEFAULT_BRIGHTNESS;
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id ? { ...node, brightness: value } : node,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </>
               )}
               {!isWheelNode(selectedNode.id) && (
                 <button
@@ -1377,7 +1450,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                               transferMode: mode,
                               transferPoints: connection.transferPoints?.length
                                 ? connection.transferPoints
-                                : [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+                                : [{ x: -100, y: -100 }, { x: 100, y: 100 }],
                             }
                           : connection,
                       ),
@@ -1435,7 +1508,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
               {selectedConnection.transferMode === 'nonlinear' && (
                 <TransferCurveEditor
-                  points={selectedConnection.transferPoints ?? [{ x: 0, y: 0 }, { x: 1, y: 1 }]}
+                  points={selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }]}
                   onChange={(pts: TransferPoint[]) =>
                     setConnections((prev) =>
                       prev.map((connection) =>
