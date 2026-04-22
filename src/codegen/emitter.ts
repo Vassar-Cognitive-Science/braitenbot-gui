@@ -83,7 +83,7 @@ function nodeById(graph: WiringGraph, id: string): GraphNode | undefined {
 
 /**
  * Emit a piecewise-linear lookup function for a non-linear edge.
- * Input: 0–1 (normalized sensor signal). Output: -1 to 1.
+ * Input and output: -100 to 100.
  */
 function readableEdgeId(nodeId: string): string {
   // Look up the readable name via the label map, fall back to sanitized raw id
@@ -171,7 +171,14 @@ function emitPinDeclarations(graph: WiringGraph): string {
         `const int SENSOR_${readableId(node)} = ${node.arduinoPort.trim()};`,
       );
     }
-    if (node.kind === 'motor' && node.servoPin?.trim()) {
+    if (node.typeId === 'display-tm1637') {
+      if (node.clkPin?.trim()) {
+        lines.push(`const int TM1637_${readableId(node)}_CLK = ${node.clkPin.trim()};`);
+      }
+      if (node.dioPin?.trim()) {
+        lines.push(`const int TM1637_${readableId(node)}_DIO = ${node.dioPin.trim()};`);
+      }
+    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
       lines.push(
         `const int SERVO_${readableId(node)}_PIN = ${node.servoPin.trim()};`,
       );
@@ -200,7 +207,11 @@ function emitSetup(graph: WiringGraph): string {
     if (node.kind === 'sensor' && node.protocol === 'digital' && node.arduinoPort?.trim()) {
       lines.push(`  pinMode(SENSOR_${readableId(node)}, INPUT);`);
     }
-    if (node.kind === 'motor' && node.servoPin?.trim()) {
+    if (node.typeId === 'display-tm1637') {
+      const b = Math.max(0, Math.min(7, Math.round(node.brightness ?? 3)));
+      lines.push(`  display_${readableId(node)}.setBrightness(${b});`);
+      lines.push(`  display_${readableId(node)}.clear();`);
+    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
       lines.push(`  servo_${readableId(node)}.attach(SERVO_${readableId(node)}_PIN);`);
     }
   }
@@ -212,10 +223,10 @@ function emitSetup(graph: WiringGraph): string {
 function emitSensorRead(node: GraphNode, indent: string): string {
   const name = varName(node);
   if (node.protocol === 'analog') {
-    return `${indent}float ${name} = analogRead(SENSOR_${readableId(node)}) / 1023.0;`;
+    return `${indent}float ${name} = analogRead(SENSOR_${readableId(node)}) * (100.0 / 1023.0);`;
   }
   if (node.protocol === 'digital') {
-    return `${indent}float ${name} = (float)digitalRead(SENSOR_${readableId(node)});`;
+    return `${indent}float ${name} = digitalRead(SENSOR_${readableId(node)}) * 100.0;`;
   }
   if (node.typeId === 'sensor-color') {
     // One bulk I2C read per loop; each channel is exposed as its own
@@ -223,10 +234,10 @@ function emitSensorRead(node: GraphNode, indent: string): string {
     const rid = readableId(node);
     return [
       `${indent}TCS34725Sample sample_${rid} = tcs34725_read_all();`,
-      `${indent}float sig_${rid}_clear = sample_${rid}.c / 65535.0;`,
-      `${indent}float sig_${rid}_red   = sample_${rid}.r / 65535.0;`,
-      `${indent}float sig_${rid}_green = sample_${rid}.g / 65535.0;`,
-      `${indent}float sig_${rid}_blue  = sample_${rid}.b / 65535.0;`,
+      `${indent}float sig_${rid}_clear = sample_${rid}.c * (100.0 / 65535.0);`,
+      `${indent}float sig_${rid}_red   = sample_${rid}.r * (100.0 / 65535.0);`,
+      `${indent}float sig_${rid}_green = sample_${rid}.g * (100.0 / 65535.0);`,
+      `${indent}float sig_${rid}_blue  = sample_${rid}.b * (100.0 / 65535.0);`,
     ].join('\n');
   }
   return `${indent}float ${name} = 0.0;`;
@@ -292,9 +303,9 @@ function emitComputeNode(
 
   if (typeDef === 'compute-threshold') {
     lines.push(emitInputAggregation(graph, node, indent));
-    const threshold = node.threshold ?? 0.5;
+    const threshold = node.threshold ?? 50;
     lines.push(
-      `${indent}float ${name} = (${inputVar(node)} > ${threshold.toFixed(4)}) ? 1.0 : 0.0;`,
+      `${indent}float ${name} = (${inputVar(node)} > ${threshold.toFixed(4)}) ? 100.0 : 0.0;`,
     );
   } else if (typeDef === 'compute-summation') {
     lines.push(emitInputAggregation(graph, node, indent));
@@ -336,7 +347,7 @@ function emitCrServoWrite(
   const sid = readableId(node);
   lines.push(emitInputAggregation(graph, node, indent));
   lines.push(
-    `${indent}int us_${sid} = 1500 + (int)(constrain(${inputVar(node)}, -1.0, 1.0) * 500.0);`,
+    `${indent}int us_${sid} = 1500 + (int)(constrain(${inputVar(node)}, -100.0, 100.0) * 5.0);`,
   );
   lines.push(`${indent}servo_${sid}.writeMicroseconds(us_${sid});`);
   return lines.join('\n');
@@ -346,13 +357,13 @@ function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
   const left = readableId(leftWheel);
   const right = readableId(rightWheel);
   return [
-    '// Drive both wheel continuous servos. left/right are -1.0..1.0 (signed speed).',
+    '// Drive both wheel continuous servos. left/right are -100..100 (signed speed).',
     '// The right servo is mounted mirrored, so its direction is inverted.',
     'void drive(float left, float right) {',
-    '  left  = constrain(left,  -1.0, 1.0);',
-    '  right = constrain(right, -1.0, 1.0);',
-    `  servo_${left}.writeMicroseconds(1500 + (int)(left  * 500.0));`,
-    `  servo_${right}.writeMicroseconds(1500 - (int)(right * 500.0));`,
+    '  left  = constrain(left,  -100.0, 100.0);',
+    '  right = constrain(right, -100.0, 100.0);',
+    `  servo_${left}.writeMicroseconds(1500 + (int)(left  * 5.0));`,
+    `  servo_${right}.writeMicroseconds(1500 - (int)(right * 5.0));`,
     '}',
   ].join('\n');
 }
@@ -367,9 +378,26 @@ function emitPositionalServoWrite(
 
   lines.push(emitInputAggregation(graph, node, indent));
   lines.push(
-    `${indent}int angle_${sid} = constrain((int)((${inputVar(node)} + 1.0) * 0.5 * 180.0), 0, 180);`,
+    `${indent}int angle_${sid} = constrain((int)((${inputVar(node)} + 100.0) * 0.9), 0, 180);`,
   );
   lines.push(`${indent}servo_${sid}.write(angle_${sid});`);
+
+  return lines.join('\n');
+}
+
+function emitTm1637DisplayWrite(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  const lines: string[] = [];
+  const sid = readableId(node);
+
+  lines.push(emitInputAggregation(graph, node, indent));
+  lines.push(
+    `${indent}int value_${sid} = constrain((int)lround(${inputVar(node)}), -999, 9999);`,
+  );
+  lines.push(`${indent}display_${sid}.showNumberDec(value_${sid}, false);`);
 
   return lines.join('\n');
 }
@@ -379,20 +407,27 @@ export function generateSketch(graph: WiringGraph): string {
   const sections: string[] = [];
   const hasI2C = graph.nodes.some((n) => n.protocol === 'i2c');
   const hasColor = graph.nodes.some((n) => n.typeId === 'sensor-color');
-  const actuatorNodes = graph.nodes.filter((n) => n.kind === 'motor');
+  const servoNodes = graph.nodes.filter(
+    (n) => n.typeId === 'servo-cr' || n.typeId === 'servo-positional',
+  );
+  const tm1637Nodes = graph.nodes.filter((n) => n.typeId === 'display-tm1637');
   const leftWheel = graph.nodes.find((n) => n.id === 'motor-left');
   const rightWheel = graph.nodes.find((n) => n.id === 'motor-right');
-  const hasActuator = actuatorNodes.length > 0;
+  const hasServo = servoNodes.length > 0;
+  const hasTm1637 = tm1637Nodes.length > 0;
   const hasDrive = !!(leftWheel && rightWheel);
 
   // Header
   sections.push('// --- Auto-generated by BraitenBot GUI ---');
-  sections.push('// Signal convention: sensors output 0.0–1.0, internal signals -1.0–1.0');
+  sections.push('// Signal convention: sensors output 0.0–100.0, internal signals -100.0–100.0');
   if (hasI2C) {
     sections.push('#include <Wire.h>');
   }
-  if (hasActuator) {
+  if (hasServo) {
     sections.push('#include <Servo.h>');
+  }
+  if (hasTm1637) {
+    sections.push('#include <TM1637Display.h>');
   }
   sections.push('');
 
@@ -409,11 +444,22 @@ export function generateSketch(graph: WiringGraph): string {
     sections.push('');
   }
 
-  // Servo objects — every actuator (wheels, continuous servos, positional
-  // servos) is driven through Servo.h.
-  if (hasActuator) {
-    for (const node of actuatorNodes) {
+  // Servo objects — continuous and positional servos (including wheels)
+  // are driven through Servo.h.
+  if (hasServo) {
+    for (const node of servoNodes) {
       sections.push(`Servo servo_${readableId(node)};`);
+    }
+    sections.push('');
+  }
+
+  // TM1637 display instances — one per display node, constructed with its
+  // configured CLK/DIO pins.
+  if (hasTm1637) {
+    for (const node of tm1637Nodes) {
+      sections.push(
+        `TM1637Display display_${readableId(node)}(TM1637_${readableId(node)}_CLK, TM1637_${readableId(node)}_DIO);`,
+      );
     }
     sections.push('');
   }
@@ -466,6 +512,9 @@ export function generateSketch(graph: WiringGraph): string {
       } else {
         loopLines.push(emitCrServoWrite(graph, node, '  '));
       }
+    } else if (node.typeId === 'display-tm1637') {
+      loopLines.push('');
+      loopLines.push(emitTm1637DisplayWrite(graph, node, '  '));
     }
   }
 

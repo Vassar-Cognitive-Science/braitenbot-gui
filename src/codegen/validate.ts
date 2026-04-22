@@ -59,7 +59,15 @@ export function validateGraph(
 
   // 3. Actuator missing pin
   for (const motor of motors) {
-    if (!motor.servoPin?.trim()) {
+    if (motor.type === 'display-tm1637') {
+      if (!motor.clkPin?.trim() || !motor.dioPin?.trim()) {
+        errors.push({
+          nodeId: motor.id,
+          message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' needs both CLK and DIO pins configured`,
+          severity: 'error',
+        });
+      }
+    } else if (!motor.servoPin?.trim()) {
       errors.push({
         nodeId: motor.id,
         message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' has no pin configured`,

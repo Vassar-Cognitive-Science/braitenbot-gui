@@ -52,7 +52,7 @@ export function simulateGraph(
     const typeDef = TYPE_BY_ID[node.type];
 
     if (typeDef.kind === 'sensor') {
-      nodeValues[nodeId] = sensorValues[nodeId] ?? 0.5;
+      nodeValues[nodeId] = sensorValues[nodeId] ?? 50;
       continue;
     }
 
@@ -81,10 +81,10 @@ export function simulateGraph(
     const sum = inputs.reduce((a, b) => a + b, 0);
 
     if (typeDef.kind === 'motor') {
-      nodeValues[nodeId] = clamp(sum, -1, 1);
+      nodeValues[nodeId] = clamp(sum, -100, 100);
     } else if (typeDef.mode === 'threshold') {
-      const thresh = node.threshold ?? 0.5;
-      nodeValues[nodeId] = sum > thresh ? 1 : 0;
+      const thresh = node.threshold ?? 50;
+      nodeValues[nodeId] = sum > thresh ? 100 : 0;
     } else if (typeDef.mode === 'multiply') {
       nodeValues[nodeId] = inputs.reduce((a, b) => a * b, 1);
     } else if (typeDef.mode === 'delay') {
@@ -127,14 +127,13 @@ function applyTransfer(input: number, edge: DiagramConnection): number {
 
 function interpolateTransfer(input: number, points: TransferPoint[]): number {
   const sorted = [...points].sort((a, b) => a.x - b.x);
-  const clamped = clamp(input, 0, 1);
 
-  if (clamped <= sorted[0].x) return sorted[0].y;
-  if (clamped >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
+  if (input <= sorted[0].x) return sorted[0].y;
+  if (input >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
 
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (clamped >= sorted[i].x && clamped <= sorted[i + 1].x) {
-      const t = (clamped - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
+    if (input >= sorted[i].x && input <= sorted[i + 1].x) {
+      const t = (input - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
       return sorted[i].y + t * (sorted[i + 1].y - sorted[i].y);
     }
   }
@@ -148,9 +147,6 @@ function clamp(v: number, min: number, max: number): number {
 
 /** Format a trace value smartly — fewer decimals for clean values. */
 export function formatTraceValue(v: number): string {
-  if (v === 0) return '0';
-  if (v === 1) return '1';
-  if (v === -1) return '-1';
   if (Number.isInteger(v)) return v.toString();
   const s = v.toFixed(2);
   // strip trailing zero: "0.50" → "0.5"
