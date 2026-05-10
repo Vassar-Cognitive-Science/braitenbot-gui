@@ -568,11 +568,13 @@ describe('node parity (trace vs emitted C)', () => {
 // ---------------------------------------------------------------------------
 
 describe('known divergences (documented, not parity)', () => {
-  it('delay node: trace passes through, C uses a ring buffer', () => {
-    // The trace simulator has no time dimension. This test pins the
-    // current pass-through behavior so it cannot drift silently. If you
-    // ever add multi-tick simulation, replace this with a real parity
-    // test against a tick-stepped C interpreter.
+  it('delay node: trace outputs 0, C ring buffer starts at 0 then catches up', () => {
+    // The trace simulator has no time dimension, so delay nodes output 0
+    // (matching the C ring buffer's initial state — `static float buf[N]
+    // = {0}`). After BUF_SIZE iterations on the actual hardware the C
+    // delay starts emitting historical inputs; the static trace cannot
+    // model that. If you ever add multi-tick simulation, replace this
+    // with a real parity test against a tick-stepped C interpreter.
     const delayNode: DiagramNode = {
       id: 'd1',
       type: 'compute-delay',
@@ -587,7 +589,7 @@ describe('known divergences (documented, not parity)', () => {
       makeConn({ id: 'c2', from: 'd1', to: 'motor-L' }),
     ];
     const trace = simulateGraph(nodes, connections, { s1: 0.7 });
-    expect(trace.nodeValues.d1).toBeCloseTo(0.7, 9);
+    expect(trace.nodeValues.d1).toBe(0);
   });
 
 });

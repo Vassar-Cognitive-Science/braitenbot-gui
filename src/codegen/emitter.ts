@@ -198,7 +198,8 @@ function emitSetup(graph: WiringGraph): string {
 
   for (const node of graph.nodes) {
     if (node.kind === 'sensor' && node.protocol === 'digital' && node.arduinoPort?.trim()) {
-      lines.push(`  pinMode(SENSOR_${readableId(node)}, INPUT);`);
+      const mode = node.pullup ? 'INPUT_PULLUP' : 'INPUT';
+      lines.push(`  pinMode(SENSOR_${readableId(node)}, ${mode});`);
     }
     if (node.kind === 'motor' && node.servoPin?.trim()) {
       lines.push(`  servo_${readableId(node)}.attach(SERVO_${readableId(node)}_PIN);`);
@@ -303,17 +304,44 @@ function emitComputeNode(
     lines.push(emitProductAggregation(graph, node, indent));
     lines.push(`${indent}float ${name} = ${inputVar(node)};`);
   } else if (typeDef === 'compute-delay') {
-    lines.push(emitInputAggregation(graph, node, indent));
+    // Delay nodes are emitted in two halves: the "read" half here, at the
+    // node's position in execution order, exposes the buffered value from
+    // a previous iteration as sig_<name>. The "write" half (input
+    // aggregation + buffer store) is deferred to the end of loop() — see
+    // emitDelayCapture — so that any feedback cycles broken by this delay
+    // see all source signals fully computed.
     const delayMs = node.delayMs ?? 100;
     const bufSize = Math.max(1, Math.round(delayMs / loopPeriodMs));
     lines.push(`${indent}static const int ${name}_BUF_SIZE = ${bufSize};`);
     lines.push(`${indent}static float ${name}_buf[${bufSize}] = {0};`);
     lines.push(`${indent}static int ${name}_idx = 0;`);
     lines.push(`${indent}float ${name} = ${name}_buf[${name}_idx];`);
-    lines.push(`${indent}${name}_buf[${name}_idx] = ${inputVar(node)};`);
-    lines.push(`${indent}${name}_idx = (${name}_idx + 1) % ${name}_BUF_SIZE;`);
+  } else if (typeDef === 'compute-oscillator') {
+    const freq = node.frequencyHz ?? 1.0;
+    const amp = node.amplitude ?? 1.0;
+    lines.push(
+      `${indent}float ${name} = ${amp.toFixed(4)} * sin(2.0 * PI * ${freq.toFixed(4)} * (millis() / 1000.0));`,
+    );
+  } else if (typeDef === 'compute-noise') {
+    const amp = node.amplitude ?? 0.5;
+    lines.push(
+      `${indent}float ${name} = ${amp.toFixed(4)} * ((float)random(-10000, 10001) / 10000.0);`,
+    );
   }
 
+  return lines.join('\n');
+}
+
+function emitDelayCapture(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+): string {
+  const lines: string[] = [];
+  const name = varName(node);
+  lines.push(emitInputAggregation(graph, node, indent));
+  lines.push(`${indent}${name}_buf[${name}_idx] = ${inputVar(node)};`);
+  lines.push(`${indent}${name}_idx = (${name}_idx + 1) % ${name}_BUF_SIZE;`);
   return lines.join('\n');
 }
 
@@ -467,6 +495,15 @@ export function generateSketch(graph: WiringGraph): string {
         loopLines.push(emitCrServoWrite(graph, node, '  '));
       }
     }
+  }
+
+  // Deferred delay-node capture: aggregate inputs and advance the ring
+  // buffer at the bottom of the loop, after every other signal has been
+  // computed. This is what makes feedback cycles broken by a delay work.
+  const delayNodes = graph.nodes.filter((n) => n.typeId === 'compute-delay');
+  for (const delayNode of delayNodes) {
+    loopLines.push('');
+    loopLines.push(emitDelayCapture(graph, delayNode, '  '));
   }
 
   if (hasDrive) {

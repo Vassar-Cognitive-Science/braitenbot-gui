@@ -174,6 +174,52 @@ describe('generateSketch', () => {
     expect(code).toContain('BUF_SIZE = 10');
     expect(code).toContain('static float sig_Delay_buf');
     expect(code).toContain('float sig_Delay =');
+    // The delay read happens at the node's normal position; the input
+    // aggregation + buffer write are deferred to the end of loop() so the
+    // delay can break feedback cycles.
+    expect(code).toContain('sig_Delay_buf[sig_Delay_idx] = input_Delay');
+    // The read must appear before the write in the emitted loop.
+    const readPos = code.indexOf('float sig_Delay =');
+    const writePos = code.indexOf('sig_Delay_buf[sig_Delay_idx] = input_Delay');
+    expect(readPos).toBeGreaterThan(-1);
+    expect(writePos).toBeGreaterThan(readPos);
+  });
+
+  it('allows feedback cycles when broken by a delay node', () => {
+    // A node feeding back into itself through a delay forms a recurrent
+    // loop. buildGraph must accept this (no CycleError), and the emitted
+    // sketch must still reference the back-edge in the delay's input.
+    const delayNode: DiagramNode = {
+      id: 'delay-1',
+      type: 'compute-delay',
+      label: 'Delay',
+      x: 0,
+      y: 0,
+      delayMs: 40,
+    };
+    const sumNode: DiagramNode = {
+      id: 'sum-1',
+      type: 'compute-summation',
+      label: 'Sum',
+      x: 0,
+      y: 0,
+    };
+    const nodes: DiagramNode[] = [makeSensor(), sumNode, delayNode, makeMotor(), makeRightMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'sum-1', weight: 1 }),
+      // Recurrent self-loop: Sum -> Delay -> Sum
+      conn({ id: 'c2', from: 'sum-1', to: 'delay-1', weight: 0.9 }),
+      conn({ id: 'c3', from: 'delay-1', to: 'sum-1', weight: 0.5 }),
+      conn({ id: 'c4', from: 'sum-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c5', from: 'sum-1', to: 'motor-right', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // The cycle is accepted (no throw) and the delay's input aggregation
+    // references the back-edge from Sum.
+    expect(code).toContain('input_Delay');
+    expect(code).toContain('sig_Sum');
   });
 
   it('generates digital sensor as float', () => {

@@ -16,10 +16,13 @@ export interface GraphNode {
   label: string;
   arduinoPort?: string;
   protocol?: SensorProtocol;
+  pullup?: boolean;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;
+  frequencyHz?: number;
+  amplitude?: number;
 }
 
 export interface GraphEdge {
@@ -53,10 +56,13 @@ export function buildGraph(
       label: node.label,
       arduinoPort: node.arduinoPort,
       protocol: typeDef.protocol,
+      pullup: node.pullup,
       threshold: node.threshold,
       delayMs: node.delayMs,
       servoPin: node.servoPin,
       constantValue: node.constantValue,
+      frequencyHz: node.frequencyHz,
+      amplitude: node.amplitude,
     };
   });
 
@@ -69,8 +75,16 @@ export function buildGraph(
     transferPoints: conn.transferPoints,
   }));
 
+  // Delay nodes break feedback cycles: their output is the buffered value
+  // from a previous loop iteration, so they don't impose an ordering
+  // dependency on their inputs. We filter edges INTO delay nodes out of the
+  // dependency graph used for toposort, which lets the rest of the loop run
+  // before delays capture their (now-final) inputs at the bottom.
+  const delayIds = new Set(graphNodes.filter((n) => n.typeId === 'compute-delay').map((n) => n.id));
+  const orderingEdges = graphEdges.filter((e) => !delayIds.has(e.to));
+
   const nodeIds = graphNodes.map((n) => n.id);
-  const executionOrder = toposort(nodeIds, graphEdges);
+  const executionOrder = toposort(nodeIds, orderingEdges);
 
   return { nodes: graphNodes, edges: graphEdges, executionOrder, loopPeriodMs };
 }

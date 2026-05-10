@@ -31,17 +31,24 @@ export function simulateGraph(
 ): TraceResult {
   if (nodes.length === 0) return EMPTY;
 
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const delayIds = new Set(
+    nodes.filter((n) => n.type === 'compute-delay').map((n) => n.id),
+  );
+
   let order: string[];
   try {
+    // Mirror the codegen: edges into delay nodes don't impose ordering,
+    // since the delay's output is taken from a previous iteration.
     order = toposort(
       nodes.map((n) => n.id),
-      connections.map((c) => ({ from: c.from, to: c.to })),
+      connections
+        .filter((c) => !delayIds.has(c.to))
+        .map((c) => ({ from: c.from, to: c.to })),
     );
   } catch {
     return EMPTY;
   }
-
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const nodeValues: Record<string, number> = {};
   const edgeSignals: Record<string, number> = {};
   const disconnected = new Set<string>();
@@ -58,6 +65,27 @@ export function simulateGraph(
 
     if (typeDef.kind === 'constant') {
       nodeValues[nodeId] = node.constantValue ?? 0.5;
+      continue;
+    }
+
+    if (node.type === 'compute-oscillator') {
+      const freq = node.frequencyHz ?? 1.0;
+      const amp = node.amplitude ?? 1.0;
+      nodeValues[nodeId] = amp * Math.sin(2 * Math.PI * freq * (Date.now() / 1000));
+      continue;
+    }
+
+    if (node.type === 'compute-noise') {
+      const amp = node.amplitude ?? 0.5;
+      nodeValues[nodeId] = amp * (Math.random() * 2 - 1);
+      continue;
+    }
+
+    if (node.type === 'compute-delay') {
+      // Static trace has no notion of past iterations, so delay outputs
+      // 0. Incoming edge signals are computed below in the second pass,
+      // once all upstream values are known.
+      nodeValues[nodeId] = 0;
       continue;
     }
 

@@ -35,11 +35,17 @@ export function validateGraph(
 
   const sensors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'sensor');
   const constants = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'constant');
+  const sourceCompute = nodes.filter(
+    (n) => n.type === 'compute-oscillator' || n.type === 'compute-noise',
+  );
   const motors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'motor');
 
-  // 1. No source nodes (sensors or constants)
-  if (sensors.length === 0 && constants.length === 0) {
-    errors.push({ message: 'Diagram has no source nodes (sensors or constants)', severity: 'error' });
+  // 1. No source nodes (sensors, constants, oscillators, or noise generators)
+  if (sensors.length === 0 && constants.length === 0 && sourceCompute.length === 0) {
+    errors.push({
+      message: 'Diagram has no source nodes (sensors, constants, oscillators, or noise)',
+      severity: 'error',
+    });
   }
 
   // 2. Sensor missing arduinoPort
@@ -77,7 +83,7 @@ export function validateGraph(
   for (const conn of connections) {
     adjacency.get(conn.from)?.push(conn.to);
   }
-  const queue = [...sensors, ...constants].map((s) => s.id);
+  const queue = [...sensors, ...constants, ...sourceCompute].map((s) => s.id);
   for (const id of queue) {
     if (reachable.has(id)) continue;
     reachable.add(id);
@@ -95,17 +101,24 @@ export function validateGraph(
     }
   }
 
-  // 5. Cycle detection
+  // 5. Cycle detection — delay nodes break cycles (their output comes from
+  // a previous loop iteration), so we exclude edges into delays before
+  // checking. Any cycle that survives this filtering has no delay to break
+  // it and must be flagged.
   try {
     const nodeIds = nodes.map((n) => n.id);
-    toposort(nodeIds, connections);
+    const delayIds = new Set(
+      nodes.filter((n) => n.type === 'compute-delay').map((n) => n.id),
+    );
+    const orderingEdges = connections.filter((c) => !delayIds.has(c.to));
+    toposort(nodeIds, orderingEdges);
   } catch (err) {
     if (err instanceof CycleError) {
       for (const nodeId of err.involvedNodeIds) {
         const node = nodes.find((n) => n.id === nodeId);
         errors.push({
           nodeId,
-          message: `Cycle detected involving node '${node?.label ?? nodeId}'`,
+          message: `Cycle detected involving node '${node?.label ?? nodeId}' — break the cycle by inserting a Delay node`,
           severity: 'error',
         });
       }
@@ -115,9 +128,13 @@ export function validateGraph(
   // 6. Orphan compute nodes
   const computeNodes = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'compute');
   for (const compute of computeNodes) {
+    // Oscillators and noise generators are source-like and don't take
+    // inputs — only require an output.
+    const requiresInputs =
+      compute.type !== 'compute-oscillator' && compute.type !== 'compute-noise';
     const hasInputs = connections.some((c) => c.to === compute.id);
     const hasOutputs = connections.some((c) => c.from === compute.id);
-    if (!hasInputs || !hasOutputs) {
+    if ((requiresInputs && !hasInputs) || !hasOutputs) {
       errors.push({
         nodeId: compute.id,
         message: `Compute node '${compute.label}' is not connected`,

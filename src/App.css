@@ -602,6 +602,13 @@ body {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
+
+.config-section label.config-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
  
 .transfer-curve-editor {
   display: flex;

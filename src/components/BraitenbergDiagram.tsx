@@ -652,6 +652,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
           threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
+          frequencyHz: nodeType.mode === 'oscillator' ? 1.0 : undefined,
+          amplitude:
+            nodeType.mode === 'oscillator'
+              ? 1.0
+              : nodeType.mode === 'noise'
+                ? 0.5
+                : undefined,
           constantValue: nodeType.kind === 'constant' ? 512 : undefined,
           servoPin: nodeType.kind === 'motor' ? '' : undefined,
         },
@@ -1078,6 +1085,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ${node.threshold}`;
           } else if (nodeType.mode === 'delay' && node.delayMs !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.delayMs}ms`;
+          } else if (nodeType.mode === 'oscillator' && node.frequencyHz !== undefined) {
+            nodeMeta = `${nodeType.metaLabel} • ${node.frequencyHz} Hz`;
+          } else if (nodeType.mode === 'noise' && node.amplitude !== undefined) {
+            nodeMeta = `${nodeType.metaLabel} • ±${node.amplitude}`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
           } else if (nodeType.kind === 'motor' && node.servoPin?.trim()) {
@@ -1212,6 +1223,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
                   TYPE_BY_ID[selectedNode.type].mode === 'multiply' &&
                   'Multiplies all incoming signals together. When one input is 0 or 1, it acts as a gate: the other signal passes through when the gate is on, and zero when the gate is off.'}
+                {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+                  TYPE_BY_ID[selectedNode.type].mode === 'oscillator' &&
+                  'Generates a sine wave that oscillates over time. Useful as a central pattern generator for rhythmic motor behavior. Output ranges from -amplitude to +amplitude.'}
+                {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+                  TYPE_BY_ID[selectedNode.type].mode === 'noise' &&
+                  'Emits a fresh uniform random value every loop iteration. Useful for adding exploration or jitter to motor behavior. Output ranges from -amplitude to +amplitude.'}
                 {TYPE_BY_ID[selectedNode.type].kind === 'constant' &&
                   'Emits a fixed constant value to all connected nodes.'}
                 {selectedNode.type === 'servo-cr' && isWheelNode(selectedNode.id) &&
@@ -1253,6 +1270,25 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       )
                     }
                   />
+                </label>
+              )}
+
+              {selectedNode.type === 'sensor-digital' && (
+                <label className="config-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedNode.pullup ?? false}
+                    onChange={(event) =>
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id
+                            ? { ...node, pullup: event.target.checked }
+                            : node,
+                        ),
+                      )
+                    }
+                  />
+                  Enable INPUT_PULLUP
                 </label>
               )}
 
@@ -1300,6 +1336,71 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, delayMs: value } : node,
+                        ),
+                      );
+                    }}
+                  />
+                </label>
+              )}
+
+              {TYPE_BY_ID[selectedNode.type].mode === 'oscillator' && (
+                <>
+                  <label>
+                    Frequency (Hz)
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="0.1"
+                      value={selectedNode.frequencyHz ?? 1.0}
+                      onChange={(event) => {
+                        const parsed = Number.parseFloat(event.target.value);
+                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(50, parsed)) : 1.0;
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id ? { ...node, frequencyHz: value } : node,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Amplitude
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={selectedNode.amplitude ?? 1.0}
+                      onChange={(event) => {
+                        const parsed = Number.parseFloat(event.target.value);
+                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 1.0;
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id ? { ...node, amplitude: value } : node,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+
+              {TYPE_BY_ID[selectedNode.type].mode === 'noise' && (
+                <label>
+                  Amplitude
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={selectedNode.amplitude ?? 0.5}
+                    onChange={(event) => {
+                      const parsed = Number.parseFloat(event.target.value);
+                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id ? { ...node, amplitude: value } : node,
                         ),
                       );
                     }}

@@ -1,6 +1,6 @@
 export type NodeKind = 'sensor' | 'compute' | 'motor' | 'constant';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
-export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply';
+export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
 /**
  * Identifier for a specific output port on a multi-output node.
@@ -16,6 +16,8 @@ export type NodeTypeId =
   | 'compute-delay'
   | 'compute-summation'
   | 'compute-multiply'
+  | 'compute-oscillator'
+  | 'compute-noise'
   | 'constant'
   | 'servo-cr'
   | 'servo-positional';
@@ -36,10 +38,16 @@ export interface DiagramNode {
   x: number;
   y: number;
   arduinoPort?: string;
+  /** Use INPUT_PULLUP mode for digital sensors. Ignored for non-digital sensors. */
+  pullup?: boolean;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;
+  /** Oscillator frequency in Hz. */
+  frequencyHz?: number;
+  /** Oscillator amplitude (0–1). Output ranges from -amplitude to +amplitude. */
+  amplitude?: number;
 }
 
 export type TransferMode = 'linear' | 'nonlinear';
@@ -87,6 +95,8 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },
   { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply' },
+  { id: 'compute-oscillator', kind: 'compute', displayName: 'Oscillator', metaLabel: 'oscillator', mode: 'oscillator' },
+  { id: 'compute-noise', kind: 'compute', displayName: 'Noise', metaLabel: 'noise', mode: 'noise' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
   { id: 'servo-cr', kind: 'motor', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
   { id: 'servo-positional', kind: 'motor', displayName: 'Positional Servo', metaLabel: 'positional servo' },
