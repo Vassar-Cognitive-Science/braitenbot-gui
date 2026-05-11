@@ -19,6 +19,9 @@ const DIGITAL_PORT_PLACEHOLDER = '2';
 const MOTOR_PIN_PLACEHOLDER = '9';
 const SERVO_PIN_PLACEHOLDER = '10';
 const DIGITAL_OUT_PIN_PLACEHOLDER = '13';
+const TM1637_CLK_PLACEHOLDER = '2';
+const TM1637_DIO_PLACEHOLDER = '3';
+const TM1637_DEFAULT_BRIGHTNESS = 3;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.25;
@@ -679,7 +682,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 ? 50
                 : undefined,
           constantValue: nodeType.kind === 'constant' ? 0 : undefined,
-          servoPin: nodeType.kind === 'motor' ? '' : undefined,
+          servoPin:
+            nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' ? '' : undefined,
+          clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          dioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          brightness:
+            nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
         },
       ];
     });
@@ -1110,7 +1118,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ±${node.amplitude}`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
-          } else if (nodeType.kind === 'motor' && node.servoPin?.trim()) {
+          } else if (nodeType.id === 'display-tm1637' && node.clkPin?.trim() && node.dioPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • CLK ${node.clkPin.trim()} / DIO ${node.dioPin.trim()}`;
+          } else if (nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
             nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
@@ -1272,6 +1282,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   'Positional servo. The input signal (-100 to 100) is mapped to an angle (0° to 180°).'}
                 {selectedNode.type === 'digital-out' &&
                   'Digital output pin (e.g. an LED). Drives the pin HIGH when the aggregated input exceeds the threshold, otherwise LOW. Useful for showing internal state externally.'}
+                {selectedNode.type === 'display-tm1637' &&
+                  'TM1637 4-digit 7-segment display. The aggregated input signal is rounded to the nearest integer, clamped to -999…9999, and shown on the display.'}
               </p>
               <label>
                 Node Label
@@ -1465,7 +1477,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </label>
               )}
 
-              {TYPE_BY_ID[selectedNode.type].kind === 'motor' && (
+              {TYPE_BY_ID[selectedNode.type].kind === 'motor' &&
+                selectedNode.type !== 'display-tm1637' && (
                 <label>
                   {selectedNode.type === 'digital-out' ? 'Pin' : 'Servo Pin'}
                   <input
@@ -1511,6 +1524,66 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     }}
                   />
                 </label>
+              )}
+
+              {selectedNode.type === 'display-tm1637' && (
+                <>
+                  <label>
+                    CLK Pin
+                    <input
+                      type="text"
+                      value={selectedNode.clkPin ?? ''}
+                      placeholder={TM1637_CLK_PLACEHOLDER}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, clkPin: event.target.value.trimStart() }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    DIO Pin
+                    <input
+                      type="text"
+                      value={selectedNode.dioPin ?? ''}
+                      placeholder={TM1637_DIO_PLACEHOLDER}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, dioPin: event.target.value.trimStart() }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Brightness (0–7)
+                    <input
+                      type="number"
+                      min="0"
+                      max="7"
+                      step="1"
+                      value={selectedNode.brightness ?? TM1637_DEFAULT_BRIGHTNESS}
+                      onChange={(event) => {
+                        const parsed = Number.parseInt(event.target.value, 10);
+                        const value = Number.isFinite(parsed)
+                          ? Math.max(0, Math.min(7, parsed))
+                          : TM1637_DEFAULT_BRIGHTNESS;
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id ? { ...node, brightness: value } : node,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </>
               )}
               {!isWheelNode(selectedNode.id) && (
                 <button

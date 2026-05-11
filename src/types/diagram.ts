@@ -21,7 +21,8 @@ export type NodeTypeId =
   | 'constant'
   | 'servo-cr'
   | 'servo-positional'
-  | 'digital-out';
+  | 'digital-out'
+  | 'display-tm1637';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -47,8 +48,11 @@ export interface DiagramNode {
   constantValue?: number;
   /** Oscillator frequency in Hz. */
   frequencyHz?: number;
-  /** Oscillator amplitude (0–1). Output ranges from -amplitude to +amplitude. */
+  /** Oscillator amplitude (0–100). Output ranges from -amplitude to +amplitude. */
   amplitude?: number;
+  clkPin?: string;
+  dioPin?: string;
+  brightness?: number;
 }
 
 export type TransferMode = 'linear' | 'nonlinear';
@@ -102,6 +106,7 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'servo-cr', kind: 'motor', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
   { id: 'servo-positional', kind: 'motor', displayName: 'Positional Servo', metaLabel: 'positional servo' },
   { id: 'digital-out', kind: 'motor', displayName: 'Digital Output', metaLabel: 'digital out' },
+  { id: 'display-tm1637', kind: 'motor', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit' },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(
