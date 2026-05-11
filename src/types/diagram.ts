@@ -24,6 +24,8 @@ export type NodeTypeId =
   | 'digital-out'
   | 'display-tm1637';
 
+export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'dioPin';
+
 export interface NodeTypeDefinition {
   id: NodeTypeId;
   kind: NodeKind;
@@ -31,6 +33,12 @@ export interface NodeTypeDefinition {
   metaLabel: string;
   protocol?: SensorProtocol;
   mode?: ComputeMode;
+  /** User-supplied pin/port fields the type requires. Drives pin-decl emission and validation. */
+  pinFields?: PinFieldId[];
+  /** Whether the node consumes incoming edges. Sources (sensors, constants, oscillator, noise) are false. */
+  hasInputs?: boolean;
+  /** Whether the node breaks feedback cycles (delay nodes do; nothing else currently). */
+  breaksCycles?: boolean;
 }
 
 export interface DiagramNode {
@@ -93,20 +101,20 @@ export function isValidOutputPort(
 }
 
 export const NODE_TYPES: NodeTypeDefinition[] = [
-  { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog' },
-  { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital' },
+  { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog', pinFields: ['arduinoPort'] },
+  { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital', pinFields: ['arduinoPort'] },
   { id: 'sensor-color', kind: 'sensor', displayName: 'Color Sensor', metaLabel: 'TCS34725', protocol: 'i2c' },
-  { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold' },
-  { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay' },
-  { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation' },
-  { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply' },
+  { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold', hasInputs: true },
+  { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay', hasInputs: true, breaksCycles: true },
+  { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation', hasInputs: true },
+  { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply', hasInputs: true },
   { id: 'compute-oscillator', kind: 'compute', displayName: 'Oscillator', metaLabel: 'oscillator', mode: 'oscillator' },
   { id: 'compute-noise', kind: 'compute', displayName: 'Noise', metaLabel: 'noise', mode: 'noise' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
-  { id: 'servo-cr', kind: 'output', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
-  { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo' },
-  { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out' },
-  { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit' },
+  { id: 'servo-cr', kind: 'output', displayName: 'Continuous Servo', metaLabel: 'continuous servo', pinFields: ['servoPin'], hasInputs: true },
+  { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo', pinFields: ['servoPin'], hasInputs: true },
+  { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out', pinFields: ['servoPin'], hasInputs: true },
+  { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit', pinFields: ['clkPin', 'dioPin'], hasInputs: true },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

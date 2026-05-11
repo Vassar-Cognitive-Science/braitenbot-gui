@@ -77,6 +77,51 @@ describe('validateGraph', () => {
     expect(errors.some((e) => e.message.includes('Right Wheel') && e.message.includes('not connected'))).toBe(true);
   });
 
+  it('rejects pin strings that are not plain pin references', () => {
+    const nodes = [makeSensor({ arduinoPort: '13); evil()' }), makeMotor()];
+    const connections = [makeConnection()];
+    const errors = validateGraph(nodes, connections);
+    expect(errors.some((e) => e.message.includes('invalid Arduino port'))).toBe(true);
+  });
+
+  it('accepts numeric and analog pin strings', () => {
+    for (const port of ['0', '13', 'A0', 'A6']) {
+      const nodes = [makeSensor({ arduinoPort: port }), makeMotor()];
+      const errors = validateGraph(nodes, [makeConnection()]);
+      expect(
+        errors.some((e) => e.message.includes('invalid Arduino port')),
+        `port "${port}" rejected unexpectedly`,
+      ).toBe(false);
+    }
+  });
+
+  it('warns on edges with unknown fromPort', () => {
+    const colorSensor: DiagramNode = {
+      id: 'color-1',
+      type: 'sensor-color',
+      label: 'Front Color',
+      x: 0,
+      y: 0,
+    };
+    const connections: DiagramConnection[] = [
+      {
+        id: 'conn-1',
+        from: 'color-1',
+        fromPort: 'ultraviolet' as unknown as 'clear',
+        to: 'motor-left',
+        weight: 1,
+        transferMode: 'linear',
+        transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+      },
+    ];
+    const errors = validateGraph([colorSensor, makeMotor()], connections);
+    expect(
+      errors.some(
+        (e) => e.severity === 'warning' && e.message.includes("unknown output port 'ultraviolet'"),
+      ),
+    ).toBe(true);
+  });
+
   it('reports orphan compute node as warning', () => {
     const compute: DiagramNode = {
       id: 'thresh-1',

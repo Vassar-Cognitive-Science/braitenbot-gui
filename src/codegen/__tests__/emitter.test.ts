@@ -392,6 +392,93 @@ describe('generateSketch', () => {
     expect(code).not.toContain('#include <Servo.h>');
   });
 
+  it('generates oscillator node with sin(2*PI*f*t) form', () => {
+    const osc: DiagramNode = {
+      id: 'osc-1',
+      type: 'compute-oscillator',
+      label: 'Wobble',
+      x: 0,
+      y: 0,
+      frequencyHz: 2.5,
+      amplitude: 80,
+    };
+    const nodes: DiagramNode[] = [osc, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'osc-1', to: 'motor-left', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    expect(code).toContain('float sig_Wobble = 80.0000 * sin(2.0 * PI * 2.5000 * (millis() / 1000.0));');
+  });
+
+  it('generates oscillator with default amplitude=100 and freq=1Hz', () => {
+    const osc: DiagramNode = {
+      id: 'osc-1',
+      type: 'compute-oscillator',
+      label: 'Default',
+      x: 0,
+      y: 0,
+    };
+    const nodes: DiagramNode[] = [osc, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'osc-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('100.0000 * sin(2.0 * PI * 1.0000');
+  });
+
+  it('generates noise node with scaled random(-10000, 10001) form', () => {
+    const noise: DiagramNode = {
+      id: 'noise-1',
+      type: 'compute-noise',
+      label: 'Jitter',
+      x: 0,
+      y: 0,
+      amplitude: 30,
+    };
+    const nodes: DiagramNode[] = [noise, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'noise-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('float sig_Jitter = 30.0000 * ((float)random(-10000, 10001) / 10000.0);');
+  });
+
+  it('generates noise with default amplitude=50', () => {
+    const noise: DiagramNode = {
+      id: 'noise-1',
+      type: 'compute-noise',
+      label: 'Default',
+      x: 0,
+      y: 0,
+    };
+    const code = generateSketch(
+      buildGraph([noise, makeMotor()], [
+        conn({ id: 'c1', from: 'noise-1', to: 'motor-left', weight: 1 }),
+      ]),
+    );
+
+    expect(code).toContain('50.0000 * ((float)random');
+  });
+
+  it('clamps loopPeriodMs to safe bounds', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+    ];
+    // Zero would yield Infinity delay-buffer sizes; the clamp must keep it ≥ 1.
+    const graph = buildGraph(nodes, connections, 0);
+    expect(graph.loopPeriodMs).toBeGreaterThanOrEqual(1);
+    expect(generateSketch(graph)).toContain('delay(1)');
+
+    // Absurdly large values must be clamped, not propagated.
+    const bigGraph = buildGraph(nodes, connections, 100000);
+    expect(bigGraph.loopPeriodMs).toBeLessThanOrEqual(1000);
+  });
+
   it('generates non-linear transfer function', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
     const connections: DiagramConnection[] = [
