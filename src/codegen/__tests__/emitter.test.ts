@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../graph';
 import { generateSketch } from '../emitter';
-import type { DiagramNode, DiagramConnection } from '../../types/diagram';
+import type { CompoundTypeDefinition, DiagramNode, DiagramConnection } from '../../types/diagram';
 
 function makeSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
@@ -477,6 +477,53 @@ describe('generateSketch', () => {
     // Absurdly large values must be clamped, not propagated.
     const bigGraph = buildGraph(nodes, connections, 100000);
     expect(bigGraph.loopPeriodMs).toBeLessThanOrEqual(1000);
+  });
+
+  it('expands compound instances before codegen', () => {
+    const passthrough: CompoundTypeDefinition = {
+      id: 'gain',
+      displayName: 'Gain',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input', label: 'in', x: 0, y: 0 },
+          { id: 'sum', type: 'compute-summation', label: 'InnerSum', x: 0, y: 0 },
+          { id: 'out', type: 'compound-output', label: 'out', x: 0, y: 0 },
+        ],
+        connections: [
+          conn({ id: 'b1', from: 'in', to: 'sum', weight: 1 }),
+          conn({ id: 'b2', from: 'sum', to: 'out', weight: 0.5 }),
+        ],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      {
+        id: 'inst-1', type: 'compound', compoundTypeId: 'gain',
+        label: 'Gain', x: 0, y: 0,
+      },
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'e1', from: 'sensor-1', to: 'inst-1', toPort: 'in', weight: 1 }),
+      conn({ id: 'e2', from: 'inst-1', to: 'motor-left', fromPort: 'out', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections, 20, [passthrough]);
+    const code = generateSketch(graph);
+
+    // The compound instance's inner summation node appears with the
+    // instance-prefixed label.
+    expect(code).toContain('sig_InnerSum');
+    // The port anchors became summation pass-throughs with their own
+    // sig_<label> variables.
+    expect(code).toContain('sig_in');
+    expect(code).toContain('sig_out');
+    // The outer sensor's value reaches the inner sum through the
+    // pass-through input anchor.
+    expect(code).toContain('input_in += sig_Sensor_1');
+    // The 0.5 weight on the inner b2 edge is preserved.
+    expect(code).toContain('* 0.5000');
+    // No compound or port-anchor symbols leak into the sketch.
+    expect(code).not.toContain('compound');
   });
 
   it('generates non-linear transfer function', () => {

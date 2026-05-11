@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import type { DiagramNode, DiagramConnection, TransferPoint } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, TransferPoint } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
+import { flattenCompounds } from '../codegen/flatten';
 import { toposort } from '../codegen/toposort';
 
 export interface TraceResult {
@@ -63,8 +64,15 @@ export function simulateGraph(
   connections: DiagramConnection[],
   sensorValues: Record<string, number>,
   state?: SimulationState,
+  compoundTypes: CompoundTypeDefinition[] = [],
 ): TraceResult {
   if (nodes.length === 0) return EMPTY;
+
+  // Inline compound instances so simulation sees the same flat graph
+  // that codegen emits.
+  const flat = flattenCompounds(nodes, connections, compoundTypes);
+  nodes = flat.nodes;
+  connections = flat.connections;
 
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const delayIds = new Set(
@@ -212,10 +220,11 @@ export function useTraceSimulation(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
   sensorValues: Record<string, number>,
+  compoundTypes: CompoundTypeDefinition[] = [],
 ): TraceResult {
   return useMemo(
-    () => simulateGraph(nodes, connections, sensorValues),
-    [nodes, connections, sensorValues],
+    () => simulateGraph(nodes, connections, sensorValues, undefined, compoundTypes),
+    [nodes, connections, sensorValues, compoundTypes],
   );
 }
 

@@ -357,6 +357,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     sensorValues,
     traceMode,
     loopPeriodMs,
+    compoundTypes,
   );
   const traceResult = scope.current;
   const [pulsingId, setPulsingId] = useState<string | null>(null);
@@ -460,10 +461,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setShowCodeDialog(true);
       return;
     }
-    const graph = buildGraph(nodes, connections, loopPeriodMs);
+    const graph = buildGraph(nodes, connections, loopPeriodMs, compoundTypes);
     setGeneratedCode(generateSketch(graph));
     setShowCodeDialog(true);
-  }, [nodes, connections, loopPeriodMs]);
+  }, [nodes, connections, loopPeriodMs, compoundTypes]);
 
   const handleCopyCode = useCallback(() => {
     if (generatedCode) {
@@ -502,11 +503,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setShowCodeDialog(true);
       return;
     }
-    const graph = buildGraph(nodes, connections, loopPeriodMs);
+    const graph = buildGraph(nodes, connections, loopPeriodMs, compoundTypes);
     const code = generateSketch(graph);
     setGeneratedCode(code);
     await compileAndUpload(code, selectedBoard.fqbn, selectedBoard.port);
-  }, [nodes, connections, loopPeriodMs, selectedBoard, compileAndUpload]);
+  }, [nodes, connections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload]);
 
   useEffect(() => {
     const dialog = codeDialogRef.current;

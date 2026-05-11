@@ -1,4 +1,5 @@
 import type {
+  CompoundTypeDefinition,
   DiagramNode,
   DiagramConnection,
   NodeKind,
@@ -7,6 +8,7 @@ import type {
   SensorProtocol,
 } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
+import { flattenCompounds } from './flatten';
 import { toposort } from './toposort';
 
 /**
@@ -72,11 +74,20 @@ export function buildGraph(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
   loopPeriodMs = 20,
+  compoundTypes: CompoundTypeDefinition[] = [],
 ): WiringGraph {
   const safeLoopPeriodMs = Math.max(
     MIN_LOOP_PERIOD_MS,
     Math.min(MAX_LOOP_PERIOD_MS, Math.round(loopPeriodMs)),
   );
+
+  // Inline compound instances before anything else — every downstream pass
+  // (toposort, validator, emitter) sees a graph with no compound or
+  // port-anchor types.
+  const flat = flattenCompounds(nodes, connections, compoundTypes);
+  nodes = flat.nodes;
+  connections = flat.connections;
+
   const graphNodes: GraphNode[] = nodes.map((node) => {
     const typeDef = TYPE_BY_ID[node.type];
     return {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DiagramConnection, DiagramNode } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
 import {
   type SimulationState,
   type TraceResult,
@@ -73,6 +73,7 @@ export function useScopeSimulation(
   sensorValues: Record<string, number>,
   enabled: boolean,
   loopPeriodMs: number,
+  compoundTypes: CompoundTypeDefinition[] = [],
   options: UseScopeSimulationOptions = {},
 ): UseScopeSimulationResult {
   const windowSec = options.windowSec ?? 5;
@@ -88,9 +89,11 @@ export function useScopeSimulation(
   const nodesRef = useRef(nodes);
   const connectionsRef = useRef(connections);
   const sensorValuesRef = useRef(sensorValues);
+  const compoundTypesRef = useRef(compoundTypes);
   nodesRef.current = nodes;
   connectionsRef.current = connections;
   sensorValuesRef.current = sensorValues;
+  compoundTypesRef.current = compoundTypes;
 
   const [current, setCurrent] = useState<TraceResult>(EMPTY);
   const [paused, setPaused] = useState(false);
@@ -150,6 +153,7 @@ export function useScopeSimulation(
         connectionsRef.current,
         effective,
         state,
+        compoundTypesRef.current,
       );
 
       // Append to scope buffers and prune the trailing edge.

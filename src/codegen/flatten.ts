@@ -111,15 +111,21 @@ function flattenInner(
   // the edge (weight, transfer, etc.) is preserved untouched. An edge
   // that touches a compound but doesn't name a port is dropped — the
   // validator surfaces these to the user; we silently skip here.
+  // Edges that don't touch a compound pass through unchanged so that
+  // multi-output sources (e.g. color sensors) keep their fromPort.
   for (const conn of connections) {
     const fromInst = instanceInfo.get(conn.from);
     const toInst = instanceInfo.get(conn.to);
+    if (!fromInst && !toInst) {
+      outConnections.push(conn);
+      continue;
+    }
     if (fromInst && !conn.fromPort) continue;
     if (toInst && !conn.toPort) continue;
     const from = fromInst ? fromInst.prefix + conn.fromPort! : conn.from;
     const to = toInst ? toInst.prefix + conn.toPort! : conn.to;
-    // Strip fromPort/toPort once resolved — the flat graph has no
-    // compound instances left, so port refs would be stale.
+    // Strip fromPort/toPort only on edges we just rewired — they pointed
+    // at compound boundary ports that no longer exist after flattening.
     const { fromPort: _fp, toPort: _tp, ...rest } = conn;
     void _fp;
     void _tp;
