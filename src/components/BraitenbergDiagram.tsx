@@ -46,11 +46,49 @@ interface RobotOverlayLayout {
 const START_CONNECTIONS: DiagramConnection[] = [];
 
 function canOutput(nodeType: NodeTypeDefinition): boolean {
-  return nodeType.kind !== 'motor';
+  return nodeType.kind !== 'output';
 }
 
 function canInput(nodeType: NodeTypeDefinition): boolean {
   return nodeType.kind !== 'sensor' && nodeType.kind !== 'constant';
+}
+
+/**
+ * The small tag rendered under each palette item. Sources/computes show
+ * their kind, but the Outputs group has heterogeneous hardware — servos,
+ * GPIO pins, displays — so we surface what each *is* rather than the
+ * common kind label.
+ */
+function paletteItemTag(nodeType: NodeTypeDefinition): string {
+  if (nodeType.id === 'servo-cr' || nodeType.id === 'servo-positional') return 'servo';
+  if (nodeType.id === 'digital-out') return 'output';
+  if (nodeType.id === 'display-tm1637') return 'display';
+  if (nodeType.kind === 'constant') return 'compute';
+  return nodeType.kind;
+}
+
+type PaletteSection = 'sensor' | 'compute' | 'output';
+const PALETTE_COLLAPSED_KEY = 'braitenbot-gui:palette-collapsed:v1';
+
+function loadCollapsedPaletteSections(): Record<PaletteSection, boolean> {
+  const fallback: Record<PaletteSection, boolean> = {
+    sensor: false,
+    compute: false,
+    output: false,
+  };
+  try {
+    const raw = localStorage.getItem(PALETTE_COLLAPSED_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    return {
+      sensor: !!parsed.sensor,
+      compute: !!parsed.compute,
+      output: !!parsed.output,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function makePath(x1: number, y1: number, x2: number, y2: number): string {
@@ -206,6 +244,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const fallbackIdCounterRef = useRef(0);
   const [traceMode, setTraceMode] = useState(false);
   const [sensorValues, setSensorValues] = useState<Record<string, number>>({});
+  const [collapsedPaletteSections, setCollapsedPaletteSections] = useState<
+    Record<PaletteSection, boolean>
+  >(loadCollapsedPaletteSections);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        PALETTE_COLLAPSED_KEY,
+        JSON.stringify(collapsedPaletteSections),
+      );
+    } catch {
+      /* private mode / quota — ignore */
+    }
+  }, [collapsedPaletteSections]);
   const undoStackRef = useRef<{ nodes: DiagramNode[]; connections: DiagramConnection[] }[]>([]);
   const [resetArmed, setResetArmed] = useState(false);
   const resetArmTimerRef = useRef<number | null>(null);
@@ -215,23 +266,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const panStateRef = useRef<{ startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
-  const nodeScreenPos = useCallback(
+  const nodeWorldPos = useCallback(
     (node: DiagramNode): { x: number; y: number } => {
       if (node.id === 'motor-left') {
         return {
-          x: pan.x + robotLayout.leftWheelCx * zoom - NODE_W / 2,
-          y: pan.y + robotLayout.leftWheelCy * zoom - NODE_H / 2,
+          x: robotLayout.leftWheelCx * zoom - NODE_W / 2,
+          y: robotLayout.leftWheelCy * zoom - NODE_H / 2,
         };
       }
       if (node.id === 'motor-right') {
         return {
-          x: pan.x + robotLayout.rightWheelCx * zoom - NODE_W / 2,
-          y: pan.y + robotLayout.rightWheelCy * zoom - NODE_H / 2,
+          x: robotLayout.rightWheelCx * zoom - NODE_W / 2,
+          y: robotLayout.rightWheelCy * zoom - NODE_H / 2,
         };
       }
-      return { x: pan.x + node.x * zoom, y: pan.y + node.y * zoom };
+      return { x: node.x * zoom, y: node.y * zoom };
     },
-    [pan.x, pan.y, zoom, robotLayout],
+    [zoom, robotLayout],
   );
 
   const zoomAtPoint = useCallback((nextZoom: number, screenX: number, screenY: number) => {
@@ -461,12 +512,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         const from = nodeMap[connection.from];
         const to = nodeMap[connection.to];
         if (!from || !to) return null;
-        const fromScreen = nodeScreenPos(from);
-        const toScreen = nodeScreenPos(to);
-        const x1 = fromScreen.x + portOffsetX(from.type, connection.fromPort);
-        const y1 = fromScreen.y + NODE_H;
-        const x2 = toScreen.x + NODE_W / 2;
-        const y2 = toScreen.y;
+        const fromWorld = nodeWorldPos(from);
+        const toWorld = nodeWorldPos(to);
+        const x1 = fromWorld.x + portOffsetX(from.type, connection.fromPort);
+        const y1 = fromWorld.y + NODE_H;
+        const x2 = toWorld.x + NODE_W / 2;
+        const y2 = toWorld.y;
         return {
           id: connection.id,
           d: makePath(x1, y1, x2, y2),
@@ -476,7 +527,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         };
       })
       .filter((item): item is { id: string; d: string; weight: number; midX: number; midY: number } => item !== null);
-  }, [connections, nodeMap, nodeScreenPos]);
+  }, [connections, nodeMap, nodeWorldPos]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -600,7 +651,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     setLinkDraftSource({ id: nodeId, port });
-    setLinkDraftPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+    setLinkDraftPoint({ x: event.clientX - rect.left - pan.x, y: event.clientY - rect.top - pan.y });
   };
 
   const handleCanvasMove = (event: MouseEvent) => {
@@ -631,7 +682,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
 
     if (linkDraftSource) {
-      setLinkDraftPoint({ x: pointerX, y: pointerY });
+      setLinkDraftPoint({ x: pointerX - pan.x, y: pointerY - pan.y });
     }
   };
 
@@ -683,7 +734,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 : undefined,
           constantValue: nodeType.kind === 'constant' ? 0 : undefined,
           servoPin:
-            nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' ? '' : undefined,
+            nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
           clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
           dioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
           brightness:
@@ -743,7 +794,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   return (
     <section className="diagram-layout">
       <aside className="node-palette">
-        {(['sensor', 'compute', 'motor'] as const).map((kind) => {
+        {(['sensor', 'compute', 'output'] as const).map((kind) => {
           const nodesOfKind = kind === 'compute'
             ? NODE_TYPES.filter((n) => n.kind === 'compute' || n.kind === 'constant')
             : NODE_TYPES.filter((n) => n.kind === kind);
@@ -751,25 +802,49 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           const kindLabels: Record<string, string> = {
             sensor: 'Sensors',
             compute: 'Compute',
-            motor: 'Actuators',
+            output: 'Outputs',
           };
+          const collapsed = collapsedPaletteSections[kind];
           return (
             <div key={kind} className="palette-group">
               <h2 className={`palette-category palette-category-${kind}`}>
-                <span className={`palette-category-dot palette-dot-${kind}`} />
-                {kindLabels[kind]}
-              </h2>
-              {nodesOfKind.map((nodeType) => (
-                <div
-                  key={nodeType.id}
-                  className={`palette-item palette-item-${nodeType.kind}`}
-                  draggable
-                  onDragStart={(event) => event.dataTransfer.setData('application/x-node-type', nodeType.id)}
+                <button
+                  type="button"
+                  className="palette-category-toggle"
+                  aria-expanded={!collapsed}
+                  aria-controls={`palette-group-${kind}`}
+                  onClick={() =>
+                    setCollapsedPaletteSections((prev) => ({ ...prev, [kind]: !prev[kind] }))
+                  }
                 >
-                  <span>{nodeType.displayName}</span>
-                  <small>{nodeType.kind === 'constant' ? 'compute' : nodeType.kind}</small>
+                  <span
+                    className={`palette-chevron ${collapsed ? 'collapsed' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ▾
+                  </span>
+                  <span
+                    className={`palette-category-dot palette-dot-${kind}`}
+                    aria-hidden="true"
+                  />
+                  {kindLabels[kind]}
+                </button>
+              </h2>
+              {!collapsed && (
+                <div id={`palette-group-${kind}`} className="palette-group-items">
+                  {nodesOfKind.map((nodeType) => (
+                    <div
+                      key={nodeType.id}
+                      className={`palette-item palette-item-${nodeType.kind}`}
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData('application/x-node-type', nodeType.id)}
+                    >
+                      <span>{nodeType.displayName}</span>
+                      <small>{paletteItemTag(nodeType)}</small>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           );
         })}
@@ -1017,10 +1092,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           </div>
         )}
         <div
+          className="diagram-world"
+          style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0)` }}
+        >
+        <div
           className="robot-overlay robot-body"
           style={{
-            left: `${pan.x + robotLayout.bodyCx * zoom}px`,
-            top: `${pan.y + robotLayout.bodyCy * zoom}px`,
+            left: `${robotLayout.bodyCx * zoom}px`,
+            top: `${robotLayout.bodyCy * zoom}px`,
             width: `${robotLayout.bodyRadius * 2 * zoom}px`,
             height: `${robotLayout.bodyRadius * 2 * zoom}px`,
           }}
@@ -1029,8 +1108,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div
           className="robot-overlay robot-wheel"
           style={{
-            left: `${pan.x + robotLayout.leftWheelCx * zoom}px`,
-            top: `${pan.y + robotLayout.leftWheelCy * zoom}px`,
+            left: `${robotLayout.leftWheelCx * zoom}px`,
+            top: `${robotLayout.leftWheelCy * zoom}px`,
             width: `${robotLayout.wheelWidth * zoom}px`,
             height: `${robotLayout.wheelHeight * zoom}px`,
           }}
@@ -1039,8 +1118,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div
           className="robot-overlay robot-wheel"
           style={{
-            left: `${pan.x + robotLayout.rightWheelCx * zoom}px`,
-            top: `${pan.y + robotLayout.rightWheelCy * zoom}px`,
+            left: `${robotLayout.rightWheelCx * zoom}px`,
+            top: `${robotLayout.rightWheelCy * zoom}px`,
             width: `${robotLayout.wheelWidth * zoom}px`,
             height: `${robotLayout.wheelHeight * zoom}px`,
           }}
@@ -1065,13 +1144,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           })}
           {linkDraftSource && nodeMap[linkDraftSource.id] && (() => {
             const src = nodeMap[linkDraftSource.id];
-            const srcScreen = nodeScreenPos(src);
+            const srcWorld = nodeWorldPos(src);
             return (
               <path
                 className="draft-link"
                 d={makePath(
-                  srcScreen.x + portOffsetX(src.type, linkDraftSource.port),
-                  srcScreen.y + NODE_H,
+                  srcWorld.x + portOffsetX(src.type, linkDraftSource.port),
+                  srcWorld.y + NODE_H,
                   linkDraftPoint.x,
                   linkDraftPoint.y,
                 )}
@@ -1120,7 +1199,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
           } else if (nodeType.id === 'display-tm1637' && node.clkPin?.trim() && node.dioPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • CLK ${node.clkPin.trim()} / DIO ${node.dioPin.trim()}`;
-          } else if (nodeType.kind === 'motor' && nodeType.id !== 'display-tm1637' && node.servoPin?.trim()) {
+          } else if (nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
             nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
@@ -1128,7 +1207,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = nodeType.metaLabel;
           }
 
-          const screenPos = nodeScreenPos(node);
+          const worldPos = nodeWorldPos(node);
           return (
             <div
               key={node.id}
@@ -1139,7 +1218,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 isDisconnected ? 'trace-disconnected' : '',
                 hasSlider ? 'trace-expanded' : '',
               ].filter(Boolean).join(' ')}
-              style={{ left: `${screenPos.x}px`, top: `${screenPos.y}px` }}
+              style={{ left: `${worldPos.x}px`, top: `${worldPos.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
               onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
             >
@@ -1234,6 +1313,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </div>
           );
         })}
+        </div>
 
         <aside className="diagram-config-panel" onMouseDown={(event) => event.stopPropagation()}>
           <div className="config-header">
@@ -1477,7 +1557,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </label>
               )}
 
-              {TYPE_BY_ID[selectedNode.type].kind === 'motor' &&
+              {TYPE_BY_ID[selectedNode.type].kind === 'output' &&
                 selectedNode.type !== 'display-tm1637' && (
                 <label>
                   {selectedNode.type === 'digital-out' ? 'Pin' : 'Servo Pin'}

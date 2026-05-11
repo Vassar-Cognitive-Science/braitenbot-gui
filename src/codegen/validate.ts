@@ -38,7 +38,7 @@ export function validateGraph(
   const sourceCompute = nodes.filter(
     (n) => n.type === 'compute-oscillator' || n.type === 'compute-noise',
   );
-  const motors = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'motor');
+  const outputs = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'output');
 
   // 1. No source nodes (sensors, constants, oscillators, or noise generators)
   if (sensors.length === 0 && constants.length === 0 && sourceCompute.length === 0) {
@@ -63,26 +63,26 @@ export function validateGraph(
     }
   }
 
-  // 3. Actuator missing pin
-  for (const motor of motors) {
-    if (motor.type === 'display-tm1637') {
-      if (!motor.clkPin?.trim() || !motor.dioPin?.trim()) {
+  // 3. Output missing pin
+  for (const output of outputs) {
+    if (output.type === 'display-tm1637') {
+      if (!output.clkPin?.trim() || !output.dioPin?.trim()) {
         errors.push({
-          nodeId: motor.id,
-          message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' needs both CLK and DIO pins configured`,
+          nodeId: output.id,
+          message: `${TYPE_BY_ID[output.type].displayName} '${output.label}' needs both CLK and DIO pins configured`,
           severity: 'error',
         });
       }
-    } else if (!motor.servoPin?.trim()) {
+    } else if (!output.servoPin?.trim()) {
       errors.push({
-        nodeId: motor.id,
-        message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' has no pin configured`,
+        nodeId: output.id,
+        message: `${TYPE_BY_ID[output.type].displayName} '${output.label}' has no pin configured`,
         severity: 'error',
       });
     }
   }
 
-  // 4. Motor unreachable from any sensor (BFS forward from sensors)
+  // 4. Output unreachable from any sensor (BFS forward from sensors)
   const reachable = new Set<string>();
   const adjacency = new Map<string, string[]>();
   for (const node of nodes) {
@@ -99,11 +99,11 @@ export function validateGraph(
       queue.push(neighbor);
     }
   }
-  for (const motor of motors) {
-    if (!reachable.has(motor.id)) {
+  for (const output of outputs) {
+    if (!reachable.has(output.id)) {
       errors.push({
-        nodeId: motor.id,
-        message: `${TYPE_BY_ID[motor.type].displayName} '${motor.label}' is not connected to any sensor`,
+        nodeId: output.id,
+        message: `${TYPE_BY_ID[output.type].displayName} '${output.label}' is not connected to any sensor`,
         severity: 'error',
       });
     }

@@ -1,4 +1,4 @@
-export type NodeKind = 'sensor' | 'compute' | 'motor' | 'constant';
+export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
@@ -103,10 +103,10 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'compute-oscillator', kind: 'compute', displayName: 'Oscillator', metaLabel: 'oscillator', mode: 'oscillator' },
   { id: 'compute-noise', kind: 'compute', displayName: 'Noise', metaLabel: 'noise', mode: 'noise' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
-  { id: 'servo-cr', kind: 'motor', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
-  { id: 'servo-positional', kind: 'motor', displayName: 'Positional Servo', metaLabel: 'positional servo' },
-  { id: 'digital-out', kind: 'motor', displayName: 'Digital Output', metaLabel: 'digital out' },
-  { id: 'display-tm1637', kind: 'motor', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit' },
+  { id: 'servo-cr', kind: 'output', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
+  { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo' },
+  { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out' },
+  { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit' },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

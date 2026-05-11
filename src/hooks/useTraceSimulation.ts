@@ -153,7 +153,7 @@ export function simulateGraph(
     if (node.type === 'digital-out') {
       const thresh = node.threshold ?? 50;
       nodeValues[nodeId] = sum > thresh ? 100 : 0;
-    } else if (typeDef.kind === 'motor') {
+    } else if (typeDef.kind === 'output') {
       nodeValues[nodeId] = clamp(sum, -100, 100);
     } else if (typeDef.mode === 'threshold') {
       const thresh = node.threshold ?? 50;

@@ -178,7 +178,7 @@ function emitPinDeclarations(graph: WiringGraph): string {
       if (node.dioPin?.trim()) {
         lines.push(`const int TM1637_${readableId(node)}_DIO = ${node.dioPin.trim()};`);
       }
-    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
+    } else if (node.kind === 'output' && node.servoPin?.trim()) {
       const prefix = node.typeId === 'digital-out' ? 'OUTPUT' : 'SERVO';
       lines.push(
         `const int ${prefix}_${readableId(node)}_PIN = ${node.servoPin.trim()};`,
@@ -213,7 +213,7 @@ function emitSetup(graph: WiringGraph): string {
       const b = Math.max(0, Math.min(7, Math.round(node.brightness ?? 3)));
       lines.push(`  display_${readableId(node)}.setBrightness(${b});`);
       lines.push(`  display_${readableId(node)}.clear();`);
-    } else if (node.kind === 'motor' && node.servoPin?.trim()) {
+    } else if (node.kind === 'output' && node.servoPin?.trim()) {
       if (node.typeId === 'digital-out') {
         lines.push(`  pinMode(OUTPUT_${readableId(node)}_PIN, OUTPUT);`);
       } else {

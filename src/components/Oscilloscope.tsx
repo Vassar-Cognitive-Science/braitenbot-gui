@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DiagramNode } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
 import type { ScopeRow } from '../hooks/useScopeSimulation';
@@ -19,6 +19,8 @@ interface OscilloscopeProps {
 const ROW_HEIGHT = 30;
 const ROW_PADDING = 3;
 const CANVAS_WIDTH = 600;
+const MIN_HEIGHT = 120;
+const DEFAULT_HEIGHT = 280;
 
 export function Oscilloscope({
   nodes,
@@ -35,9 +37,46 @@ export function Oscilloscope({
   // compute node with at least one wired connection. We keep this stable
   // by sorting; the canvas reads the live buffer for whatever's listed.
   const rows = useMemo(() => visibleRows(nodes), [nodes]);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = height;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent) => {
+      const dy = startY - ev.clientY;
+      const maxH = window.innerHeight - 80;
+      const next = Math.max(MIN_HEIGHT, Math.min(maxH, startH + dy));
+      setHeight(next);
+    };
+    const onUp = () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   return (
-    <section className={`oscilloscope ${open ? 'open' : 'collapsed'}`}>
+    <section
+      className={`oscilloscope ${open ? 'open' : 'collapsed'}`}
+      style={open ? { height } : undefined}
+    >
+      {open && (
+        <div
+          className="oscilloscope-resize-handle"
+          onPointerDown={startResize}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize scope"
+        />
+      )}
       <header className="oscilloscope-header">
         <button
           type="button"
@@ -106,14 +145,14 @@ function visibleRows(nodes: DiagramNode[]): RowDescriptor[] {
 function accentFor(kind: string): string {
   switch (kind) {
     case 'sensor':
-      return 'var(--sensor-color)';
+      return '--trace-sensor';
     case 'compute':
     case 'constant':
-      return 'var(--compute-color)';
-    case 'motor':
-      return 'var(--motor-color)';
+      return '--trace-compute';
+    case 'output':
+      return '--trace-output';
     default:
-      return 'var(--text)';
+      return '--text';
   }
 }
 
@@ -177,8 +216,10 @@ function renderRow(
   row: ScopeRow | undefined,
   now: number,
   windowMs: number,
-  stroke: string,
+  strokeVar: string,
 ) {
+  const stroke =
+    getComputedStyle(canvas).getPropertyValue(strokeVar).trim() || '#e8e4d8';
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || CANVAS_WIDTH;
   const cssH = canvas.clientHeight || ROW_HEIGHT;
@@ -216,7 +257,9 @@ function renderRow(
   };
 
   ctx.strokeStyle = stroke;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   ctx.beginPath();
   for (let i = 0; i < row.times.length; i++) {
     const x = tToX(row.times[i]);

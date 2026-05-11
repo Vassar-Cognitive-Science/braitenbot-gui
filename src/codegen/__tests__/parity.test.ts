@@ -143,7 +143,7 @@ function simulateEmittedC(
       continue;
     }
 
-    if (node.kind === 'motor') {
+    if (node.kind === 'output') {
       // Wheel motors aggregate inputs into a sum and pass them to the emitted
       // drive() helper, which clamps to [-100, 100] before writing
       // microseconds. Servos aggregate into a sum then map to angle via
@@ -437,9 +437,9 @@ describe('node parity (trace vs emitted C)', () => {
     });
   });
 
-  describe('motor', () => {
-    // Motor parity is the clamping behavior: anything beyond ±100 should be
-    // saturated to ±100 by both sides.
+  describe('output', () => {
+    // Output parity is the clamping behavior: anything beyond ±100 should
+    // be saturated to ±100 by both sides.
     it('agrees in the linear range', () => {
       const nodes = [sensor('s1'), leftMotor()];
       const connections = [
