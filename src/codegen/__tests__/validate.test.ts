@@ -122,6 +122,81 @@ describe('validateGraph', () => {
     ).toBe(true);
   });
 
+  it('reports compound instance referencing unknown type', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      {
+        id: 'inst-1', type: 'compound', compoundTypeId: 'does-not-exist',
+        label: 'Mystery', x: 0, y: 0,
+      },
+      makeMotor(),
+    ];
+    const errors = validateGraph(nodes, []);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes("unknown type 'does-not-exist'"),
+      ),
+    ).toBe(true);
+  });
+
+  it('reports compound-touching edge with no port specified', () => {
+    const typeDef = {
+      id: 'pass',
+      displayName: 'Pass',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input' as const, label: 'in', x: 0, y: 0 },
+          { id: 'out', type: 'compound-output' as const, label: 'out', x: 0, y: 0 },
+        ],
+        connections: [],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      {
+        id: 'inst-1', type: 'compound', compoundTypeId: 'pass',
+        label: 'Pass', x: 0, y: 0,
+      },
+    ];
+    const connections: DiagramConnection[] = [
+      // Missing toPort — would silently drop at flatten time without this rule.
+      {
+        id: 'c1', from: 'sensor-1', to: 'inst-1', weight: 1,
+        transferMode: 'linear',
+        transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+      },
+    ];
+    const errors = validateGraph(nodes, connections, [typeDef]);
+    expect(
+      errors.some((e) => e.severity === 'error' && e.message.includes('must specify which input port')),
+    ).toBe(true);
+  });
+
+  it('detects compound-type recursion', () => {
+    const a = {
+      id: 'A', displayName: 'A',
+      body: {
+        nodes: [
+          { id: 'inner', type: 'compound' as const, compoundTypeId: 'B', label: 'B', x: 0, y: 0 },
+        ],
+        connections: [],
+      },
+    };
+    const b = {
+      id: 'B', displayName: 'B',
+      body: {
+        nodes: [
+          { id: 'inner', type: 'compound' as const, compoundTypeId: 'A', label: 'A', x: 0, y: 0 },
+        ],
+        connections: [],
+      },
+    };
+    const errors = validateGraph([], [], [a, b]);
+    expect(
+      errors.some((e) => e.severity === 'error' && e.message.includes('Compound type recursion')),
+    ).toBe(true);
+  });
+
   it('reports orphan compute node as warning', () => {
     const compute: DiagramNode = {
       id: 'thresh-1',

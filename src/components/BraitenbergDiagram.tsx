@@ -453,7 +453,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   );
 
   const handleGenerate = useCallback(() => {
-    const errors = validateGraph(nodes, connections);
+    const errors = validateGraph(nodes, connections, compoundTypes);
     setCodeGenErrors(errors);
     const hasErrors = errors.some((e) => e.severity === 'error');
     if (hasErrors) {
@@ -484,7 +484,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   }, [generatedCode]);
 
   const handleUploadToArduino = useCallback(async () => {
-    const errors = validateGraph(nodes, connections);
+    const errors = validateGraph(nodes, connections, compoundTypes);
     const hasErrors = errors.some((e) => e.severity === 'error');
     if (hasErrors) {
       setCodeGenErrors(errors);

@@ -1,5 +1,14 @@
-import type { DiagramNode, DiagramConnection, PinFieldId } from '../types/diagram';
-import { TYPE_BY_ID, isValidOutputPort } from '../types/diagram';
+import type {
+  CompoundTypeDefinition,
+  DiagramNode,
+  DiagramConnection,
+  PinFieldId,
+} from '../types/diagram';
+import {
+  TYPE_BY_ID,
+  isValidOutputPort,
+  getInputPorts,
+} from '../types/diagram';
 import { toposort, CycleError } from './toposort';
 
 const PIN_FIELD_LABEL: Record<PinFieldId, string> = {
@@ -24,9 +33,53 @@ export interface ValidationError {
   severity: 'error' | 'warning';
 }
 
+/**
+ * Walk the compound-type dependency graph and report any cycle (type A's
+ * body references type B which references A, transitively). Cycles would
+ * cause the flattener to throw at codegen time; we surface them as a
+ * user-visible error here.
+ */
+function detectCompoundTypeRecursion(
+  compoundTypes: CompoundTypeDefinition[],
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const byId = new Map(compoundTypes.map((c) => [c.id, c]));
+  // DFS with a stack to find back-edges in the type dependency graph.
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const seenCycles = new Set<string>();
+  const visit = (typeId: string, path: string[]) => {
+    if (visited.has(typeId)) return;
+    if (visiting.has(typeId)) {
+      const cyclePath = [...path.slice(path.indexOf(typeId)), typeId].join(' → ');
+      if (!seenCycles.has(cyclePath)) {
+        seenCycles.add(cyclePath);
+        errors.push({
+          message: `Compound type recursion: ${cyclePath}`,
+          severity: 'error',
+        });
+      }
+      return;
+    }
+    const def = byId.get(typeId);
+    if (!def) return;
+    visiting.add(typeId);
+    for (const node of def.body.nodes) {
+      if (node.type === 'compound' && node.compoundTypeId) {
+        visit(node.compoundTypeId, [...path, typeId]);
+      }
+    }
+    visiting.delete(typeId);
+    visited.add(typeId);
+  };
+  for (const def of compoundTypes) visit(def.id, []);
+  return errors;
+}
+
 export function validateGraph(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
+  compoundTypes: CompoundTypeDefinition[] = [],
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -87,22 +140,72 @@ export function validateGraph(
     }
   }
 
-  // 2b. Stale fromPort references — multi-output node types declare a set of
-  // ports; an edge that names a port the source no longer exposes would
-  // silently fall back at codegen time, surprising the user.
+  // 2b. Stale fromPort / toPort references — multi-port node types declare a
+  // set of ports; an edge that names a port the source/target no longer
+  // exposes would silently misroute at flatten or codegen time.
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   for (const conn of connections) {
-    if (!conn.fromPort) continue;
     const src = nodeById.get(conn.from);
-    if (!src) continue;
-    if (!isValidOutputPort(src.type, conn.fromPort)) {
+    const dst = nodeById.get(conn.to);
+    if (conn.fromPort && src && !isValidOutputPort(src.type, conn.fromPort, src, compoundTypes)) {
       errors.push({
         nodeId: src.id,
         message: `Connection from '${src.label}' references unknown output port '${conn.fromPort}'`,
         severity: 'warning',
       });
     }
+    if (conn.toPort && dst) {
+      const inputs = getInputPorts(dst.type, dst, compoundTypes);
+      if (!inputs || !inputs.includes(conn.toPort)) {
+        errors.push({
+          nodeId: dst.id,
+          message: `Connection to '${dst.label}' references unknown input port '${conn.toPort}'`,
+          severity: 'warning',
+        });
+      }
+    }
   }
+
+  // 2c. Compound instances — references to unknown types, and edges that
+  // touch a compound but don't name a port.
+  const compoundTypeIds = new Set(compoundTypes.map((c) => c.id));
+  for (const node of nodes) {
+    if (node.type !== 'compound') continue;
+    if (!node.compoundTypeId) {
+      errors.push({
+        nodeId: node.id,
+        message: `Compound '${node.label}' has no type assigned`,
+        severity: 'error',
+      });
+    } else if (!compoundTypeIds.has(node.compoundTypeId)) {
+      errors.push({
+        nodeId: node.id,
+        message: `Compound '${node.label}' references unknown type '${node.compoundTypeId}'`,
+        severity: 'error',
+      });
+    }
+  }
+  for (const conn of connections) {
+    const src = nodeById.get(conn.from);
+    const dst = nodeById.get(conn.to);
+    if (src?.type === 'compound' && !conn.fromPort) {
+      errors.push({
+        nodeId: src.id,
+        message: `Edge from compound '${src.label}' must specify which output port`,
+        severity: 'error',
+      });
+    }
+    if (dst?.type === 'compound' && !conn.toPort) {
+      errors.push({
+        nodeId: dst.id,
+        message: `Edge into compound '${dst.label}' must specify which input port`,
+        severity: 'error',
+      });
+    }
+  }
+
+  // 2d. Compound-type recursion (would cause the flattener to throw).
+  errors.push(...detectCompoundTypeRecursion(compoundTypes));
 
   // 4. Output unreachable from any sensor (BFS forward from sensors)
   const reachable = new Set<string>();
