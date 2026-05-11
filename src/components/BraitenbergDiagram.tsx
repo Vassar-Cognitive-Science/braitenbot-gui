@@ -5,7 +5,9 @@ import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
-import { useTraceSimulation, formatTraceValue } from '../hooks/useTraceSimulation';
+import { formatTraceValue } from '../hooks/useTraceSimulation';
+import { useScopeSimulation } from '../hooks/useScopeSimulation';
+import { Oscilloscope } from './Oscilloscope';
 import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
 import type { useArduino } from '../hooks/useArduino';
 
@@ -16,6 +18,7 @@ const ANALOG_PORT_PLACEHOLDER = 'A0';
 const DIGITAL_PORT_PLACEHOLDER = '2';
 const MOTOR_PIN_PLACEHOLDER = '9';
 const SERVO_PIN_PLACEHOLDER = '10';
+const DIGITAL_OUT_PIN_PLACEHOLDER = '13';
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.25;
@@ -254,10 +257,25 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   }, [zoom, zoomAtPoint]);
 
 
-  const traceResult = useTraceSimulation(
+  const [scopeOpen, setScopeOpen] = useState(true);
+  const scope = useScopeSimulation(
     traceMode ? nodes : [],
     traceMode ? connections : [],
     sensorValues,
+    traceMode,
+    loopPeriodMs,
+  );
+  const traceResult = scope.current;
+  const [pulsingId, setPulsingId] = useState<string | null>(null);
+  const pulseSensor = useCallback(
+    (id: string) => {
+      scope.pulse(id, 100, 200);
+      setPulsingId(id);
+      window.setTimeout(() => {
+        setPulsingId((prev) => (prev === id ? null : prev));
+      }, 200);
+    },
+    [scope],
   );
 
   const pushUndo = useCallback(() => {
@@ -650,16 +668,17 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           x,
           y,
           arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
-          threshold: nodeType.mode === 'threshold' ? 0.5 : undefined,
+          threshold:
+            nodeType.mode === 'threshold' || nodeTypeId === 'digital-out' ? 50 : undefined,
           delayMs: nodeType.mode === 'delay' ? 100 : undefined,
           frequencyHz: nodeType.mode === 'oscillator' ? 1.0 : undefined,
           amplitude:
             nodeType.mode === 'oscillator'
-              ? 1.0
+              ? 100
               : nodeType.mode === 'noise'
-                ? 0.5
+                ? 50
                 : undefined,
-          constantValue: nodeType.kind === 'constant' ? 512 : undefined,
+          constantValue: nodeType.kind === 'constant' ? 0 : undefined,
           servoPin: nodeType.kind === 'motor' ? '' : undefined,
         },
       ];
@@ -701,7 +720,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         to: toId,
         weight: DEFAULT_CONNECTION_WEIGHT,
         transferMode: 'linear',
-        transferPoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+        transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
       },
     ]);
     setLinkDraftSource(null);
@@ -1118,16 +1137,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
               {hasSlider && (
                 <div className="trace-slider-row">
-                  <span className="trace-slider-label">0</span>
+                  <span className="trace-slider-label">{nodeType.kind === 'constant' ? '-100' : '0'}</span>
                   <input
                     type="range"
                     className="trace-slider"
-                    min="0"
-                    max="1"
-                    step="0.01"
+                    min={nodeType.kind === 'constant' ? '-100' : '0'}
+                    max="100"
+                    step="1"
                     value={nodeType.kind === 'sensor'
-                      ? (sensorValues[node.id] ?? 0.5)
-                      : (node.constantValue ?? 0.5)}
+                      ? (sensorValues[node.id] ?? 50)
+                      : (node.constantValue ?? 0)}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
@@ -1143,7 +1162,21 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       }
                     }}
                   />
-                  <span className="trace-slider-label">1</span>
+                  <span className="trace-slider-label">100</span>
+                  {nodeType.kind === 'sensor' && (
+                    <button
+                      type="button"
+                      className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
+                      title="Pulse this sensor to 100 for 200ms"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pulseSensor(node.id);
+                      }}
+                    >
+                      ▶
+                    </button>
+                  )}
                 </div>
               )}
               {canOutput(nodeType) && (() => {
@@ -1234,9 +1267,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 {selectedNode.type === 'servo-cr' && isWheelNode(selectedNode.id) &&
                   'Drives a wheel of the robot as a continuous-rotation servo on a single PWM pin. Speed and direction are determined by incoming connection weights; the right wheel is inverted automatically to account for mirrored mounting.'}
                 {selectedNode.type === 'servo-cr' && !isWheelNode(selectedNode.id) &&
-                  'Continuous-rotation servo. The input signal (-1 to 1) is mapped to signed speed via writeMicroseconds (1500 ± 500 µs).'}
+                  'Continuous-rotation servo. The input signal (-100 to 100) is mapped to signed speed via writeMicroseconds (1500 ± 500 µs).'}
                 {selectedNode.type === 'servo-positional' &&
-                  'Positional servo. The input signal (-1 to 1) is mapped to an angle (0° to 180°).'}
+                  'Positional servo. The input signal (-100 to 100) is mapped to an angle (0° to 180°).'}
+                {selectedNode.type === 'digital-out' &&
+                  'Digital output pin (e.g. an LED). Drives the pin HIGH when the aggregated input exceeds the threshold, otherwise LOW. Useful for showing internal state externally.'}
               </p>
               <label>
                 Node Label
@@ -1304,13 +1339,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   Threshold Value
                   <input
                     type="number"
-                    min="-1"
-                    max="1"
-                    step="0.01"
-                    value={selectedNode.threshold ?? 0.5}
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={selectedNode.threshold ?? 50}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(-1, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 50;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, threshold: value } : node,
@@ -1369,12 +1404,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     <input
                       type="number"
                       min="0"
-                      max="1"
-                      step="0.01"
-                      value={selectedNode.amplitude ?? 1.0}
+                      max="100"
+                      step="1"
+                      value={selectedNode.amplitude ?? 100}
                       onChange={(event) => {
                         const parsed = Number.parseFloat(event.target.value);
-                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 1.0;
+                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 100;
                         setNodes((prev) =>
                           prev.map((node) =>
                             node.id === selectedNode.id ? { ...node, amplitude: value } : node,
@@ -1392,12 +1427,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   <input
                     type="number"
                     min="0"
-                    max="1"
-                    step="0.01"
-                    value={selectedNode.amplitude ?? 0.5}
+                    max="100"
+                    step="1"
+                    value={selectedNode.amplitude ?? 50}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 50;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, amplitude: value } : node,
@@ -1413,13 +1448,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   Constant Value
                   <input
                     type="number"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={selectedNode.constantValue ?? 0.5}
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={selectedNode.constantValue ?? 0}
                     onChange={(event) => {
                       const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : 0.5;
+                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 0;
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, constantValue: value } : node,
@@ -1432,12 +1467,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
               {TYPE_BY_ID[selectedNode.type].kind === 'motor' && (
                 <label>
-                  Servo Pin
+                  {selectedNode.type === 'digital-out' ? 'Pin' : 'Servo Pin'}
                   <input
                     type="text"
                     value={selectedNode.servoPin ?? ''}
                     placeholder={
-                      selectedNode.type === 'servo-cr' ? MOTOR_PIN_PLACEHOLDER : SERVO_PIN_PLACEHOLDER
+                      selectedNode.type === 'digital-out'
+                        ? DIGITAL_OUT_PIN_PLACEHOLDER
+                        : selectedNode.type === 'servo-cr'
+                          ? MOTOR_PIN_PLACEHOLDER
+                          : SERVO_PIN_PLACEHOLDER
                     }
                     onChange={(event) =>
                       setNodes((prev) =>
@@ -1448,6 +1487,28 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                         ),
                       )
                     }
+                  />
+                </label>
+              )}
+
+              {selectedNode.type === 'digital-out' && (
+                <label>
+                  Threshold
+                  <input
+                    type="number"
+                    min="-100"
+                    max="100"
+                    step="1"
+                    value={selectedNode.threshold ?? 50}
+                    onChange={(event) => {
+                      const parsed = Number.parseFloat(event.target.value);
+                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 50;
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id ? { ...node, threshold: value } : node,
+                        ),
+                      );
+                    }}
                   />
                 </label>
               )}
@@ -1478,7 +1539,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                               transferMode: mode,
                               transferPoints: connection.transferPoints?.length
                                 ? connection.transferPoints
-                                : [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+                                : [{ x: -100, y: -100 }, { x: 100, y: 100 }],
                             }
                           : connection,
                       ),
@@ -1536,7 +1597,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
               {selectedConnection.transferMode === 'nonlinear' && (
                 <TransferCurveEditor
-                  points={selectedConnection.transferPoints ?? [{ x: 0, y: 0 }, { x: 1, y: 1 }]}
+                  points={selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }]}
                   onChange={(pts: TransferPoint[]) =>
                     setConnections((prev) =>
                       prev.map((connection) =>
@@ -1559,6 +1620,20 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           )}
         </aside>
       </div>
+
+      {traceMode && (
+        <Oscilloscope
+          nodes={nodes}
+          buffersRef={scope.buffersRef}
+          timeRef={scope.timeRef}
+          windowSec={5}
+          paused={scope.paused}
+          onTogglePause={() => scope.setPaused(!scope.paused)}
+          onClear={scope.clear}
+          open={scopeOpen}
+          onToggleOpen={() => setScopeOpen((v) => !v)}
+        />
+      )}
 
       <dialog
         ref={codeDialogRef}

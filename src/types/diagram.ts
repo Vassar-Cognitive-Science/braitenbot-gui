@@ -20,7 +20,8 @@ export type NodeTypeId =
   | 'compute-noise'
   | 'constant'
   | 'servo-cr'
-  | 'servo-positional';
+  | 'servo-positional'
+  | 'digital-out';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -53,8 +54,8 @@ export interface DiagramNode {
 export type TransferMode = 'linear' | 'nonlinear';
 
 export interface TransferPoint {
-  x: number; // input  0–1 (normalized sensor signal)
-  y: number; // output -1 to 1
+  x: number; // input  -100 to 100 (signed signal)
+  y: number; // output -100 to 100
 }
 
 export interface DiagramConnection {
@@ -100,6 +101,7 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
   { id: 'servo-cr', kind: 'motor', displayName: 'Continuous Servo', metaLabel: 'continuous servo' },
   { id: 'servo-positional', kind: 'motor', displayName: 'Positional Servo', metaLabel: 'positional servo' },
+  { id: 'digital-out', kind: 'motor', displayName: 'Digital Output', metaLabel: 'digital out' },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

@@ -15,19 +15,54 @@ export interface TraceResult {
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
 
 /**
- * Pure simulation function — propagates sensor/constant input values through
- * the wiring graph and returns the computed value at every node plus the
- * signal carried on every edge.
+ * Per-tick simulation state. When passed to simulateGraph, oscillators use
+ * `t` as their phase clock and delay nodes draw from / write to the per-node
+ * ring buffers. Without state, simulateGraph is a stateless snapshot:
+ * delays output 0 and oscillators fall back to Date.now() for phase.
+ */
+export interface SimulationState {
+  /** Virtual time in ms since the simulation started. */
+  t: number;
+  /** Per-delay-node ring buffers. */
+  delays: Map<string, { values: number[]; idx: number }>;
+}
+
+/**
+ * Build an initial SimulationState for the given diagram. Each delay node
+ * gets a zero-filled ring buffer sized from its `delayMs` and the loop
+ * period, matching the codegen.
+ */
+export function createSimulationState(
+  nodes: DiagramNode[],
+  loopPeriodMs: number,
+): SimulationState {
+  const delays = new Map<string, { values: number[]; idx: number }>();
+  for (const node of nodes) {
+    if (node.type === 'compute-delay') {
+      const delayMs = node.delayMs ?? 100;
+      const size = Math.max(1, Math.round(delayMs / Math.max(1, loopPeriodMs)));
+      delays.set(node.id, { values: new Array(size).fill(0), idx: 0 });
+    }
+  }
+  return { t: 0, delays };
+}
+
+/**
+ * Propagate sensor/constant input values through the wiring graph and
+ * return the computed value at every node plus the signal carried on every
+ * edge.
  *
- * This is a *static* trace — delay nodes simply pass their input through
- * since there is no time dimension.
- *
- * Exposed separately from the hook so tests can call it without React.
+ * When `state` is omitted this is a stateless snapshot — delay nodes
+ * output 0 (no history) and oscillator/noise phase samples Date.now().
+ * When `state` is supplied, it represents one tick of a running
+ * simulation: oscillators use `state.t`, delays read from / write to the
+ * ring buffers in `state.delays`. `state.delays` is mutated in place.
  */
 export function simulateGraph(
   nodes: DiagramNode[],
   connections: DiagramConnection[],
   sensorValues: Record<string, number>,
+  state?: SimulationState,
 ): TraceResult {
   if (nodes.length === 0) return EMPTY;
 
@@ -53,39 +88,46 @@ export function simulateGraph(
   const edgeSignals: Record<string, number> = {};
   const disconnected = new Set<string>();
 
+  // Phase clock for oscillator/noise — use simulation time when running
+  // tick-stepped, otherwise wall clock so the static trace still animates
+  // between unrelated re-renders.
+  const phaseMs = state ? state.t : Date.now();
+
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
     if (!node) continue;
     const typeDef = TYPE_BY_ID[node.type];
 
     if (typeDef.kind === 'sensor') {
-      nodeValues[nodeId] = sensorValues[nodeId] ?? 0.5;
+      nodeValues[nodeId] = sensorValues[nodeId] ?? 50;
       continue;
     }
 
     if (typeDef.kind === 'constant') {
-      nodeValues[nodeId] = node.constantValue ?? 0.5;
+      nodeValues[nodeId] = node.constantValue ?? 0;
       continue;
     }
 
     if (node.type === 'compute-oscillator') {
       const freq = node.frequencyHz ?? 1.0;
-      const amp = node.amplitude ?? 1.0;
-      nodeValues[nodeId] = amp * Math.sin(2 * Math.PI * freq * (Date.now() / 1000));
+      const amp = node.amplitude ?? 100;
+      nodeValues[nodeId] = amp * Math.sin(2 * Math.PI * freq * (phaseMs / 1000));
       continue;
     }
 
     if (node.type === 'compute-noise') {
-      const amp = node.amplitude ?? 0.5;
+      const amp = node.amplitude ?? 50;
       nodeValues[nodeId] = amp * (Math.random() * 2 - 1);
       continue;
     }
 
     if (node.type === 'compute-delay') {
-      // Static trace has no notion of past iterations, so delay outputs
-      // 0. Incoming edge signals are computed below in the second pass,
-      // once all upstream values are known.
-      nodeValues[nodeId] = 0;
+      const buf = state?.delays.get(nodeId);
+      // With state: read the value buffered N iterations ago. Without
+      // state: 0 (no history available). Incoming edge signals are
+      // computed in the second pass below, after all upstream values
+      // are known.
+      nodeValues[nodeId] = buf ? buf.values[buf.idx] : 0;
       continue;
     }
 
@@ -108,11 +150,14 @@ export function simulateGraph(
 
     const sum = inputs.reduce((a, b) => a + b, 0);
 
-    if (typeDef.kind === 'motor') {
-      nodeValues[nodeId] = clamp(sum, -1, 1);
+    if (node.type === 'digital-out') {
+      const thresh = node.threshold ?? 50;
+      nodeValues[nodeId] = sum > thresh ? 100 : 0;
+    } else if (typeDef.kind === 'motor') {
+      nodeValues[nodeId] = clamp(sum, -100, 100);
     } else if (typeDef.mode === 'threshold') {
-      const thresh = node.threshold ?? 0.5;
-      nodeValues[nodeId] = sum > thresh ? 1 : 0;
+      const thresh = node.threshold ?? 50;
+      nodeValues[nodeId] = sum > thresh ? 100 : 0;
     } else if (typeDef.mode === 'multiply') {
       nodeValues[nodeId] = inputs.reduce((a, b) => a * b, 1);
     } else if (typeDef.mode === 'delay') {
@@ -124,11 +169,32 @@ export function simulateGraph(
     }
   }
 
-  // Also compute outgoing edge signals for source nodes (sensors/constants)
+  // Second pass: compute outgoing edge signals for source nodes
+  // (sensors/constants/oscillator/noise) and for edges feeding delay
+  // nodes, both of which were skipped above.
   for (const edge of connections) {
     if (!(edge.id in edgeSignals)) {
       const raw = nodeValues[edge.from] ?? 0;
       edgeSignals[edge.id] = applyTransfer(raw, edge);
+    }
+  }
+
+  // Deferred delay-buffer write: aggregate current-iteration inputs and
+  // push them into the ring buffer for next tick's read. This is the
+  // simulator equivalent of emitDelayCapture in the codegen.
+  if (state) {
+    for (const node of nodes) {
+      if (node.type !== 'compute-delay') continue;
+      const buf = state.delays.get(node.id);
+      if (!buf) continue;
+      let sum = 0;
+      for (const edge of connections) {
+        if (edge.to !== node.id) continue;
+        const raw = nodeValues[edge.from] ?? 0;
+        sum += applyTransfer(raw, edge);
+      }
+      buf.values[buf.idx] = sum;
+      buf.idx = (buf.idx + 1) % buf.values.length;
     }
   }
 
@@ -155,14 +221,13 @@ function applyTransfer(input: number, edge: DiagramConnection): number {
 
 function interpolateTransfer(input: number, points: TransferPoint[]): number {
   const sorted = [...points].sort((a, b) => a.x - b.x);
-  const clamped = clamp(input, 0, 1);
 
-  if (clamped <= sorted[0].x) return sorted[0].y;
-  if (clamped >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
+  if (input <= sorted[0].x) return sorted[0].y;
+  if (input >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
 
   for (let i = 0; i < sorted.length - 1; i++) {
-    if (clamped >= sorted[i].x && clamped <= sorted[i + 1].x) {
-      const t = (clamped - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
+    if (input >= sorted[i].x && input <= sorted[i + 1].x) {
+      const t = (input - sorted[i].x) / (sorted[i + 1].x - sorted[i].x);
       return sorted[i].y + t * (sorted[i + 1].y - sorted[i].y);
     }
   }
@@ -176,9 +241,6 @@ function clamp(v: number, min: number, max: number): number {
 
 /** Format a trace value smartly — fewer decimals for clean values. */
 export function formatTraceValue(v: number): string {
-  if (v === 0) return '0';
-  if (v === 1) return '1';
-  if (v === -1) return '-1';
   if (Number.isInteger(v)) return v.toString();
   const s = v.toFixed(2);
   // strip trailing zero: "0.50" → "0.5"
