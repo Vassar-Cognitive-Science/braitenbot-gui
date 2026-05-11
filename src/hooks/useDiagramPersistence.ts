@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { isTauri } from '../lib/tauri';
 import { parse, serialize, type DiagramState } from '../lib/diagramFile';
-import type { DiagramConnection, DiagramNode } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
 
 const STORAGE_KEY = 'braitenbot-gui:diagram:v1';
 const AUTOSAVE_DEBOUNCE_MS = 300;
@@ -12,6 +12,7 @@ export interface DiagramPersistenceSetters {
   setNodes: (nodes: DiagramNode[]) => void;
   setConnections: (connections: DiagramConnection[]) => void;
   setLoopPeriodMs: (ms: number) => void;
+  setCompoundTypes: (compoundTypes: CompoundTypeDefinition[]) => void;
 }
 
 export interface DiagramPersistenceOptions {
@@ -25,6 +26,7 @@ function applyFile(file: DiagramState, setters: DiagramPersistenceSetters) {
   setters.setNodes(file.nodes);
   setters.setConnections(file.connections);
   setters.setLoopPeriodMs(file.loopPeriodMs);
+  setters.setCompoundTypes(file.compoundTypes);
 }
 
 export function useDiagramPersistence({

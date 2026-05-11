@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
-import type { DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
@@ -273,6 +273,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
   const [loopPeriodMs, setLoopPeriodMs] = useState(20);
+  const [compoundTypes, setCompoundTypes] = useState<CompoundTypeDefinition[]>([]);
   const [codeGenErrors, setCodeGenErrors] = useState<ValidationError[]>([]);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
@@ -394,12 +395,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setNodes(makeWheelNodes(robotLayout));
     setConnections(START_CONNECTIONS);
     setLoopPeriodMs(20);
+    setCompoundTypes([]);
     setConfigTarget(null);
   }, [robotLayout]);
 
   useDiagramPersistence({
-    state: { nodes, connections, loopPeriodMs },
-    setters: { setNodes, setConnections, setLoopPeriodMs },
+    state: { nodes, connections, loopPeriodMs, compoundTypes },
+    setters: { setNodes, setConnections, setLoopPeriodMs, setCompoundTypes },
     isPristine: isDiagramPristine,
     resetToDefault,
   });

@@ -218,7 +218,13 @@ interface NodeEmitter {
   deferredLoop?(node: GraphNode, ctx: EmitCtx): string | undefined;
 }
 
+// Compound and port-anchor types never reach codegen — the flattener
+// expands them away before buildGraph runs. They appear here as empty
+// entries so this map stays exhaustive over NodeTypeId.
 const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
+  compound: {},
+  'compound-input': {},
+  'compound-output': {},
   // --- Sensors ---
   'sensor-analog': {
     loop: (node, { indent }) =>

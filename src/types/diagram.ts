@@ -1,13 +1,14 @@
-export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant';
+export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound' | 'port';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
 /**
- * Identifier for a specific output port on a multi-output node.
- * Currently only color sensors have named ports, so this is equivalent to
- * `ColorChannel`. Adding new multi-output node types should widen this union.
+ * Identifier for a port on a node. Color sensor channels are a fixed enum;
+ * compound-node ports are user-defined strings. Runtime port validity is
+ * checked via getOutputPorts / getInputPorts, not the static type.
  */
-export type OutputPortId = ColorChannel;
+export type OutputPortId = string;
+export type InputPortId = string;
 export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
@@ -22,7 +23,10 @@ export type NodeTypeId =
   | 'servo-cr'
   | 'servo-positional'
   | 'digital-out'
-  | 'display-tm1637';
+  | 'display-tm1637'
+  | 'compound'
+  | 'compound-input'
+  | 'compound-output';
 
 export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'dioPin';
 
@@ -39,6 +43,10 @@ export interface NodeTypeDefinition {
   hasInputs?: boolean;
   /** Whether the node breaks feedback cycles (delay nodes do; nothing else currently). */
   breaksCycles?: boolean;
+  /** Type may only appear inside a compound body — never on the top-level diagram. */
+  bodyOnly?: boolean;
+  /** Type may only appear at the top level — never inside a compound body (e.g. wheel motors). */
+  topLevelOnly?: boolean;
 }
 
 export interface DiagramNode {
@@ -61,6 +69,8 @@ export interface DiagramNode {
   clkPin?: string;
   dioPin?: string;
   brightness?: number;
+  /** For type === 'compound': id of the CompoundTypeDefinition this node instantiates. */
+  compoundTypeId?: string;
 }
 
 export type TransferMode = 'linear' | 'nonlinear';
@@ -73,21 +83,67 @@ export interface TransferPoint {
 export interface DiagramConnection {
   id: string;
   from: string;
-  /** Optional output-port id on the source node; used by multi-output nodes (e.g. color sensors). */
+  /** Output port on the source node (color sensor channel or compound output). */
   fromPort?: OutputPortId;
   to: string;
+  /** Input port on the target node (compound input). */
+  toPort?: InputPortId;
   weight: number;
   transferMode: TransferMode;
   transferPoints: TransferPoint[];
 }
 
 /**
- * Output ports for node types that expose more than one signal.
- * Undefined means the node has a single default output — edges leaving such
- * nodes don't carry a `fromPort` field.
+ * A user-defined compound node — a named subdiagram with declared input and
+ * output anchor nodes. Instances of this type appear as `type: 'compound'`
+ * DiagramNodes whose `compoundTypeId` matches `id` below.
  */
-export function getOutputPorts(typeId: NodeTypeId): OutputPortId[] | undefined {
+export interface CompoundTypeDefinition {
+  id: string;
+  displayName: string;
+  body: {
+    nodes: DiagramNode[];
+    connections: DiagramConnection[];
+  };
+}
+
+/**
+ * Output ports on a node. Compound instances expose one port per
+ * 'compound-output' anchor in their body; color sensors expose their fixed
+ * channels. Single-output nodes return undefined.
+ */
+export function getOutputPorts(
+  typeId: NodeTypeId,
+  node?: { compoundTypeId?: string },
+  compoundTypes?: CompoundTypeDefinition[],
+): OutputPortId[] | undefined {
   if (typeId === 'sensor-color') return ['clear', 'red', 'green', 'blue'];
+  if (typeId === 'compound' && node?.compoundTypeId && compoundTypes) {
+    const def = compoundTypes.find((c) => c.id === node.compoundTypeId);
+    if (!def) return undefined;
+    return def.body.nodes
+      .filter((n) => n.type === 'compound-output')
+      .map((n) => n.id);
+  }
+  return undefined;
+}
+
+/**
+ * Input ports on a node. Currently only compound instances have named input
+ * ports — every other consumer type has a single implicit input.
+ */
+export function getInputPorts(
+  typeId: NodeTypeId,
+  node?: { compoundTypeId?: string },
+  compoundTypes?: CompoundTypeDefinition[],
+): InputPortId[] | undefined {
+  if (typeId === 'compound' && node?.compoundTypeId && compoundTypes) {
+    const def = compoundTypes.find((c) => c.id === node.compoundTypeId);
+    if (!def) return undefined;
+    return def.body.nodes
+      .filter((n) => n.type === 'compound-input')
+      .map((n) => n.id);
+  }
   return undefined;
 }
 
@@ -95,8 +151,10 @@ export function getOutputPorts(typeId: NodeTypeId): OutputPortId[] | undefined {
 export function isValidOutputPort(
   typeId: NodeTypeId,
   value: unknown,
+  node?: { compoundTypeId?: string },
+  compoundTypes?: CompoundTypeDefinition[],
 ): value is OutputPortId {
-  const ports = getOutputPorts(typeId);
+  const ports = getOutputPorts(typeId, node, compoundTypes);
   return ports !== undefined && typeof value === 'string' && (ports as string[]).includes(value);
 }
 
@@ -115,6 +173,11 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo', pinFields: ['servoPin'], hasInputs: true },
   { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out', pinFields: ['servoPin'], hasInputs: true },
   { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit', pinFields: ['clkPin', 'dioPin'], hasInputs: true },
+  // Compound instance — a placeholder node whose ports and behavior are defined by a CompoundTypeDefinition.
+  { id: 'compound', kind: 'compound', displayName: 'Compound', metaLabel: 'compound', hasInputs: true },
+  // Port anchors — only legal inside a compound body.
+  { id: 'compound-input', kind: 'port', displayName: 'Compound Input', metaLabel: 'input port', bodyOnly: true },
+  { id: 'compound-output', kind: 'port', displayName: 'Compound Output', metaLabel: 'output port', bodyOnly: true, hasInputs: true },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

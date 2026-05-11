@@ -1,15 +1,17 @@
-import type { DiagramConnection, DiagramNode } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
 
 export interface DiagramFile {
   loopPeriodMs: number;
   nodes: DiagramNode[];
   connections: DiagramConnection[];
+  compoundTypes: CompoundTypeDefinition[];
 }
 
 export interface DiagramState {
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   loopPeriodMs: number;
+  compoundTypes: CompoundTypeDefinition[];
 }
 
 export function serialize(state: DiagramState): string {
@@ -17,6 +19,7 @@ export function serialize(state: DiagramState): string {
     loopPeriodMs: state.loopPeriodMs,
     nodes: state.nodes,
     connections: state.connections,
+    compoundTypes: state.compoundTypes,
   };
   return JSON.stringify(file, null, 2);
 }
@@ -62,6 +65,25 @@ function validateConnection(raw: unknown, index: number): DiagramConnection {
   return raw as unknown as DiagramConnection;
 }
 
+function validateCompoundType(raw: unknown, index: number): CompoundTypeDefinition {
+  if (!isObject(raw)) {
+    throw new Error(`compoundTypes[${index}] is not an object`);
+  }
+  const { id, displayName, body } = raw;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`compoundTypes[${index}].id must be a non-empty string`);
+  }
+  if (typeof displayName !== 'string') {
+    throw new Error(`compoundTypes[${index}].displayName must be a string`);
+  }
+  if (!isObject(body) || !Array.isArray(body.nodes) || !Array.isArray(body.connections)) {
+    throw new Error(`compoundTypes[${index}].body must be { nodes: [], connections: [] }`);
+  }
+  body.nodes.forEach((n, i) => validateNode(n, i));
+  body.connections.forEach((c, i) => validateConnection(c, i));
+  return raw as unknown as CompoundTypeDefinition;
+}
+
 export function parse(text: string): DiagramFile {
   let raw: unknown;
   try {
@@ -83,9 +105,15 @@ export function parse(text: string): DiagramFile {
   }
   const nodes = raw.nodes.map(validateNode);
   const connections = raw.connections.map(validateConnection);
+  // compoundTypes is optional — files saved before this field was introduced
+  // load as an empty list. Alpha policy: no migration, just a default.
+  const compoundTypes = Array.isArray(raw.compoundTypes)
+    ? raw.compoundTypes.map(validateCompoundType)
+    : [];
   return {
     loopPeriodMs: raw.loopPeriodMs,
     nodes,
     connections,
+    compoundTypes,
   };
 }
