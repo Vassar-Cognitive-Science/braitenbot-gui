@@ -38,6 +38,22 @@ export function Oscilloscope({
   // by sorting; the canvas reads the live buffer for whatever's listed.
   const rows = useMemo(() => visibleRows(nodes), [nodes]);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+
+  const toggleHidden = (id: string) => {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const hasHidden = rows.some((r) => hidden.has(r.id));
+  const toggleAll = () => {
+    if (hasHidden) setHidden(new Set());
+    else setHidden(new Set(rows.map((r) => r.id)));
+  };
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -90,6 +106,16 @@ export function Oscilloscope({
         </button>
         {open && (
           <div className="oscilloscope-controls">
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="scope-btn"
+                title={hasHidden ? 'Show all signals' : 'Hide all signals'}
+              >
+                {hasHidden ? 'Show all' : 'Hide all'}
+              </button>
+            )}
             <button type="button" onClick={onTogglePause} className="scope-btn">
               {paused ? 'Resume' : 'Pause'}
             </button>
@@ -113,6 +139,8 @@ export function Oscilloscope({
                 buffersRef={buffersRef}
                 timeRef={timeRef}
                 windowMs={windowSec * 1000}
+                hidden={hidden.has(row.id)}
+                onToggleHidden={() => toggleHidden(row.id)}
               />
             ))
           )}
@@ -163,6 +191,8 @@ interface ScopeRowViewProps {
   buffersRef: React.MutableRefObject<Map<string, ScopeRow>>;
   timeRef: React.MutableRefObject<number>;
   windowMs: number;
+  hidden: boolean;
+  onToggleHidden: () => void;
 }
 
 function ScopeRowView({
@@ -172,7 +202,51 @@ function ScopeRowView({
   buffersRef,
   timeRef,
   windowMs,
+  hidden,
+  onToggleHidden,
 }: ScopeRowViewProps) {
+  if (hidden) {
+    return (
+      <div className="scope-row scope-row-hidden">
+        <EyeButton hidden onClick={onToggleHidden} label={label} />
+        <span className="scope-row-label muted" title={label}>
+          {label}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <ScopeRowVisible
+      label={label}
+      accent={accent}
+      nodeId={nodeId}
+      buffersRef={buffersRef}
+      timeRef={timeRef}
+      windowMs={windowMs}
+      onToggleHidden={onToggleHidden}
+    />
+  );
+}
+
+interface ScopeRowVisibleProps {
+  label: string;
+  accent: string;
+  nodeId: string;
+  buffersRef: React.MutableRefObject<Map<string, ScopeRow>>;
+  timeRef: React.MutableRefObject<number>;
+  windowMs: number;
+  onToggleHidden: () => void;
+}
+
+function ScopeRowVisible({
+  label,
+  accent,
+  nodeId,
+  buffersRef,
+  timeRef,
+  windowMs,
+  onToggleHidden,
+}: ScopeRowVisibleProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const valueRef = useRef<HTMLSpanElement>(null);
 
@@ -197,6 +271,7 @@ function ScopeRowView({
 
   return (
     <div className="scope-row">
+      <EyeButton hidden={false} onClick={onToggleHidden} label={label} />
       <span className="scope-row-label" title={label}>
         {label}
       </span>
@@ -208,6 +283,53 @@ function ScopeRowView({
       />
       <span ref={valueRef} className="scope-row-value">—</span>
     </div>
+  );
+}
+
+function EyeButton({
+  hidden,
+  onClick,
+  label,
+}: {
+  hidden: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="scope-row-eye"
+      onClick={onClick}
+      aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+      title={hidden ? 'Show signal' : 'Hide signal'}
+      aria-pressed={hidden}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {hidden ? (
+          <>
+            <path d="M2 8 s2.5 -4 6 -4 c1.4 0 2.6 0.6 3.6 1.4" />
+            <path d="M14 8 s-2.5 4 -6 4 c-1.4 0 -2.6 -0.6 -3.6 -1.4" />
+            <path d="M2 2 l12 12" />
+          </>
+        ) : (
+          <>
+            <path d="M2 8 s2.5 -4 6 -4 s6 4 6 4 s-2.5 4 -6 4 s-6 -4 -6 -4 Z" />
+            <circle cx="8" cy="8" r="1.7" />
+          </>
+        )}
+      </svg>
+    </button>
   );
 }
 

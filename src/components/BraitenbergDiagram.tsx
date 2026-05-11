@@ -118,6 +118,44 @@ function clampWeight(value: number): number {
   return Math.max(-1, Math.min(1, value));
 }
 
+function WeightInput({ value, onChange }: { value: number; onChange: (next: number) => void }) {
+  const [text, setText] = useState(() => value.toString());
+  const lastCommitted = useRef(value);
+
+  useEffect(() => {
+    if (value !== lastCommitted.current) {
+      setText(value.toString());
+      lastCommitted.current = value;
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      min="-1"
+      max="1"
+      step="0.05"
+      value={text}
+      onChange={(event) => {
+        const next = event.target.value;
+        setText(next);
+        const parsed = Number.parseFloat(next);
+        if (Number.isFinite(parsed)) {
+          const clamped = clampWeight(parsed);
+          lastCommitted.current = clamped;
+          onChange(clamped);
+        }
+      }}
+      onBlur={() => {
+        const parsed = Number.parseFloat(text);
+        if (!Number.isFinite(parsed)) {
+          setText(value.toString());
+        }
+      }}
+    />
+  );
+}
+
 function weightToColor(weight: number): string {
   // Warm ink-like tones: positive → muted green, negative → muted rust
   if (weight >= 0) {
@@ -1224,7 +1262,41 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             >
               <div className="node-label">{node.label}</div>
               <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
-              {hasSlider && (
+              {hasSlider && node.type === 'sensor-digital' && (
+                <div className="trace-slider-row">
+                  <button
+                    type="button"
+                    className={`trace-digital-toggle ${
+                      (sensorValues[node.id] ?? 0) >= 50 ? 'high' : 'low'
+                    }`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const isHigh = (sensorValues[node.id] ?? 0) >= 50;
+                      setSensorValues((prev) => ({
+                        ...prev,
+                        [node.id]: isHigh ? 0 : 100,
+                      }));
+                    }}
+                    title="Toggle digital input (LOW / HIGH)"
+                  >
+                    {(sensorValues[node.id] ?? 0) >= 50 ? 'HIGH' : 'LOW'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
+                    title="Pulse this sensor HIGH for 200ms"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pulseSensor(node.id);
+                    }}
+                  >
+                    ▶
+                  </button>
+                </div>
+              )}
+              {hasSlider && node.type !== 'sensor-digital' && (
                 <div className="trace-slider-row">
                   <span className="trace-slider-label">{nodeType.kind === 'constant' ? '-100' : '0'}</span>
                   <input
@@ -1726,23 +1798,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   </label>
                   <label>
                     Numeric Weight
-                    <input
-                      type="number"
-                      min="-1"
-                      max="1"
-                      step="0.05"
+                    <WeightInput
                       value={selectedConnection.weight}
-                      onChange={(event) => {
-                        const parsed = Number.parseFloat(event.target.value);
-                        const value = Number.isFinite(parsed)
-                          ? clampWeight(parsed)
-                          : DEFAULT_CONNECTION_WEIGHT;
+                      onChange={(value) =>
                         setConnections((prev) =>
                           prev.map((connection) =>
                             connection.id === selectedConnection.id ? { ...connection, weight: value } : connection,
                           ),
-                        );
-                      }}
+                        )
+                      }
                     />
                   </label>
                 </>

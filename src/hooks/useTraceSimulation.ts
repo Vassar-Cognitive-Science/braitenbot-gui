@@ -99,7 +99,14 @@ export function simulateGraph(
     const typeDef = TYPE_BY_ID[node.type];
 
     if (typeDef.kind === 'sensor') {
-      nodeValues[nodeId] = sensorValues[nodeId] ?? 50;
+      if (node.type === 'sensor-digital') {
+        // digitalRead in codegen yields 0 or 100 (HIGH/LOW * 100). Mirror
+        // that here so the trace and scope show a square wave, not a ramp.
+        const raw = sensorValues[nodeId] ?? 0;
+        nodeValues[nodeId] = raw >= 50 ? 100 : 0;
+      } else {
+        nodeValues[nodeId] = sensorValues[nodeId] ?? 50;
+      }
       continue;
     }
 
