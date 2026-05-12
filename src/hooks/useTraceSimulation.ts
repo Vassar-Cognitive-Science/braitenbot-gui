@@ -123,6 +123,15 @@ export function simulateGraph(
       continue;
     }
 
+    // Compound input anchors source their value from outside the body. When
+    // the user is editing a body in isolation there's no outer scope, so we
+    // treat them as sensor-like and read from sensorValues — that lets the
+    // editor offer a slider on each input anchor in trace mode.
+    if (node.type === 'compound-input') {
+      nodeValues[nodeId] = sensorValues[nodeId] ?? 0;
+      continue;
+    }
+
     if (node.type === 'compute-oscillator') {
       const freq = node.frequencyHz ?? 1.0;
       const amp = node.amplitude ?? 100;

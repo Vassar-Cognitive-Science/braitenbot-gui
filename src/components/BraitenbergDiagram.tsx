@@ -1719,7 +1719,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           const nodeType = TYPE_BY_ID[node.type];
           const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
           const isDisconnected = traceMode && traceResult.disconnected.has(node.id);
-          const hasSlider = traceMode && (nodeType.kind === 'sensor' || nodeType.kind === 'constant');
+          // Compound input anchors get the sensor-style slider treatment
+          // when editing a body in isolation — there's no outer scope to
+          // drive them, so the user injects test values directly.
+          const isCompoundInput = node.type === 'compound-input';
+          const hasSlider =
+            traceMode && (nodeType.kind === 'sensor' || nodeType.kind === 'constant' || isCompoundInput);
 
           let nodeMeta: string;
           if (traceVal !== undefined) {
@@ -1821,23 +1826,28 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   </button>
                 </div>
               )}
-              {hasSlider && node.type !== 'sensor-digital' && (
+              {hasSlider && node.type !== 'sensor-digital' && (() => {
+                const sliderMin = nodeType.kind === 'constant' || isCompoundInput ? -100 : 0;
+                const sliderValue = nodeType.kind === 'sensor'
+                  ? (sensorValues[node.id] ?? 50)
+                  : isCompoundInput
+                    ? (sensorValues[node.id] ?? 0)
+                    : (node.constantValue ?? 0);
+                return (
                 <div className="trace-slider-row">
-                  <span className="trace-slider-label">{nodeType.kind === 'constant' ? '-100' : '0'}</span>
+                  <span className="trace-slider-label">{sliderMin}</span>
                   <input
                     type="range"
                     className="trace-slider"
-                    min={nodeType.kind === 'constant' ? '-100' : '0'}
+                    min={sliderMin}
                     max="100"
                     step="1"
-                    value={nodeType.kind === 'sensor'
-                      ? (sensorValues[node.id] ?? 50)
-                      : (node.constantValue ?? 0)}
+                    value={sliderValue}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
                       const v = parseFloat(e.target.value);
-                      if (nodeType.kind === 'sensor') {
+                      if (nodeType.kind === 'sensor' || isCompoundInput) {
                         setSensorValues((prev) => ({ ...prev, [node.id]: v }));
                       } else {
                         setNodes((prev) =>
@@ -1864,7 +1874,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     </button>
                   )}
                 </div>
-              )}
+                );
+              })()}
               {canOutput(nodeType) && (() => {
                 const ports = getOutputPorts(nodeType.id, node, compoundTypes);
                 if (!ports || ports.length === 0) {
