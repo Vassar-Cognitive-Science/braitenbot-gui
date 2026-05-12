@@ -1320,6 +1320,58 @@ body {
   gap: 0.35rem;
 }
 
+/* Breadcrumb shown when descending into a compound body. Sits at the very
+   top of the canvas; stacks under .trace-banner when both are on. */
+.diagram-breadcrumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  padding: 0.35rem 0.75rem;
+  background: rgba(22, 26, 36, 0.92);
+  border-bottom: 1px solid rgba(120, 150, 200, 0.3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+}
+
+.diagram-breadcrumb-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diagram-breadcrumb-sep {
+  color: rgba(160, 175, 200, 0.55);
+  padding: 0 0.1rem;
+}
+
+.diagram-breadcrumb-segment {
+  background: transparent;
+  border: none;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  color: rgba(160, 185, 215, 0.85);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.diagram-breadcrumb-segment:hover:not(:disabled) {
+  background: rgba(120, 150, 200, 0.12);
+  color: #c4d5ee;
+}
+
+.diagram-breadcrumb-segment.current {
+  color: #d8e4f5;
+  font-weight: 600;
+  cursor: default;
+}
+
 .trace-banner span {
   font-family: var(--font-mono);
   color: #d4bc78;

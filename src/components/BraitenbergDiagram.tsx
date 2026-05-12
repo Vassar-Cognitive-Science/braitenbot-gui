@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
+import type { Dispatch, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
@@ -264,8 +264,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     lastResult,
     compileAndUpload,
   } = arduino;
-  const [nodes, setNodes] = useState<DiagramNode[]>(START_NODES);
-  const [connections, setConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
+  // Top-level diagram state lives here; the user-visible `nodes` /
+  // `connections` below are a routed view that switches to a compound
+  // body when the user double-clicks into one (see `editingPath`).
+  const [topNodes, setTopNodes] = useState<DiagramNode[]>(START_NODES);
+  const [topConnections, setTopConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
+  // Stack of compound-type ids currently being edited. Empty = at top.
+  const [editingPath, setEditingPath] = useState<string[]>([]);
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
   const [linkDraftSource, setLinkDraftSource] = useState<{ id: string; port?: OutputPortId } | null>(null);
@@ -274,6 +279,68 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [configTarget, setConfigTarget] = useState<{ kind: 'node' | 'connection'; id: string } | null>(null);
   const [loopPeriodMs, setLoopPeriodMs] = useState(20);
   const [compoundTypes, setCompoundTypes] = useState<CompoundTypeDefinition[]>([]);
+
+  // The compound type currently being edited, if any. Body edits flow into
+  // its body.nodes / body.connections instead of the top-level state.
+  const currentCompoundId = editingPath.length > 0 ? editingPath[editingPath.length - 1] : null;
+  const currentCompound = currentCompoundId
+    ? compoundTypes.find((c) => c.id === currentCompoundId) ?? null
+    : null;
+
+  const nodes = currentCompound ? currentCompound.body.nodes : topNodes;
+  const connections = currentCompound ? currentCompound.body.connections : topConnections;
+
+  const setNodes = useCallback<Dispatch<SetStateAction<DiagramNode[]>>>(
+    (action) => {
+      if (currentCompoundId) {
+        setCompoundTypes((prev) =>
+          prev.map((c) =>
+            c.id === currentCompoundId
+              ? {
+                  ...c,
+                  body: {
+                    ...c.body,
+                    nodes:
+                      typeof action === 'function'
+                        ? (action as (p: DiagramNode[]) => DiagramNode[])(c.body.nodes)
+                        : action,
+                  },
+                }
+              : c,
+          ),
+        );
+      } else {
+        setTopNodes(action);
+      }
+    },
+    [currentCompoundId],
+  );
+
+  const setConnections = useCallback<Dispatch<SetStateAction<DiagramConnection[]>>>(
+    (action) => {
+      if (currentCompoundId) {
+        setCompoundTypes((prev) =>
+          prev.map((c) =>
+            c.id === currentCompoundId
+              ? {
+                  ...c,
+                  body: {
+                    ...c.body,
+                    connections:
+                      typeof action === 'function'
+                        ? (action as (p: DiagramConnection[]) => DiagramConnection[])(c.body.connections)
+                        : action,
+                  },
+                }
+              : c,
+          ),
+        );
+      } else {
+        setTopConnections(action);
+      }
+    },
+    [currentCompoundId],
+  );
   const [codeGenErrors, setCodeGenErrors] = useState<ValidationError[]>([]);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
@@ -393,16 +460,25 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   );
 
   const resetToDefault = useCallback(() => {
-    setNodes(makeWheelNodes(robotLayout));
-    setConnections(START_CONNECTIONS);
+    setTopNodes(makeWheelNodes(robotLayout));
+    setTopConnections(START_CONNECTIONS);
     setLoopPeriodMs(20);
     setCompoundTypes([]);
+    setEditingPath([]);
     setConfigTarget(null);
   }, [robotLayout]);
 
+  // Persistence operates on the canonical top-level state — never on the
+  // compound body currently in view — so reload/autosave round-trips
+  // independent of which compound the user happens to be editing.
   useDiagramPersistence({
-    state: { nodes, connections, loopPeriodMs, compoundTypes },
-    setters: { setNodes, setConnections, setLoopPeriodMs, setCompoundTypes },
+    state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes },
+    setters: {
+      setNodes: setTopNodes,
+      setConnections: setTopConnections,
+      setLoopPeriodMs,
+      setCompoundTypes,
+    },
     isPristine: isDiagramPristine,
     resetToDefault,
   });
@@ -453,7 +529,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   );
 
   const handleGenerate = useCallback(() => {
-    const errors = validateGraph(nodes, connections, compoundTypes);
+    // Codegen always targets the canonical top-level diagram, even if the
+    // user is currently inside a compound body.
+    const errors = validateGraph(topNodes, topConnections, compoundTypes);
     setCodeGenErrors(errors);
     const hasErrors = errors.some((e) => e.severity === 'error');
     if (hasErrors) {
@@ -461,10 +539,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setShowCodeDialog(true);
       return;
     }
-    const graph = buildGraph(nodes, connections, loopPeriodMs, compoundTypes);
+    const graph = buildGraph(topNodes, topConnections, loopPeriodMs, compoundTypes);
     setGeneratedCode(generateSketch(graph));
     setShowCodeDialog(true);
-  }, [nodes, connections, loopPeriodMs, compoundTypes]);
+  }, [topNodes, topConnections, loopPeriodMs, compoundTypes]);
 
   const handleCopyCode = useCallback(() => {
     if (generatedCode) {
@@ -484,7 +562,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   }, [generatedCode]);
 
   const handleUploadToArduino = useCallback(async () => {
-    const errors = validateGraph(nodes, connections, compoundTypes);
+    // Always upload the canonical top-level diagram, not whichever
+    // compound body the user is currently editing.
+    const errors = validateGraph(topNodes, topConnections, compoundTypes);
     const hasErrors = errors.some((e) => e.severity === 'error');
     if (hasErrors) {
       setCodeGenErrors(errors);
@@ -503,11 +583,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setShowCodeDialog(true);
       return;
     }
-    const graph = buildGraph(nodes, connections, loopPeriodMs, compoundTypes);
+    const graph = buildGraph(topNodes, topConnections, loopPeriodMs, compoundTypes);
     const code = generateSketch(graph);
     setGeneratedCode(code);
     await compileAndUpload(code, selectedBoard.fqbn, selectedBoard.port);
-  }, [nodes, connections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload]);
+  }, [topNodes, topConnections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload]);
 
   useEffect(() => {
     const dialog = codeDialogRef.current;
@@ -1126,6 +1206,35 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         onMouseUp={handleCanvasMouseUp}
         onMouseLeave={handleCanvasMouseUp}
       >
+        {editingPath.length > 0 && (
+          <div className="diagram-breadcrumb">
+            <button
+              type="button"
+              className="diagram-breadcrumb-segment"
+              onClick={() => setEditingPath([])}
+            >
+              Top
+            </button>
+            {editingPath.map((typeId, index) => {
+              const def = compoundTypes.find((c) => c.id === typeId);
+              const label = def?.displayName ?? typeId;
+              const isLast = index === editingPath.length - 1;
+              return (
+                <span key={`${typeId}-${index}`} className="diagram-breadcrumb-step">
+                  <span className="diagram-breadcrumb-sep">›</span>
+                  <button
+                    type="button"
+                    className={`diagram-breadcrumb-segment ${isLast ? 'current' : ''}`}
+                    onClick={() => setEditingPath(editingPath.slice(0, index + 1))}
+                    disabled={isLast}
+                  >
+                    {label}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
         {traceMode && (
           <div className="trace-banner">
             <span>Trace Mode</span> — set sensor values to see signal propagation
@@ -1262,6 +1371,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               style={{ left: `${worldPos.x}px`, top: `${worldPos.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
               onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
+              onDoubleClick={
+                node.type === 'compound' && node.compoundTypeId
+                  ? (event) => {
+                      event.stopPropagation();
+                      setEditingPath((prev) => [...prev, node.compoundTypeId!]);
+                      setConfigTarget(null);
+                    }
+                  : undefined
+              }
             >
               <div className="node-label">{node.label}</div>
               <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
