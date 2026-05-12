@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
-import { NODE_TYPES, TYPE_BY_ID, getOutputPorts } from '../types/diagram';
+import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
@@ -46,10 +46,16 @@ interface RobotOverlayLayout {
 const START_CONNECTIONS: DiagramConnection[] = [];
 
 function canOutput(nodeType: NodeTypeDefinition): boolean {
+  // compound-output is a body-only sink — it receives values inside the
+  // body but exposes nothing inside the body itself.
+  if (nodeType.id === 'compound-output') return false;
   return nodeType.kind !== 'output';
 }
 
 function canInput(nodeType: NodeTypeDefinition): boolean {
+  // compound-input is a body-only source — it produces values inside the
+  // body but accepts nothing from the body itself.
+  if (nodeType.id === 'compound-input') return false;
   return nodeType.kind !== 'sensor' && nodeType.kind !== 'constant';
 }
 
@@ -98,10 +104,27 @@ function makePath(x1: number, y1: number, x2: number, y2: number): string {
 }
 
 /** Horizontal offset (px, local to the node) of the output anchor for a given port. */
-function portOffsetX(typeId: NodeTypeId, fromPort?: OutputPortId): number {
-  const ports = getOutputPorts(typeId);
-  if (!ports) return NODE_W / 2;
+function portOffsetX(
+  node: DiagramNode,
+  fromPort?: OutputPortId,
+  compoundTypes?: CompoundTypeDefinition[],
+): number {
+  const ports = getOutputPorts(node.type, node, compoundTypes);
+  if (!ports || ports.length === 0) return NODE_W / 2;
   const idx = fromPort ? ports.indexOf(fromPort) : -1;
+  const i = idx >= 0 ? idx : 0;
+  return ((i + 0.5) / ports.length) * NODE_W;
+}
+
+/** Horizontal offset (px, local to the node) of the input anchor for a given port. */
+function inputPortOffsetX(
+  node: DiagramNode,
+  toPort?: string,
+  compoundTypes?: CompoundTypeDefinition[],
+): number {
+  const ports = getInputPorts(node.type, node, compoundTypes);
+  if (!ports || ports.length === 0) return NODE_W / 2;
+  const idx = toPort ? ports.indexOf(toPort) : -1;
   const i = idx >= 0 ? idx : 0;
   return ((i + 0.5) / ports.length) * NODE_W;
 }
@@ -528,6 +551,43 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     [resetArmed, disarmReset],
   );
 
+  // Create a new compound type with one default input and one default output
+  // anchor, then jump into its body for editing. The user can add or remove
+  // anchors and internal nodes from there.
+  const handleNewCompound = useCallback(() => {
+    pushUndo();
+    const nextNumber = compoundTypes.length + 1;
+    const id = `compound-${nextNumber}-${Math.random().toString(36).slice(2, 8)}`;
+    const inputAnchorId = `${id}/in`;
+    const outputAnchorId = `${id}/out`;
+    const def: CompoundTypeDefinition = {
+      id,
+      displayName: `Compound ${nextNumber}`,
+      body: {
+        nodes: [
+          {
+            id: inputAnchorId,
+            type: 'compound-input',
+            label: 'in',
+            x: 200,
+            y: 240,
+          },
+          {
+            id: outputAnchorId,
+            type: 'compound-output',
+            label: 'out',
+            x: 600,
+            y: 240,
+          },
+        ],
+        connections: [],
+      },
+    };
+    setCompoundTypes((prev) => [...prev, def]);
+    setEditingPath((prev) => [...prev, id]);
+    setConfigTarget(null);
+  }, [compoundTypes.length, pushUndo]);
+
   const handleGenerate = useCallback(() => {
     // Codegen always targets the canonical top-level diagram, even if the
     // user is currently inside a compound body.
@@ -635,9 +695,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         if (!from || !to) return null;
         const fromWorld = nodeWorldPos(from);
         const toWorld = nodeWorldPos(to);
-        const x1 = fromWorld.x + portOffsetX(from.type, connection.fromPort);
+        const x1 = fromWorld.x + portOffsetX(from, connection.fromPort, compoundTypes);
         const y1 = fromWorld.y + NODE_H;
-        const x2 = toWorld.x + NODE_W / 2;
+        const x2 = toWorld.x + inputPortOffsetX(to, connection.toPort, compoundTypes);
         const y2 = toWorld.y;
         return {
           id: connection.id,
@@ -895,7 +955,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     );
   };
 
-  const completeLink = (toId: string) => {
+  const completeLink = (toId: string, toPort?: string) => {
     if (
       !linkDraftSource ||
       !canConnect(linkDraftSource.id, toId, linkDraftSource.port)
@@ -912,6 +972,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         from: fromId,
         ...(fromPort ? { fromPort } : {}),
         to: toId,
+        ...(toPort ? { toPort } : {}),
         weight: DEFAULT_CONNECTION_WEIGHT,
         transferMode: 'linear',
         transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
@@ -983,14 +1044,21 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </div>
           );
         })}
-        {(compoundTypes.length > 0 || editingPath.length > 0) && (
-          <div className="palette-group">
-            <h2 className="palette-category palette-category-compound">
-              <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
-              Compounds
-            </h2>
-            <div className="palette-group-items">
-              {editingPath.length > 0 && (
+        <div className="palette-group">
+          <h2 className="palette-category palette-category-compound">
+            <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
+            Compounds
+          </h2>
+          <div className="palette-group-items">
+            <button
+              type="button"
+              className="palette-new-compound"
+              onClick={handleNewCompound}
+              title="Create a new compound subdiagram. You'll be dropped into its body to wire it up."
+            >
+              + New Compound
+            </button>
+            {editingPath.length > 0 && (
                 <>
                   <div
                     className="palette-item palette-item-port"
@@ -1030,9 +1098,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   <small>compound</small>
                 </div>
               ))}
-            </div>
           </div>
-        )}
+        </div>
       </aside>
 
       <div className="canvas-toolbar">
@@ -1363,7 +1430,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <path
                 className="draft-link"
                 d={makePath(
-                  srcWorld.x + portOffsetX(src.type, linkDraftSource.port),
+                  srcWorld.x + portOffsetX(src, linkDraftSource.port, compoundTypes),
                   srcWorld.y + NODE_H,
                   linkDraftPoint.x,
                   linkDraftPoint.y,
@@ -1526,8 +1593,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </div>
               )}
               {canOutput(nodeType) && (() => {
-                const ports = getOutputPorts(nodeType.id);
-                if (!ports) {
+                const ports = getOutputPorts(nodeType.id, node, compoundTypes);
+                if (!ports || ports.length === 0) {
                   return (
                     <button
                       className="node-handle output-handle"
@@ -1536,9 +1603,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     />
                   );
                 }
+                const isCompound = node.type === 'compound';
                 return ports.map((port, i) => {
                   const leftPct = ((i + 0.5) / ports.length) * 100;
-                  const abbr = port[0].toUpperCase();
+                  const label = isCompound ? port : port[0].toUpperCase();
                   return (
                     <span key={port}>
                       <button
@@ -1549,24 +1617,53 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                         onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
                       />
                       <span
-                        className={`output-port-label output-port-label-${port}`}
+                        className={`output-port-label ${
+                          isCompound ? 'output-port-label-compound' : `output-port-label-${port}`
+                        }`}
                         style={{ left: `${leftPct}%` }}
                         aria-hidden="true"
                       >
-                        {abbr}
+                        {label}
                       </span>
                     </span>
                   );
                 });
               })()}
-              {canInput(nodeType) && (
-                <button
-                  className="node-handle input-handle"
-                  aria-label={`Connect to ${node.label}`}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onMouseUp={() => completeLink(node.id)}
-                />
-              )}
+              {canInput(nodeType) && (() => {
+                const inputs = getInputPorts(nodeType.id, node, compoundTypes);
+                if (!inputs || inputs.length === 0) {
+                  return (
+                    <button
+                      className="node-handle input-handle"
+                      aria-label={`Connect to ${node.label}`}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onMouseUp={() => completeLink(node.id)}
+                    />
+                  );
+                }
+                return inputs.map((port, i) => {
+                  const leftPct = ((i + 0.5) / inputs.length) * 100;
+                  return (
+                    <span key={port}>
+                      <button
+                        className="node-handle input-handle input-handle-port"
+                        style={{ left: `${leftPct}%` }}
+                        title={port}
+                        aria-label={`Connect to ${node.label} (${port})`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onMouseUp={() => completeLink(node.id, port)}
+                      />
+                      <span
+                        className="input-port-label"
+                        style={{ left: `${leftPct}%` }}
+                        aria-hidden="true"
+                      >
+                        {port}
+                      </span>
+                    </span>
+                  );
+                });
+              })()}
             </div>
           );
         })}
