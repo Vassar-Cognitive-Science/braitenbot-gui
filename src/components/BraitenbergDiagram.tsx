@@ -294,6 +294,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [topConnections, setTopConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
   // Stack of compound-type ids currently being edited. Empty = at top.
   const [editingPath, setEditingPath] = useState<string[]>([]);
+  // Multi-selection for group operations. Click/shift-click on nodes maintain
+  // this set; the "Group selection" toolbar action consumes it.
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [nodeDragOffset, setNodeDragOffset] = useState({ x: 0, y: 0 });
   const [linkDraftSource, setLinkDraftSource] = useState<{ id: string; port?: OutputPortId } | null>(null);
@@ -551,42 +554,175 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     [resetArmed, disarmReset],
   );
 
-  // Create a new compound type with one default input and one default output
-  // anchor, then jump into its body for editing. The user can add or remove
-  // anchors and internal nodes from there.
-  const handleNewCompound = useCallback(() => {
+  // Group the currently-selected nodes into a new compound. Boundary-
+  // crossing edges become port anchors; weights and transfers on those
+  // edges stay on the *outer* edge so a user looking at the new compound
+  // instance sees the same wiring they had before grouping.
+  //
+  // Wheel motors and other top-level-only types can't move into a body,
+  // so they're filtered out of the selection silently before grouping.
+  const handleGroupSelection = useCallback(() => {
+    const selectedNodes = nodes.filter(
+      (n) =>
+        selectedNodeIds.has(n.id) &&
+        !TYPE_BY_ID[n.type].topLevelOnly &&
+        !(n.type === 'servo-cr' && (n.id === 'motor-left' || n.id === 'motor-right')),
+    );
+    if (selectedNodes.length === 0) return;
     pushUndo();
+
+    const selectedIds = new Set(selectedNodes.map((n) => n.id));
+    const isInternal = (conn: DiagramConnection) =>
+      selectedIds.has(conn.from) && selectedIds.has(conn.to);
+    const incomingBoundary = connections.filter(
+      (c) => selectedIds.has(c.to) && !selectedIds.has(c.from),
+    );
+    const outgoingBoundary = connections.filter(
+      (c) => selectedIds.has(c.from) && !selectedIds.has(c.to),
+    );
+    const internalConns = connections.filter((c) => isInternal(c));
+
     const nextNumber = compoundTypes.length + 1;
-    const id = `compound-${nextNumber}-${Math.random().toString(36).slice(2, 8)}`;
-    const inputAnchorId = `${id}/in`;
-    const outputAnchorId = `${id}/out`;
+    const compoundTypeId = `compound-${nextNumber}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // Compute centroid for placing the resulting instance node on the
+    // outer canvas, then translate body nodes so the selection's
+    // top-left maps to a comfortable origin inside the body.
+    const minX = Math.min(...selectedNodes.map((n) => n.x));
+    const minY = Math.min(...selectedNodes.map((n) => n.y));
+    const cx = (Math.min(...selectedNodes.map((n) => n.x)) + Math.max(...selectedNodes.map((n) => n.x))) / 2;
+    const cy = (Math.min(...selectedNodes.map((n) => n.y)) + Math.max(...selectedNodes.map((n) => n.y))) / 2;
+
+    const BODY_MARGIN = 120;
+    const bodyNodes: DiagramNode[] = selectedNodes.map((n) => ({
+      ...n,
+      x: n.x - minX + BODY_MARGIN + 100,
+      y: n.y - minY + BODY_MARGIN,
+    }));
+
+    // One input anchor per incoming boundary edge; ditto outputs. Names
+    // are inferred from the external endpoint's label so the user gets a
+    // readable default they can rename in the body editor.
+    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase().slice(0, 20) || 'port';
+    const usedNames = new Set<string>();
+    const uniqueName = (base: string): string => {
+      let name = base;
+      let i = 2;
+      while (usedNames.has(name)) {
+        name = `${base}_${i++}`;
+      }
+      usedNames.add(name);
+      return name;
+    };
+
+    interface BoundaryPort {
+      edge: DiagramConnection;
+      portId: string;
+    }
+    const inputPorts: BoundaryPort[] = incomingBoundary.map((edge, i) => {
+      const src = nodes.find((n) => n.id === edge.from);
+      const portId = uniqueName(sanitize(src?.label ?? `in_${i + 1}`));
+      return { edge, portId };
+    });
+    const outputPorts: BoundaryPort[] = outgoingBoundary.map((edge, i) => {
+      const dst = nodes.find((n) => n.id === edge.to);
+      const portId = uniqueName(sanitize(dst?.label ?? `out_${i + 1}`));
+      return { edge, portId };
+    });
+
+    const inputAnchorNodes: DiagramNode[] = inputPorts.map(({ portId }, i) => ({
+      id: portId,
+      type: 'compound-input',
+      label: portId,
+      x: BODY_MARGIN,
+      y: BODY_MARGIN + i * (NODE_H + 20),
+    }));
+    const outputAnchorNodes: DiagramNode[] = outputPorts.map(({ portId }, i) => ({
+      id: portId,
+      type: 'compound-output',
+      label: portId,
+      x: BODY_MARGIN + 700,
+      y: BODY_MARGIN + i * (NODE_H + 20),
+    }));
+
+    // Internal edges from input anchors to their original targets are
+    // unit-weight pass-throughs. The original weight/transfer stays on
+    // the outer edge — this preserves the user's mental model of the
+    // wiring they had before grouping.
+    const linearOne = () => ({
+      weight: 1,
+      transferMode: 'linear' as const,
+      transferPoints: [
+        { x: -100, y: -100 },
+        { x: 100, y: 100 },
+      ],
+    });
+    const innerInputEdges: DiagramConnection[] = inputPorts.map(({ edge, portId }, i) => ({
+      id: `${compoundTypeId}/in-${i}`,
+      from: portId,
+      to: edge.to,
+      ...linearOne(),
+    }));
+    const innerOutputEdges: DiagramConnection[] = outputPorts.map(({ edge, portId }, i) => ({
+      id: `${compoundTypeId}/out-${i}`,
+      from: edge.from,
+      to: portId,
+      ...linearOne(),
+    }));
+
     const def: CompoundTypeDefinition = {
-      id,
+      id: compoundTypeId,
       displayName: `Compound ${nextNumber}`,
       body: {
-        nodes: [
-          {
-            id: inputAnchorId,
-            type: 'compound-input',
-            label: 'in',
-            x: 200,
-            y: 240,
-          },
-          {
-            id: outputAnchorId,
-            type: 'compound-output',
-            label: 'out',
-            x: 600,
-            y: 240,
-          },
-        ],
-        connections: [],
+        nodes: [...inputAnchorNodes, ...bodyNodes, ...outputAnchorNodes],
+        connections: [...internalConns, ...innerInputEdges, ...innerOutputEdges],
       },
     };
+
+    // Replace the selected nodes on the outer canvas with one compound
+    // instance positioned at the selection centroid.
+    const instanceId = `compound-inst-${Math.random().toString(36).slice(2, 8)}`;
+    const instanceNode: DiagramNode = {
+      id: instanceId,
+      type: 'compound',
+      label: def.displayName,
+      x: cx,
+      y: cy,
+      compoundTypeId,
+    };
+
+    // Rewrite boundary edges to target the new instance + port. Internal
+    // edges are gone (moved into the body); external↔external edges are
+    // untouched.
+    const rewiredConnections: DiagramConnection[] = [];
+    for (const conn of connections) {
+      if (isInternal(conn)) continue;
+      const isIn = inputPorts.find((p) => p.edge.id === conn.id);
+      const isOut = outputPorts.find((p) => p.edge.id === conn.id);
+      if (isIn) {
+        rewiredConnections.push({ ...conn, to: instanceId, toPort: isIn.portId });
+      } else if (isOut) {
+        rewiredConnections.push({ ...conn, from: instanceId, fromPort: isOut.portId });
+      } else {
+        rewiredConnections.push(conn);
+      }
+    }
+
     setCompoundTypes((prev) => [...prev, def]);
-    setEditingPath((prev) => [...prev, id]);
-    setConfigTarget(null);
-  }, [compoundTypes.length, pushUndo]);
+    setNodes((prev) => [...prev.filter((n) => !selectedIds.has(n.id)), instanceNode]);
+    setConnections(rewiredConnections);
+    setSelectedNodeIds(new Set([instanceId]));
+    setConfigTarget({ kind: 'node', id: instanceId });
+  }, [
+    nodes,
+    connections,
+    selectedNodeIds,
+    compoundTypes.length,
+    pushUndo,
+    setCompoundTypes,
+    setNodes,
+    setConnections,
+  ]);
 
   const handleGenerate = useCallback(() => {
     // Codegen always targets the canonical top-level diagram, even if the
@@ -799,6 +935,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const shouldPan = event.button === 1 || (event.button === 0 && isBackground);
     if (!shouldPan) return;
     event.preventDefault();
+    // Clicking empty canvas clears the multi-selection (matches the
+    // common convention in Figma / VSCode / etc.).
+    if (event.button === 0 && isBackground && !event.shiftKey) {
+      setSelectedNodeIds(new Set());
+    }
     panStateRef.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -1044,20 +1185,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </div>
           );
         })}
+        {(compoundTypes.length > 0 || editingPath.length > 0) && (
         <div className="palette-group">
           <h2 className="palette-category palette-category-compound">
             <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
             Compounds
           </h2>
           <div className="palette-group-items">
-            <button
-              type="button"
-              className="palette-new-compound"
-              onClick={handleNewCompound}
-              title="Create a new compound subdiagram. You'll be dropped into its body to wire it up."
-            >
-              + New Compound
-            </button>
             {editingPath.length > 0 && (
                 <>
                   <div
@@ -1100,6 +1234,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               ))}
           </div>
         </div>
+        )}
       </aside>
 
       <div className="canvas-toolbar">
@@ -1166,6 +1301,27 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <path d="M5 7 h4" />
               <path d="M7 5 v4" />
             </svg>
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group">
+          <span className="toolbar-group-label">Group</span>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={handleGroupSelection}
+            disabled={selectedNodeIds.size < 2}
+            title={
+              selectedNodeIds.size < 2
+                ? 'Shift-click two or more nodes to enable grouping.'
+                : `Wrap the ${selectedNodeIds.size} selected nodes in a new compound subdiagram.`
+            }
+          >
+            {selectedNodeIds.size >= 2
+              ? `Group ${selectedNodeIds.size} into Compound`
+              : 'Group into Compound'}
           </button>
         </div>
 
@@ -1496,12 +1652,27 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 'diagram-node',
                 `node-${nodeType.kind}`,
                 selectedNode?.id === node.id ? 'selected' : '',
+                selectedNodeIds.has(node.id) ? 'multi-selected' : '',
                 isDisconnected ? 'trace-disconnected' : '',
                 hasSlider ? 'trace-expanded' : '',
               ].filter(Boolean).join(' ')}
               style={{ left: `${worldPos.x}px`, top: `${worldPos.y}px` }}
               onMouseDown={(event) => beginNodeDrag(event, node.id)}
-              onClick={() => setConfigTarget({ kind: 'node', id: node.id })}
+              onClick={(event) => {
+                if (event.shiftKey) {
+                  // Toggle this node in the multi-select set without
+                  // disturbing the rest.
+                  setSelectedNodeIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(node.id)) next.delete(node.id);
+                    else next.add(node.id);
+                    return next;
+                  });
+                } else {
+                  setSelectedNodeIds(new Set([node.id]));
+                }
+                setConfigTarget({ kind: 'node', id: node.id });
+              }}
               onDoubleClick={
                 node.type === 'compound' && node.compoundTypeId
                   ? (event) => {

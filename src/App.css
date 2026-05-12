@@ -210,24 +210,6 @@ body {
 .palette-item-compound { border-left-color: #8aa8d8; }
 .palette-item-port { border-left-color: #b09cd0; border-left-style: dashed; }
 
-.palette-new-compound {
-  border: 1px dashed rgba(138, 168, 216, 0.6);
-  border-radius: 3px;
-  padding: 0.35rem 0.6rem;
-  background: transparent;
-  color: rgba(160, 185, 215, 0.9);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  text-align: left;
-}
-
-.palette-new-compound:hover {
-  background: rgba(138, 168, 216, 0.08);
-  color: #c4d5ee;
-  border-color: rgba(138, 168, 216, 0.9);
-}
 
 .palette-item small {
   font-family: var(--font-mono);
@@ -370,6 +352,13 @@ body {
 
 .diagram-node.selected {
   box-shadow: 0 0 0 1px #d4bc78;
+}
+
+/* Multi-selection highlight — distinct from `selected` (single config target)
+   so the user can see which nodes will be consumed by Group. */
+.diagram-node.multi-selected {
+  outline: 1px dashed rgba(138, 168, 216, 0.85);
+  outline-offset: 2px;
 }
  
 .diagram-node .node-label {
