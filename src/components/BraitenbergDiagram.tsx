@@ -600,55 +600,53 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       y: n.y - minY + BODY_MARGIN,
     }));
 
-    // One input anchor per incoming boundary edge; ditto outputs. Names
-    // are inferred from the external endpoint's label so the user gets a
-    // readable default they can rename in the body editor.
-    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase().slice(0, 20) || 'port';
-    const usedNames = new Set<string>();
-    const uniqueName = (base: string): string => {
-      let name = base;
-      let i = 2;
-      while (usedNames.has(name)) {
-        name = `${base}_${i++}`;
-      }
-      usedNames.add(name);
-      return name;
-    };
-
-    interface BoundaryPort {
-      edge: DiagramConnection;
-      portId: string;
+    // One input anchor per *distinct internal target* (not per boundary
+    // edge) and one output anchor per *distinct internal source*. This
+    // way a single internal output fanning out to multiple external
+    // destinations still presents one port on the compound. Names are
+    // generic ("in", "in_2", "out", …) so users can rename in the body
+    // editor without inheriting confusing external-endpoint context.
+    const inputTargetIds: string[] = [];
+    for (const edge of incomingBoundary) {
+      if (!inputTargetIds.includes(edge.to)) inputTargetIds.push(edge.to);
     }
-    const inputPorts: BoundaryPort[] = incomingBoundary.map((edge, i) => {
-      const src = nodes.find((n) => n.id === edge.from);
-      const portId = uniqueName(sanitize(src?.label ?? `in_${i + 1}`));
-      return { edge, portId };
+    const outputSourceIds: string[] = [];
+    for (const edge of outgoingBoundary) {
+      if (!outputSourceIds.includes(edge.from)) outputSourceIds.push(edge.from);
+    }
+    const nameWithIndex = (base: string, i: number) => (i === 0 ? base : `${base}_${i + 1}`);
+    const inputPortIdByTarget = new Map<string, string>();
+    inputTargetIds.forEach((targetId, i) => {
+      inputPortIdByTarget.set(targetId, nameWithIndex('in', i));
     });
-    const outputPorts: BoundaryPort[] = outgoingBoundary.map((edge, i) => {
-      const dst = nodes.find((n) => n.id === edge.to);
-      const portId = uniqueName(sanitize(dst?.label ?? `out_${i + 1}`));
-      return { edge, portId };
+    const outputPortIdBySource = new Map<string, string>();
+    outputSourceIds.forEach((sourceId, i) => {
+      outputPortIdBySource.set(sourceId, nameWithIndex('out', i));
     });
 
-    const inputAnchorNodes: DiagramNode[] = inputPorts.map(({ portId }, i) => ({
-      id: portId,
-      type: 'compound-input',
-      label: portId,
-      x: BODY_MARGIN,
-      y: BODY_MARGIN + i * (NODE_H + 20),
-    }));
-    const outputAnchorNodes: DiagramNode[] = outputPorts.map(({ portId }, i) => ({
-      id: portId,
-      type: 'compound-output',
-      label: portId,
-      x: BODY_MARGIN + 700,
-      y: BODY_MARGIN + i * (NODE_H + 20),
-    }));
+    const inputAnchorNodes: DiagramNode[] = [...inputPortIdByTarget.entries()].map(
+      ([, portId], i) => ({
+        id: portId,
+        type: 'compound-input',
+        label: portId,
+        x: BODY_MARGIN,
+        y: BODY_MARGIN + i * (NODE_H + 20),
+      }),
+    );
+    const outputAnchorNodes: DiagramNode[] = [...outputPortIdBySource.entries()].map(
+      ([, portId], i) => ({
+        id: portId,
+        type: 'compound-output',
+        label: portId,
+        x: BODY_MARGIN + 700,
+        y: BODY_MARGIN + i * (NODE_H + 20),
+      }),
+    );
 
-    // Internal edges from input anchors to their original targets are
-    // unit-weight pass-throughs. The original weight/transfer stays on
-    // the outer edge — this preserves the user's mental model of the
-    // wiring they had before grouping.
+    // Internal pass-through edges from input anchor → original target and
+    // from original source → output anchor. Unit weight, linear transfer:
+    // the user-facing weight/transfer stays on the *outer* edge so the
+    // compound instance reads identically to the pre-group wiring.
     const linearOne = () => ({
       weight: 1,
       transferMode: 'linear' as const,
@@ -657,18 +655,22 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         { x: 100, y: 100 },
       ],
     });
-    const innerInputEdges: DiagramConnection[] = inputPorts.map(({ edge, portId }, i) => ({
-      id: `${compoundTypeId}/in-${i}`,
-      from: portId,
-      to: edge.to,
-      ...linearOne(),
-    }));
-    const innerOutputEdges: DiagramConnection[] = outputPorts.map(({ edge, portId }, i) => ({
-      id: `${compoundTypeId}/out-${i}`,
-      from: edge.from,
-      to: portId,
-      ...linearOne(),
-    }));
+    const innerInputEdges: DiagramConnection[] = [...inputPortIdByTarget.entries()].map(
+      ([targetId, portId], i) => ({
+        id: `${compoundTypeId}/in-${i}`,
+        from: portId,
+        to: targetId,
+        ...linearOne(),
+      }),
+    );
+    const innerOutputEdges: DiagramConnection[] = [...outputPortIdBySource.entries()].map(
+      ([sourceId, portId], i) => ({
+        id: `${compoundTypeId}/out-${i}`,
+        from: sourceId,
+        to: portId,
+        ...linearOne(),
+      }),
+    );
 
     const def: CompoundTypeDefinition = {
       id: compoundTypeId,
@@ -691,18 +693,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       compoundTypeId,
     };
 
-    // Rewrite boundary edges to target the new instance + port. Internal
+    // Rewire boundary edges to target the new instance + port. Internal
     // edges are gone (moved into the body); external↔external edges are
-    // untouched.
+    // untouched. Multiple boundary edges that share an internal endpoint
+    // all route through the same port.
     const rewiredConnections: DiagramConnection[] = [];
     for (const conn of connections) {
       if (isInternal(conn)) continue;
-      const isIn = inputPorts.find((p) => p.edge.id === conn.id);
-      const isOut = outputPorts.find((p) => p.edge.id === conn.id);
-      if (isIn) {
-        rewiredConnections.push({ ...conn, to: instanceId, toPort: isIn.portId });
-      } else if (isOut) {
-        rewiredConnections.push({ ...conn, from: instanceId, fromPort: isOut.portId });
+      const inboundPort = selectedIds.has(conn.to) && !selectedIds.has(conn.from)
+        ? inputPortIdByTarget.get(conn.to)
+        : undefined;
+      const outboundPort = selectedIds.has(conn.from) && !selectedIds.has(conn.to)
+        ? outputPortIdBySource.get(conn.from)
+        : undefined;
+      if (inboundPort) {
+        rewiredConnections.push({ ...conn, to: instanceId, toPort: inboundPort });
+      } else if (outboundPort) {
+        rewiredConnections.push({ ...conn, from: instanceId, fromPort: outboundPort });
       } else {
         rewiredConnections.push(conn);
       }
