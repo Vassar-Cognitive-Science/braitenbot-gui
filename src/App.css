@@ -178,6 +178,7 @@ body {
 .palette-dot-sensor { background: var(--sensor-color); }
 .palette-dot-compute { background: var(--compute-color); }
 .palette-dot-output { background: var(--output-color); }
+.palette-dot-compound { background: #8aa8d8; }
 
 .node-palette h2:not(.palette-category) {
   margin: 0.35rem 0 0.1rem;
@@ -206,6 +207,8 @@ body {
 .palette-item-compute { border-left-color: var(--compute-color); }
 .palette-item-constant { border-left-color: var(--compute-color); }
 .palette-item-output { border-left-color: var(--output-color); }
+.palette-item-compound { border-left-color: #8aa8d8; }
+.palette-item-port { border-left-color: #b09cd0; border-left-style: dashed; }
 
 .palette-item small {
   font-family: var(--font-mono);

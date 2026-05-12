@@ -821,6 +821,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     if (!canvasRef.current) return;
     const nodeTypeId = event.dataTransfer.getData('application/x-node-type') as NodeTypeId;
     if (!nodeTypeId || !(nodeTypeId in TYPE_BY_ID)) return;
+    const typeDef = TYPE_BY_ID[nodeTypeId];
+    // Body-only types (port anchors) only drop inside a compound body;
+    // dropping one at the top level is silently ignored.
+    if (typeDef.bodyOnly && editingPath.length === 0) return;
+    // Compound instances need their target type id from the drag payload.
+    const compoundTypeId =
+      nodeTypeId === 'compound'
+        ? event.dataTransfer.getData('application/x-compound-type')
+        : null;
+    if (nodeTypeId === 'compound' && !compoundTypeId) return;
     pushUndo();
 
     const rect = canvasRef.current.getBoundingClientRect();
@@ -830,7 +840,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const y = (screenY - pan.y) / zoom;
 
     const id = makeId(nodeTypeId);
-    const baseLabel = TYPE_BY_ID[nodeTypeId].displayName;
+    const baseLabel =
+      compoundTypeId
+        ? compoundTypes.find((c) => c.id === compoundTypeId)?.displayName ?? 'Compound'
+        : TYPE_BY_ID[nodeTypeId].displayName;
     setNodes((prev) => {
       const nodeNumber = prev.filter((node) => node.type === nodeTypeId).length + 1;
       const nodeType = TYPE_BY_ID[nodeTypeId];
@@ -860,6 +873,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           dioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
           brightness:
             nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
+          compoundTypeId: compoundTypeId ?? undefined,
         },
       ];
     });
@@ -969,6 +983,56 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </div>
           );
         })}
+        {(compoundTypes.length > 0 || editingPath.length > 0) && (
+          <div className="palette-group">
+            <h2 className="palette-category palette-category-compound">
+              <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
+              Compounds
+            </h2>
+            <div className="palette-group-items">
+              {editingPath.length > 0 && (
+                <>
+                  <div
+                    className="palette-item palette-item-port"
+                    draggable
+                    onDragStart={(event) =>
+                      event.dataTransfer.setData('application/x-node-type', 'compound-input')
+                    }
+                    title="Drop inside a compound body — exposes one input port to the outer diagram."
+                  >
+                    <span>Compound Input</span>
+                    <small>input port</small>
+                  </div>
+                  <div
+                    className="palette-item palette-item-port"
+                    draggable
+                    onDragStart={(event) =>
+                      event.dataTransfer.setData('application/x-node-type', 'compound-output')
+                    }
+                    title="Drop inside a compound body — exposes one output port to the outer diagram."
+                  >
+                    <span>Compound Output</span>
+                    <small>output port</small>
+                  </div>
+                </>
+              )}
+              {compoundTypes.map((def) => (
+                <div
+                  key={def.id}
+                  className="palette-item palette-item-compound"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData('application/x-node-type', 'compound');
+                    event.dataTransfer.setData('application/x-compound-type', def.id);
+                  }}
+                >
+                  <span>{def.displayName}</span>
+                  <small>compound</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
 
       <div className="canvas-toolbar">
