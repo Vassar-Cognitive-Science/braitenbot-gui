@@ -566,6 +566,37 @@ body {
   font-family: var(--font-mono);
 }
 
+/* Trace-mode readouts attached to compound port handles. Inputs read
+   above the handle (which is itself above the node top); outputs read
+   below the handle (which is below the node bottom). */
+.input-port-value {
+  position: absolute;
+  top: -36px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+  color: #d4bc78;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.output-port-value {
+  position: absolute;
+  bottom: -36px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+  color: #d4bc78;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 /* Compound instance — same dimensions as a regular node, distinctive
    double border + muted blue accent so it reads as a subdiagram. */
 .diagram-node.node-compound {

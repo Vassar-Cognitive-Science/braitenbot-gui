@@ -5,7 +5,7 @@ import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts } from '../types/
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
-import { formatTraceValue } from '../hooks/useTraceSimulation';
+import { formatTraceValue, type TraceResult } from '../hooks/useTraceSimulation';
 import { useScopeSimulation } from '../hooks/useScopeSimulation';
 import { Oscilloscope } from './Oscilloscope';
 import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
@@ -444,15 +444,75 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
 
   const [scopeOpen, setScopeOpen] = useState(true);
+
+  // When editing a compound body whose type is instantiated in the
+  // parent diagram, we drive the body's trace from the LIVE top-level
+  // simulation rather than treating the body in isolation. tracePrefix
+  // is the concatenated chain of instance ids ("inst-1/inst-2/") needed
+  // to map a visible body node to its flattened sim id, or null when
+  // any level of editingPath has no matching instance (in which case
+  // we fall back to the body's own slider-driven simulation).
+  const tracePrefix = useMemo<string | null>(() => {
+    if (editingPath.length === 0) return '';
+    let prefix = '';
+    let scopeNodes: DiagramNode[] = topNodes;
+    for (const typeId of editingPath) {
+      const instance = scopeNodes.find(
+        (n) => n.type === 'compound' && n.compoundTypeId === typeId,
+      );
+      if (!instance) return null;
+      prefix = prefix + instance.id + '/';
+      const def = compoundTypes.find((c) => c.id === typeId);
+      if (!def) return null;
+      scopeNodes = def.body.nodes;
+    }
+    return prefix;
+  }, [editingPath, topNodes, compoundTypes]);
+  const useTopForTrace = tracePrefix !== null;
+
   const scope = useScopeSimulation(
-    traceMode ? nodes : [],
-    traceMode ? connections : [],
+    traceMode ? (useTopForTrace ? topNodes : nodes) : [],
+    traceMode ? (useTopForTrace ? topConnections : connections) : [],
     sensorValues,
     traceMode,
     loopPeriodMs,
     compoundTypes,
   );
-  const traceResult = scope.current;
+
+  // When the scope simulates the top level on behalf of a body view, the
+  // raw nodeValues / edgeSignals are keyed by flattened ids. Remap them
+  // back to the body's local ids so the existing display code (which
+  // looks up by visible-view ids) keeps working.
+  const traceResult = useMemo<TraceResult>(() => {
+    if (!useTopForTrace || !tracePrefix) return scope.current;
+    const nodeValues: Record<string, number> = {};
+    const edgeSignals: Record<string, number> = {};
+    const disconnected = new Set<string>();
+    for (const node of nodes) {
+      const fullId = tracePrefix + node.id;
+      if (fullId in scope.current.nodeValues) {
+        nodeValues[node.id] = scope.current.nodeValues[fullId];
+      }
+      if (scope.current.disconnected.has(fullId)) disconnected.add(node.id);
+    }
+    for (const conn of connections) {
+      const fullId = tracePrefix + conn.id;
+      if (fullId in scope.current.edgeSignals) {
+        edgeSignals[conn.id] = scope.current.edgeSignals[fullId];
+      }
+    }
+    return { nodeValues, edgeSignals, disconnected };
+  }, [scope.current, useTopForTrace, tracePrefix, nodes, connections]);
+
+  // Look up the trace value at a specific port handle on a compound
+  // instance. Used to draw per-port readouts on instance nodes.
+  const lookupPortValue = useCallback(
+    (nodeId: string, portId: string): number | undefined => {
+      const prefix = tracePrefix ?? '';
+      return scope.current.nodeValues[`${prefix}${nodeId}/${portId}`];
+    },
+    [tracePrefix, scope.current.nodeValues],
+  );
   const [pulsingId, setPulsingId] = useState<string | null>(null);
   const pulseSensor = useCallback(
     (id: string) => {
@@ -1719,12 +1779,18 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           const nodeType = TYPE_BY_ID[node.type];
           const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
           const isDisconnected = traceMode && traceResult.disconnected.has(node.id);
-          // Compound input anchors get the sensor-style slider treatment
-          // when editing a body in isolation — there's no outer scope to
-          // drive them, so the user injects test values directly.
+          // Compound input anchors get the sensor-style slider only when
+          // there's no live outer signal driving them — i.e., when the
+          // user is editing a body in isolation (useTopForTrace=false).
+          // When an instance exists in the parent, the trace already
+          // reflects the real incoming value, so the slider would be a
+          // no-op and is hidden.
           const isCompoundInput = node.type === 'compound-input';
           const hasSlider =
-            traceMode && (nodeType.kind === 'sensor' || nodeType.kind === 'constant' || isCompoundInput);
+            traceMode &&
+            (nodeType.kind === 'sensor' ||
+              nodeType.kind === 'constant' ||
+              (isCompoundInput && !useTopForTrace));
 
           let nodeMeta: string;
           if (traceVal !== undefined) {
@@ -1891,6 +1957,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 return ports.map((port, i) => {
                   const leftPct = ((i + 0.5) / ports.length) * 100;
                   const label = isCompound ? port : port[0].toUpperCase();
+                  const portValue = isCompound && traceMode
+                    ? lookupPortValue(node.id, port)
+                    : undefined;
                   return (
                     <span key={port}>
                       <button
@@ -1909,6 +1978,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       >
                         {label}
                       </span>
+                      {portValue !== undefined && (
+                        <span
+                          className="output-port-value"
+                          style={{ left: `${leftPct}%` }}
+                          aria-hidden="true"
+                        >
+                          {formatTraceValue(portValue)}
+                        </span>
+                      )}
                     </span>
                   );
                 });
@@ -1927,6 +2005,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 }
                 return inputs.map((port, i) => {
                   const leftPct = ((i + 0.5) / inputs.length) * 100;
+                  const portValue = node.type === 'compound' && traceMode
+                    ? lookupPortValue(node.id, port)
+                    : undefined;
                   return (
                     <span key={port}>
                       <button
@@ -1944,6 +2025,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                       >
                         {port}
                       </span>
+                      {portValue !== undefined && (
+                        <span
+                          className="input-port-value"
+                          style={{ left: `${leftPct}%` }}
+                          aria-hidden="true"
+                        >
+                          {formatTraceValue(portValue)}
+                        </span>
+                      )}
                     </span>
                   );
                 });
