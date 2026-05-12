@@ -731,6 +731,88 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setConnections,
   ]);
 
+  // True when the selection is exactly one compound instance — that's the
+  // only state in which "Ungroup" makes sense.
+  const ungroupCandidate = useMemo(() => {
+    if (selectedNodeIds.size !== 1) return null;
+    const id = [...selectedNodeIds][0];
+    const node = nodes.find((n) => n.id === id);
+    if (!node || node.type !== 'compound' || !node.compoundTypeId) return null;
+    const def = compoundTypes.find((c) => c.id === node.compoundTypeId);
+    if (!def) return null;
+    return { node, def };
+  }, [selectedNodeIds, nodes, compoundTypes]);
+
+  // Ungroup: inline one compound instance back into its parent. Inverse of
+  // grouping — port anchors become compute-summation pass-throughs so any
+  // weight/transfer that was on the outer edge composes correctly with the
+  // unit-weight internal edges we generated at group time. Nested compounds
+  // inside the body stay as compound instances (single-level expansion).
+  const handleUngroup = useCallback(() => {
+    if (!ungroupCandidate) return;
+    const { node: instance, def } = ungroupCandidate;
+    pushUndo();
+
+    const prefix = `${instance.id}/`;
+    const idRemap = new Map<string, string>();
+    for (const n of def.body.nodes) idRemap.set(n.id, prefix + n.id);
+
+    // Translate body positions so the body's centroid lands on the instance.
+    const bodyXs = def.body.nodes.map((n) => n.x);
+    const bodyYs = def.body.nodes.map((n) => n.y);
+    const bodyCx = bodyXs.length ? (Math.min(...bodyXs) + Math.max(...bodyXs)) / 2 : 0;
+    const bodyCy = bodyYs.length ? (Math.min(...bodyYs) + Math.max(...bodyYs)) / 2 : 0;
+    const dx = instance.x - bodyCx;
+    const dy = instance.y - bodyCy;
+
+    const inlinedNodes: DiagramNode[] = def.body.nodes.map((n) => ({
+      ...n,
+      id: idRemap.get(n.id)!,
+      type:
+        n.type === 'compound-input' || n.type === 'compound-output'
+          ? 'compute-summation'
+          : n.type,
+      x: n.x + dx,
+      y: n.y + dy,
+    }));
+    const inlinedConns: DiagramConnection[] = def.body.connections.map((c) => ({
+      ...c,
+      id: prefix + c.id,
+      from: idRemap.get(c.from) ?? c.from,
+      to: idRemap.get(c.to) ?? c.to,
+    }));
+
+    // Rewire external edges that referenced this instance via a port. An
+    // edge without a port is dropped (the validator surfaces these).
+    const rewiredExternal: DiagramConnection[] = [];
+    for (const conn of connections) {
+      if (conn.from === instance.id) {
+        if (!conn.fromPort) continue;
+        const anchorId = prefix + conn.fromPort;
+        if (!idRemap.has(conn.fromPort)) continue;
+        const { fromPort: _fp, toPort: _tp, ...rest } = conn;
+        void _fp;
+        void _tp;
+        rewiredExternal.push({ ...rest, from: anchorId });
+      } else if (conn.to === instance.id) {
+        if (!conn.toPort) continue;
+        const anchorId = prefix + conn.toPort;
+        if (!idRemap.has(conn.toPort)) continue;
+        const { fromPort: _fp, toPort: _tp, ...rest } = conn;
+        void _fp;
+        void _tp;
+        rewiredExternal.push({ ...rest, to: anchorId });
+      } else {
+        rewiredExternal.push(conn);
+      }
+    }
+
+    setNodes((prev) => [...prev.filter((n) => n.id !== instance.id), ...inlinedNodes]);
+    setConnections([...rewiredExternal, ...inlinedConns]);
+    setSelectedNodeIds(new Set());
+    setConfigTarget(null);
+  }, [ungroupCandidate, connections, pushUndo, setNodes, setConnections]);
+
   const handleGenerate = useCallback(() => {
     // Codegen always targets the canonical top-level diagram, even if the
     // user is currently inside a compound body.
@@ -1329,6 +1411,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             {selectedNodeIds.size >= 2
               ? `Group ${selectedNodeIds.size} into Compound`
               : 'Group into Compound'}
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={handleUngroup}
+            disabled={!ungroupCandidate}
+            title={
+              ungroupCandidate
+                ? `Inline ${ungroupCandidate.def.displayName} back into this diagram.`
+                : 'Select a single compound instance to ungroup it.'
+            }
+          >
+            Ungroup
           </button>
         </div>
 
