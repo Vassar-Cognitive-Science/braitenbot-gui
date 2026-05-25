@@ -50,30 +50,18 @@ body {
   padding: 1rem;
 }
  
-.minimal-header h1 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.minimal-header p {
-  margin: 0.35rem 0 0;
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
  
 .diagram-layout {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.75rem;
-  min-height: calc(100vh - 110px);
+  height: calc(100vh - 2rem);
+  max-height: calc(100vh - 2rem);
 }
 
 .diagram-layout > .node-palette {
-  grid-row: 1 / -1;
+  grid-row: 1 / 3;
 }
 
 .diagram-layout > .canvas-toolbar {
@@ -99,12 +87,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  /* Allow the palette to scroll independently when its content exceeds
-   * the available column height, instead of pushing the canvas down. The
-   * min-height:0 is the grid escape hatch that lets a flex child
-   * actually shrink and overflow rather than overflow its grid cell. */
   overflow-y: auto;
   min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.node-palette::-webkit-scrollbar {
+  width: 4px;
+}
+
+.node-palette::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.node-palette::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.node-palette::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 .palette-group {
@@ -238,6 +241,21 @@ body {
     linear-gradient(to bottom, rgba(58, 56, 46, 0.25) 1px, transparent 1px) 0 0 / 16px 16px,
     var(--surface);
   cursor: grab;
+}
+
+.canvas-zoom-overlay {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.2rem;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 .diagram-canvas.panning,
@@ -983,6 +1001,26 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-family: inherit;
+}
+
+.serial-error-msg:hover {
+  color: #ff7a8c;
+}
+
+.upload-error-section {
+  margin: 0.4rem 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
 }
 
 .serial-unsupported {
@@ -994,7 +1032,7 @@ body {
 .canvas-toolbar {
   display: flex;
   align-items: end;
-  gap: 0.65rem;
+  gap: 0.5rem 0.65rem;
   padding: 0.45rem 0.65rem;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1027,9 +1065,6 @@ body {
   flex-shrink: 0;
 }
 
-.toolbar-spacer {
-  flex: 1;
-}
 
 /* Base button — ghost default */
 .toolbar-btn {
@@ -1091,16 +1126,6 @@ body {
   font-weight: 600;
 }
 
-/* Upload uses teal to distinguish from generate */
-.toolbar-upload {
-  background: rgba(78, 204, 163, 0.15);
-  border-color: #4ecca3;
-  color: #4ecca3;
-}
-
-.toolbar-upload:hover {
-  background: rgba(78, 204, 163, 0.28);
-}
 
 /* Connect inherits secondary, uses accent color */
 .toolbar-connect {
@@ -1113,107 +1138,6 @@ body {
   color: #e94560;
 }
 
-/* Reset — destructive, quiet by default, two-step confirm */
-.toolbar-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.38rem;
-  padding-left: 0.55rem;
-  padding-right: 0.6rem;
-  font-variant-numeric: tabular-nums;
-  transition:
-    color 160ms ease-out,
-    border-color 160ms ease-out,
-    background-color 160ms ease-out,
-    box-shadow 160ms ease-out,
-    transform 90ms ease-out;
-}
-
-.toolbar-reset-icon {
-  flex-shrink: 0;
-  transform-origin: 50% 55%;
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.toolbar-reset-label {
-  display: inline-block;
-  min-width: 3.5em;
-  text-align: left;
-}
-
-.toolbar-reset:hover:not(:disabled):not(.is-armed) {
-  color: #e74c3c;
-  border-color: rgba(231, 76, 60, 0.42);
-}
-
-.toolbar-reset:hover:not(:disabled) .toolbar-reset-icon {
-  transform: rotate(-55deg);
-}
-
-.toolbar-reset:focus-visible {
-  outline: none;
-  border-color: rgba(231, 76, 60, 0.65);
-  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.28);
-}
-
-.toolbar-reset:active:not(:disabled) {
-  transform: translateY(0.5px);
-}
-
-.toolbar-reset:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-  color: var(--muted);
-  border-color: transparent;
-}
-
-.toolbar-reset:disabled .toolbar-reset-icon {
-  transform: none;
-}
-
-.toolbar-reset.is-armed {
-  color: #f6dcd7;
-  border-color: rgba(231, 76, 60, 0.7);
-  background: rgba(231, 76, 60, 0.16);
-  font-weight: 600;
-  animation: toolbar-reset-arm-pulse 1.6s ease-in-out infinite;
-}
-
-.toolbar-reset.is-armed:hover:not(:disabled) {
-  background: rgba(231, 76, 60, 0.26);
-  color: #fff;
-  border-color: rgba(231, 76, 60, 0.85);
-}
-
-.toolbar-reset.is-armed .toolbar-reset-icon {
-  transform: rotate(-135deg);
-  color: #ff8f85;
-}
-
-@keyframes toolbar-reset-arm-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.22);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .toolbar-reset,
-  .toolbar-reset-icon {
-    transition: none;
-  }
-  .toolbar-reset.is-armed {
-    animation: none;
-  }
-  .toolbar-reset:hover:not(:disabled) .toolbar-reset-icon {
-    transform: none;
-  }
-  .toolbar-reset:active:not(:disabled) {
-    transform: none;
-  }
-}
 
 .toolbar-serial {
   gap: 0.35rem;
@@ -1578,6 +1502,25 @@ body {
 .connection-config-trigger.trace-signal {
   border-color: rgba(196, 168, 98, 0.5);
   color: #d4bc78;
+}
+
+@media (max-width: 1200px) {
+  .canvas-toolbar {
+    align-items: center;
+  }
+
+  .canvas-toolbar .toolbar-group-label {
+    display: none;
+  }
+
+  .canvas-toolbar .toolbar-group {
+    flex-wrap: nowrap;
+  }
+
+  .canvas-toolbar .toolbar-separator {
+    align-self: center;
+    height: 1.2rem;
+  }
 }
 
 @media (max-width: 860px) {

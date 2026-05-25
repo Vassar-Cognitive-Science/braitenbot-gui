@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, SetStateAction } from 'react';
+import type { Dispatch, DragEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
@@ -73,7 +73,7 @@ function paletteItemTag(nodeType: NodeTypeDefinition): string {
   return nodeType.kind;
 }
 
-type PaletteSection = 'sensor' | 'compute' | 'output';
+type PaletteSection = 'sensor' | 'compute' | 'output' | 'compound';
 const PALETTE_COLLAPSED_KEY = 'braitenbot-gui:palette-collapsed:v1';
 
 function loadCollapsedPaletteSections(): Record<PaletteSection, boolean> {
@@ -81,6 +81,7 @@ function loadCollapsedPaletteSections(): Record<PaletteSection, boolean> {
     sensor: false,
     compute: false,
     output: false,
+    compound: false,
   };
   try {
     const raw = localStorage.getItem(PALETTE_COLLAPSED_KEY);
@@ -91,6 +92,7 @@ function loadCollapsedPaletteSections(): Record<PaletteSection, boolean> {
       sensor: !!parsed.sensor,
       compute: !!parsed.compute,
       output: !!parsed.output,
+      compound: !!parsed.compound,
     };
   } catch {
     return fallback;
@@ -392,9 +394,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
   }, [collapsedPaletteSections]);
   const undoStackRef = useRef<{ nodes: DiagramNode[]; connections: DiagramConnection[] }[]>([]);
-  const [resetArmed, setResetArmed] = useState(false);
-  const resetArmTimerRef = useRef<number | null>(null);
-  const resetButtonRef = useRef<HTMLButtonElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panStateRef = useRef<{ startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null>(null);
@@ -570,51 +569,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     isPristine: isDiagramPristine,
     resetToDefault,
   });
-
-  const clearResetArmTimer = useCallback(() => {
-    if (resetArmTimerRef.current !== null) {
-      window.clearTimeout(resetArmTimerRef.current);
-      resetArmTimerRef.current = null;
-    }
-  }, []);
-
-  const disarmReset = useCallback(() => {
-    clearResetArmTimer();
-    setResetArmed(false);
-  }, [clearResetArmTimer]);
-
-  useEffect(() => () => clearResetArmTimer(), [clearResetArmTimer]);
-
-  useEffect(() => {
-    if (isDiagramPristine && resetArmed) disarmReset();
-  }, [isDiagramPristine, resetArmed, disarmReset]);
-
-  const handleResetClick = useCallback(() => {
-    if (isDiagramPristine) return;
-    if (!resetArmed) {
-      setResetArmed(true);
-      clearResetArmTimer();
-      resetArmTimerRef.current = window.setTimeout(() => setResetArmed(false), 3500);
-      return;
-    }
-    clearResetArmTimer();
-    pushUndo();
-    setNodes(makeWheelNodes(robotLayout));
-    setConnections(START_CONNECTIONS);
-    setConfigTarget(null);
-    setResetArmed(false);
-    resetButtonRef.current?.blur();
-  }, [isDiagramPristine, resetArmed, clearResetArmTimer, pushUndo, robotLayout]);
-
-  const handleResetKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (event.key === 'Escape' && resetArmed) {
-        event.preventDefault();
-        disarmReset();
-      }
-    },
-    [resetArmed, disarmReset],
-  );
 
   // Group the currently-selected nodes into a new compound. Boundary-
   // crossing edges become port anchors; weights and transfers on those
@@ -1349,10 +1303,27 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {(compoundTypes.length > 0 || editingPath.length > 0) && (
         <div className="palette-group">
           <h2 className="palette-category palette-category-compound">
-            <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
-            Compounds
+            <button
+              type="button"
+              className="palette-category-toggle"
+              aria-expanded={!collapsedPaletteSections.compound}
+              aria-controls="palette-group-compound"
+              onClick={() =>
+                setCollapsedPaletteSections((prev) => ({ ...prev, compound: !prev.compound }))
+              }
+            >
+              <span
+                className={`palette-chevron ${collapsedPaletteSections.compound ? 'collapsed' : ''}`}
+                aria-hidden="true"
+              >
+                ▾
+              </span>
+              <span className="palette-category-dot palette-dot-compound" aria-hidden="true" />
+              Compounds
+            </button>
           </h2>
-          <div className="palette-group-items">
+          {!collapsedPaletteSections.compound && (
+          <div id="palette-group-compound" className="palette-group-items">
             {editingPath.length > 0 && (
                 <>
                   <div
@@ -1394,79 +1365,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </div>
               ))}
           </div>
+          )}
         </div>
         )}
       </aside>
 
       <div className="canvas-toolbar">
-        <div className="toolbar-group toolbar-view">
-          <span className="toolbar-group-label">View</span>
-          <button
-            type="button"
-            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
-            onClick={() => zoomByStep(1 / ZOOM_STEP)}
-            disabled={zoom <= MIN_ZOOM + 1e-6}
-            aria-label="Zoom out"
-            title="Zoom out"
-          >
-            <svg
-              className="toolbar-icon"
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="7" cy="7" r="4.5" />
-              <path d="M10.3 10.3 l3.2 3.2" />
-              <path d="M5 7 h4" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="toolbar-btn toolbar-tertiary toolbar-zoom-level"
-            onClick={resetView}
-            title="Reset view (100%)"
-            aria-label={`Current zoom ${Math.round(zoom * 100)}%. Click to reset.`}
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            type="button"
-            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
-            onClick={() => zoomByStep(ZOOM_STEP)}
-            disabled={zoom >= MAX_ZOOM - 1e-6}
-            aria-label="Zoom in"
-            title="Zoom in"
-          >
-            <svg
-              className="toolbar-icon"
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="7" cy="7" r="4.5" />
-              <path d="M10.3 10.3 l3.2 3.2" />
-              <path d="M5 7 h4" />
-              <path d="M7 5 v4" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="toolbar-separator" />
-
         <div className="toolbar-group">
           <span className="toolbar-group-label">Group</span>
           <button
@@ -1481,8 +1385,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             }
           >
             {selectedNodeIds.size >= 2
-              ? `Group ${selectedNodeIds.size} into Compound`
-              : 'Group into Compound'}
+              ? `Group ${selectedNodeIds.size}`
+              : 'Group'}
           </button>
           <button
             type="button"
@@ -1514,8 +1418,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div className="toolbar-separator" />
 
         <div className="toolbar-group">
-          <span className="toolbar-group-label">Code</span>
-          <label className="toolbar-setting">
+          <span className="toolbar-group-label">Sketch</span>
+          <label className="toolbar-setting" title="Delay between sensor reads in the generated Arduino loop">
             <span className="toolbar-setting-label">Loop</span>
             <input
               type="number"
@@ -1537,8 +1441,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             Generate
           </button>
         </div>
-
-        <div className="toolbar-separator" />
 
         <div className="toolbar-group toolbar-serial">
           <span className="toolbar-group-label">Device</span>
@@ -1573,14 +1475,30 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 ))}
               </select>
               <button
-                className="toolbar-btn toolbar-tertiary"
+                className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
                 onClick={refreshBoards}
                 title="Rescan for connected Arduinos"
+                aria-label="Refresh boards"
               >
-                Refresh
+                <svg
+                  className="toolbar-icon"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.75" />
+                  <path d="M2.3 2.6v3.4h3.4" />
+                </svg>
               </button>
               <button
-                className="toolbar-btn toolbar-primary toolbar-upload"
+                className="toolbar-btn toolbar-primary"
                 onClick={handleUploadToArduino}
                 disabled={
                   !selectedBoard ||
@@ -1613,50 +1531,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           )}
         </div>
 
-        <div className="toolbar-spacer" />
-
-        <button
-          ref={resetButtonRef}
-          type="button"
-          className={`toolbar-btn toolbar-tertiary toolbar-reset${resetArmed ? ' is-armed' : ''}`}
-          onClick={handleResetClick}
-          onKeyDown={handleResetKeyDown}
-          onBlur={disarmReset}
-          disabled={isDiagramPristine}
-          aria-live="polite"
-          aria-label={
-            resetArmed
-              ? 'Confirm clearing the diagram'
-              : 'Clear the diagram and restore defaults'
-          }
-          title={
-            isDiagramPristine
-              ? 'Diagram is already empty'
-              : resetArmed
-                ? 'Click again to confirm — Esc to cancel'
-                : 'Clear all nodes and connections'
-          }
-        >
-          <svg
-            className="toolbar-reset-icon"
-            width="12"
-            height="12"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.75" />
-            <path d="M2.3 2.6v3.4h3.4" />
-          </svg>
-          <span className="toolbar-reset-label">
-            {resetArmed ? 'Confirm reset' : 'Reset'}
-          </span>
-        </button>
       </div>
 
       <div
@@ -2524,6 +2398,71 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </div>
           )}
         </aside>
+
+        <div className="canvas-zoom-overlay">
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
+            onClick={() => zoomByStep(1 / ZOOM_STEP)}
+            disabled={zoom <= MIN_ZOOM + 1e-6}
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <svg
+              className="toolbar-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.3 10.3 l3.2 3.2" />
+              <path d="M5 7 h4" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-level"
+            onClick={resetView}
+            title="Reset view (100%)"
+            aria-label={`Current zoom ${Math.round(zoom * 100)}%. Click to reset.`}
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
+            onClick={() => zoomByStep(ZOOM_STEP)}
+            disabled={zoom >= MAX_ZOOM - 1e-6}
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <svg
+              className="toolbar-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.3 10.3 l3.2 3.2" />
+              <path d="M5 7 h4" />
+              <path d="M7 5 v4" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {traceMode && (
