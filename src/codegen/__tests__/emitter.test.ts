@@ -81,7 +81,7 @@ describe('generateSketch', () => {
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
-    // Left wheel: +left * 5 (µs per signal unit, signal is -100..100).
+    // Left wheel: +left * 5.
     // Right wheel: -right * 5 (inverted mounting).
     expect(code).toMatch(/servo_Left_Wheel\.writeMicroseconds\(1500 \+ \(int\)\(left\s+\* 5\.0\)\)/);
     expect(code).toMatch(/servo_Right_Wheel\.writeMicroseconds\(1500 - \(int\)\(right \* 5\.0\)\)/);
@@ -261,7 +261,29 @@ describe('generateSketch', () => {
 
     expect(code).toContain('digitalRead(SENSOR_Digital_Sensor) * 100.0');
     expect(code).toContain('float sig_Digital_Sensor');
-    expect(code).toContain('pinMode');
+    expect(code).toContain('pinMode(SENSOR_Digital_Sensor, INPUT)');
+  });
+
+  it('inverts digital sensor reads when INPUT_PULLUP is enabled', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'dig-1',
+        type: 'sensor-digital',
+        label: 'Bumper',
+        arduinoPort: '2',
+        pullup: true,
+      }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'dig-1', to: 'motor-left', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    expect(code).toContain('pinMode(SENSOR_Bumper, INPUT_PULLUP)');
+    expect(code).toContain('(1 - digitalRead(SENSOR_Bumper)) * 100.0');
+    expect(code).not.toMatch(/=\s*digitalRead\(SENSOR_Bumper\)\s*\*/);
   });
 
   it('emits a TCS34725 driver and one variable per channel for color sensors', () => {

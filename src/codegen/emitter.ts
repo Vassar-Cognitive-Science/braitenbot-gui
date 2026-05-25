@@ -235,8 +235,14 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
       const mode = node.pullup ? 'INPUT_PULLUP' : 'INPUT';
       return `${indent}pinMode(SENSOR_${readableId(node)}, ${mode});`;
     },
-    loop: (node, { indent }) =>
-      `${indent}float ${varName(node)} = digitalRead(SENSOR_${readableId(node)}) * 100.0;`,
+    loop: (node, { indent }) => {
+      // With INPUT_PULLUP the switch shorts the pin to GND when pressed,
+      // so the raw read is inverted relative to "active = signal".
+      const read = node.pullup
+        ? `(1 - digitalRead(SENSOR_${readableId(node)}))`
+        : `digitalRead(SENSOR_${readableId(node)})`;
+      return `${indent}float ${varName(node)} = ${read} * 100.0;`;
+    },
   },
   'sensor-color': {
     // One bulk I2C read per loop; each channel is exposed as its own
@@ -494,6 +500,31 @@ function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
     'void drive(float left, float right) {',
     '  left  = constrain(left,  -100.0, 100.0);',
     '  right = constrain(right, -100.0, 100.0);',
+    '#if defined(ARDUINO_ARCH_RENESAS)',
+    '  // Safety: when a USB host is actively configured (e.g. for upload or',
+    '  // tethered debugging), hold the wheels neutral so the bot can\'t drive',
+    '  // off the bench. Other behaviors (servos, displays, sensor reads) still',
+    '  // run normally. The built-in LED blinks while the safeguard is active',
+    '  // so it\'s obvious at a glance that the bot is "disarmed".',
+    '  //',
+    '  // We read DVSQ (Device State, bits 6:4 of INTSTS0). 0b011 = Configured,',
+    '  // i.e. host has enumerated and is talking. When the cable is removed',
+    '  // DVSQ transitions to a Suspended state (0b1xx) and we re-arm.',
+    '  // (Note: VBSTS is stuck high on the R4 Minima because the chip\'s VBUS',
+    '  // sense pin is tied to the 5V rail, so we can\'t use it for this.)',
+    '  static bool drive_led_inited = false;',
+    '  if (!drive_led_inited) { pinMode(LED_BUILTIN, OUTPUT); drive_led_inited = true; }',
+    '  uint8_t dvsq = (R_USB_FS0->INTSTS0 >> 4) & 0x7;',
+    '  if (dvsq == 0b011) {',
+    '    left = 0.0;',
+    '    right = 0.0;',
+    '    static bool drive_led_state = false;',
+    '    drive_led_state = !drive_led_state;',
+    '    digitalWrite(LED_BUILTIN, drive_led_state ? HIGH : LOW);',
+    '  } else {',
+    '    digitalWrite(LED_BUILTIN, LOW);',
+    '  }',
+    '#endif',
     `  servo_${left}.writeMicroseconds(1500 + (int)(left  * 5.0));`,
     `  servo_${right}.writeMicroseconds(1500 - (int)(right * 5.0));`,
     '}',
