@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
-import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts } from '../types/diagram';
+import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
@@ -371,6 +371,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const codeDialogRef = useRef<HTMLDialogElement | null>(null);
+  const [showUploadErrorDialog, setShowUploadErrorDialog] = useState(false);
+  const uploadErrorDialogRef = useRef<HTMLDialogElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedLayoutRef = useRef<RobotOverlayLayout | null>(null);
   const fallbackIdCounterRef = useRef(0);
@@ -943,6 +945,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       dialog.close();
     }
   }, [showCodeDialog]);
+
+  useEffect(() => {
+    const dialog = uploadErrorDialogRef.current;
+    if (!dialog) return;
+    if (showUploadErrorDialog && !dialog.open) {
+      dialog.showModal();
+    } else if (!showUploadErrorDialog && dialog.open) {
+      dialog.close();
+    }
+  }, [showUploadErrorDialog]);
 
   const makeId = (prefix: string): string => {
     const uuid =
@@ -1588,12 +1600,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                         : 'Upload to Arduino'}
               </button>
               {lastResult && !lastResult.success && (
-                <span
+                <button
+                  type="button"
                   className="serial-error-msg"
-                  title={lastResult.uploadOutput || lastResult.compileOutput}
+                  onClick={() => setShowUploadErrorDialog(true)}
+                  title="Show full compile/upload output"
                 >
                   ⓘ details
-                </span>
+                </button>
               )}
             </>
           )}
@@ -1956,7 +1970,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 const isCompound = node.type === 'compound';
                 return ports.map((port, i) => {
                   const leftPct = ((i + 0.5) / ports.length) * 100;
-                  const label = isCompound ? port : port[0].toUpperCase();
+                  const label = isCompound ? getPortLabel(port, node, compoundTypes) : port[0].toUpperCase();
                   const portValue = isCompound && traceMode
                     ? lookupPortValue(node.id, port)
                     : undefined;
@@ -2023,7 +2037,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                         style={{ left: `${leftPct}%` }}
                         aria-hidden="true"
                       >
-                        {port}
+                        {getPortLabel(port, node, compoundTypes)}
                       </span>
                       {portValue !== undefined && (
                         <span
@@ -2098,13 +2112,31 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 <input
                   type="text"
                   value={selectedNode.label}
-                  onChange={(event) =>
-                    setNodes((prev) =>
-                      prev.map((node) =>
-                        node.id === selectedNode.id ? { ...node, label: event.target.value } : node,
-                      ),
-                    )
-                  }
+                  onChange={(event) => {
+                    const newLabel = event.target.value;
+                    if (selectedNode.type === 'compound' && selectedNode.compoundTypeId) {
+                      const typeId = selectedNode.compoundTypeId;
+                      setCompoundTypes((prev) =>
+                        prev.map((c) =>
+                          c.id === typeId ? { ...c, displayName: newLabel } : c,
+                        ),
+                      );
+                      const syncInstances = (prev: DiagramNode[]) =>
+                        prev.map((node) =>
+                          node.type === 'compound' && node.compoundTypeId === typeId
+                            ? { ...node, label: newLabel }
+                            : node,
+                        );
+                      setNodes(syncInstances);
+                      if (currentCompoundId) setTopNodes(syncInstances);
+                    } else {
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id ? { ...node, label: newLabel } : node,
+                        ),
+                      );
+                    }
+                  }}
                 />
               </label>
 
@@ -2547,6 +2579,44 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {!generatedCode && codeGenErrors.some((e) => e.severity === 'error') && (
           <p className="code-error-hint">Fix the errors above before generating code.</p>
         )}
+        </div>
+      </dialog>
+
+      <dialog
+        ref={uploadErrorDialogRef}
+        className="code-dialog"
+        onClose={() => setShowUploadErrorDialog(false)}
+        onClick={(e) => {
+          if (e.target === uploadErrorDialogRef.current) setShowUploadErrorDialog(false);
+        }}
+      >
+        <div className="code-dialog-inner">
+          <div className="code-dialog-header">
+            <h2>Upload failed</h2>
+            <button
+              type="button"
+              className="config-close"
+              onClick={() => setShowUploadErrorDialog(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          {lastResult?.compileOutput && (
+            <>
+              <h3 className="upload-error-section">Compile output</h3>
+              <pre className="code-preview"><code>{lastResult.compileOutput}</code></pre>
+            </>
+          )}
+          {lastResult?.uploadOutput && (
+            <>
+              <h3 className="upload-error-section">Upload output</h3>
+              <pre className="code-preview"><code>{lastResult.uploadOutput}</code></pre>
+            </>
+          )}
+          {!lastResult?.compileOutput && !lastResult?.uploadOutput && (
+            <p>No output captured.</p>
+          )}
         </div>
       </dialog>
     </section>

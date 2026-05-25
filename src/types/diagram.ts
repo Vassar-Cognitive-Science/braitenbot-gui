@@ -147,6 +147,21 @@ export function getInputPorts(
   return undefined;
 }
 
+/**
+ * Look up the display label for a compound port (input or output).
+ * Falls back to the raw port ID if the compound type or node is not found.
+ */
+export function getPortLabel(
+  portId: string,
+  node: { compoundTypeId?: string },
+  compoundTypes: CompoundTypeDefinition[],
+): string {
+  if (!node.compoundTypeId) return portId;
+  const def = compoundTypes.find((c) => c.id === node.compoundTypeId);
+  const anchor = def?.body.nodes.find((n) => n.id === portId);
+  return anchor?.label ?? portId;
+}
+
 /** Type guard for runtime `fromPort` values loaded from persisted diagrams. */
 export function isValidOutputPort(
   typeId: NodeTypeId,
