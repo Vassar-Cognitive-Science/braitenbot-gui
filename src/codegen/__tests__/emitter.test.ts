@@ -69,7 +69,8 @@ describe('generateSketch', () => {
     expect(code).toContain('void drive(float left, float right)');
     expect(code).toContain('drive(input_Left_Wheel, input_Right_Wheel)');
     expect(code).toContain('0.8000');
-    expect(code).toContain('delay(20)');
+    expect(code).toContain('unsigned long _loopStart = millis();');
+    expect(code).toContain('if (_elapsed < 20) delay(20 - _elapsed);');
   });
 
   it('inverts the right servo inside the drive() helper', () => {
@@ -391,7 +392,7 @@ describe('generateSketch', () => {
         x: 0,
         y: 0,
         clkPin: '2',
-        dioPin: '3',
+        gpioPin: '3',
         brightness: 5,
       },
     ];
@@ -403,8 +404,8 @@ describe('generateSketch', () => {
 
     expect(code).toContain('#include <TM1637Display.h>');
     expect(code).toContain('const int TM1637_Readout_CLK = 2;');
-    expect(code).toContain('const int TM1637_Readout_DIO = 3;');
-    expect(code).toContain('TM1637Display display_Readout(TM1637_Readout_CLK, TM1637_Readout_DIO);');
+    expect(code).toContain('const int TM1637_Readout_GPIO = 3;');
+    expect(code).toContain('TM1637Display display_Readout(TM1637_Readout_CLK, TM1637_Readout_GPIO, 5);');
     expect(code).toContain('display_Readout.setBrightness(5);');
     expect(code).toContain('display_Readout.clear();');
     // Aggregated input rounded and clamped to 4-digit display range.
@@ -494,7 +495,7 @@ describe('generateSketch', () => {
     // Zero would yield Infinity delay-buffer sizes; the clamp must keep it ≥ 1.
     const graph = buildGraph(nodes, connections, 0);
     expect(graph.loopPeriodMs).toBeGreaterThanOrEqual(1);
-    expect(generateSketch(graph)).toContain('delay(1)');
+    expect(generateSketch(graph)).toContain('if (_elapsed < 1) delay(1 - _elapsed);');
 
     // Absurdly large values must be clamped, not propagated.
     const bigGraph = buildGraph(nodes, connections, 100000);

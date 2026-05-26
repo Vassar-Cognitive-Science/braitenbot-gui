@@ -168,7 +168,7 @@ function emitProductAggregation(
 function pinConstantName(typeId: NodeTypeId, field: PinFieldId, sid: string): string {
   if (typeId === 'sensor-analog' || typeId === 'sensor-digital') return `SENSOR_${sid}`;
   if (typeId === 'display-tm1637') {
-    return field === 'clkPin' ? `TM1637_${sid}_CLK` : `TM1637_${sid}_DIO`;
+    return field === 'clkPin' ? `TM1637_${sid}_CLK` : `TM1637_${sid}_GPIO`;
   }
   if (typeId === 'digital-out') return `OUTPUT_${sid}_PIN`;
   return `SERVO_${sid}_PIN`;
@@ -376,7 +376,7 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
   'display-tm1637': {
     declareGlobal: (node) => {
       const sid = readableId(node);
-      return `TM1637Display display_${sid}(TM1637_${sid}_CLK, TM1637_${sid}_DIO);`;
+      return `TM1637Display display_${sid}(TM1637_${sid}_CLK, TM1637_${sid}_GPIO, 5);`;
     },
     setup: (node, { indent }) => {
       const sid = readableId(node);
@@ -603,7 +603,7 @@ export function generateSketch(graph: WiringGraph): string {
   sections.push('');
 
   // loop()
-  const loopLines: string[] = ['void loop() {'];
+  const loopLines: string[] = ['void loop() {', '  unsigned long _loopStart = millis();'];
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
   for (const nodeId of graph.executionOrder) {
     const node = nodeMap.get(nodeId);
@@ -631,7 +631,8 @@ export function generateSketch(graph: WiringGraph): string {
   }
 
   loopLines.push('');
-  loopLines.push(`  delay(${graph.loopPeriodMs});`);
+  loopLines.push(`  unsigned long _elapsed = millis() - _loopStart;`);
+  loopLines.push(`  if (_elapsed < ${graph.loopPeriodMs}) delay(${graph.loopPeriodMs} - _elapsed);`);
   loopLines.push('}');
 
   sections.push(loopLines.join('\n'));
