@@ -1,0 +1,19 @@
+.tc-figure {
+  margin: 1.5rem 0;
+  padding: 0;
+}
+
+.tc-chart-wrapper {
+  background: #12130f;
+  border: 1px solid #33342b;
+  border-radius: 6px;
+  padding: 0.5rem 0.25rem 0 0.25rem;
+}
+
+.tc-caption {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ifm-color-content-secondary, #888);
+  margin-top: 0.5rem;
+  font-style: italic;
+}

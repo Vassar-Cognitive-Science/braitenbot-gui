@@ -1,0 +1,133 @@
+---
+sidebar_position: 3
+title: "Tutorial: Obstacle Avoidance"
+---
+
+# Obstacle Avoidance
+
+The light follower is elegant, but it has a problem: it drives straight into things. Put a box between the robot and the light source and the robot plows right into it — it has no concept of "obstacle."
+
+In this tutorial, you'll add obstacle detection using IR proximity sensors and a new building block: the **Threshold** node. The result is a robot that drives forward exploring its environment and turns away when it gets too close to a wall or object — the most common behavior in hobby robotics.
+
+**Time:** 15 minutes
+**Prerequisites:** Completed [Light Follower](./light-follower)
+
+## The physical setup
+
+Mount two IR proximity sensors on the front of the robot, angled outward at about 30° from center — one pointing front-left, one front-right. These sensors output a higher analog voltage when an object is closer. Wire them to pins A0 and A1.
+
+Unlike the light sensors in the previous tutorial, proximity sensors don't give you useful *proportional* control. The voltage curve of an IR distance sensor is nonlinear and noisy — what matters is whether something is "close enough to worry about," not the exact distance. This is why we need a Threshold node: it converts the messy analog reading into a clean yes/no decision.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={600}
+  height={400}
+  robot={{ x: 300, y: 320, radius: 70 }}
+  nodes={[
+    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Obstacle', x: 20, y: 20, meta: 'A0' },
+    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Obstacle', x: 400, y: 20, meta: 'A1' },
+    { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 120, meta: '> 60' },
+    { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 120, meta: '> 60' },
+    { id: 'constant', type: 'constant', label: 'Forward (50)', x: 210, y: 80, meta: '50' },
+    { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 220 },
+    { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 220 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 155, y: 320 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 315, y: 320 },
+  ]}
+  connections={[
+    { from: 'left-sensor', to: 'left-thresh', weight: 1.0 },
+    { from: 'right-sensor', to: 'right-thresh', weight: 1.0 },
+    { from: 'constant', to: 'left-sum', weight: 1.0 },
+    { from: 'constant', to: 'right-sum', weight: 1.0 },
+    { from: 'left-thresh', to: 'right-sum', weight: -1.0, label: '-1.0' },
+    { from: 'right-thresh', to: 'left-sum', weight: -1.0, label: '-1.0' },
+    { from: 'left-sum', to: 'left-motor', weight: 1.0 },
+    { from: 'right-sum', to: 'right-motor', weight: 1.0 },
+  ]}
+  caption="Obstacle avoidance: constant forward drive with cross-wired threshold inhibition"
+/>
+
+## How it works
+
+The design combines two ideas from previous tutorials:
+
+1. **Constant forward drive** — a Constant node feeds both motors equally, so the robot always wants to drive forward at 50% speed.
+2. **Cross-wired inhibition** — when a threshold detects an obstacle, it sends a *negative* signal to the opposite motor, subtracting from the constant drive. This creates differential steering away from the obstacle.
+
+The Threshold node is the new piece. It watches its input and outputs either 0 (nothing detected) or 100 (obstacle detected). The negative weight on the cross-wire turns that 100 into -100 at the motor summation, which subtracts from the constant 50 and produces -50 — the motor reverses.
+
+## Step 1: Set up the baseline drive
+
+1. Drag a **Constant** node onto the canvas, set its value to **50**
+2. Add two **Summation** nodes — one for each motor
+3. Wire Constant → both Summations (weight 1.0), then each Summation → its Motor (weight 1.0)
+
+Test in trace mode: both motors should show 50. The robot drives straight forward.
+
+## Step 2: Add obstacle sensors
+
+1. Drag two **Analog Sensor** nodes onto the canvas
+2. Configure: Left Obstacle on port `A0`, Right Obstacle on port `A1`
+
+## Step 3: Add threshold nodes
+
+1. Drag two **Threshold** nodes onto the canvas
+2. Wire each sensor to its threshold (weight 1.0)
+3. Set both thresholds to **60**
+
+The threshold value determines how close an obstacle must be before the robot reacts. On a real robot, you'll need to calibrate this: hold an object at the distance you want the robot to start turning (roughly 15–20 cm for most IR sensors), read the sensor value in trace mode, and set the threshold just below that value.
+
+## Step 4: Cross-wire with negative weights
+
+1. Connect Left Detect → **Right** Summation (weight **-1.0**)
+2. Connect Right Detect → **Left** Summation (weight **-1.0**)
+
+The cross-wiring ensures the robot turns *away* from the obstacle — same principle as the light follower, but inverted (negative weight means inhibition instead of excitation).
+
+## Step 5: Test the behavior
+
+Activate trace mode and walk through these scenarios:
+
+**No obstacles** — both sensors at 0, thresholds output 0, both motors at 50. The robot cruises forward.
+
+**Wall on the left** — left sensor at 80 (above threshold), Left Detect fires at 100. Right motor gets 50 + (-100) = -50. Left motor stays at 50. The right wheel reverses while the left drives forward — the robot spins right, away from the wall.
+
+**Wall on the right** — mirror image. The robot spins left.
+
+**Wall dead ahead** — both sensors fire, both motors get 50 + (-100) = -50. The robot backs straight up. In practice, it will back up until the sensors clear the obstacle, then resume driving forward.
+
+## Calibrating for your hardware
+
+### Threshold value
+
+The right threshold depends on your specific sensors and how they're mounted:
+
+- **Too low** (e.g., 20): the robot reacts to distant objects and never gets close to anything — overly cautious, may get stuck oscillating
+- **Too high** (e.g., 90): the robot doesn't react until it's almost touching the obstacle — may clip corners
+- **About right** (e.g., 50–70): the robot turns about 15–20 cm from obstacles
+
+To find your value: put the robot near a wall, activate trace mode, and watch the sensor readings. Note the value at the distance where you want the robot to start turning.
+
+### Inhibition weight
+
+The weight on the inhibitory connections controls how sharply the robot turns:
+
+- **-0.5**: the opposite motor slows to 0 but doesn't reverse — gentle, wide turns. Good for open spaces.
+- **-1.0**: the opposite motor reverses to -50 — sharp pivot turns. Good for tight spaces like corridors.
+- **-1.5**: even sharper reversal. The motor output clamps at -100 (BraitenBot constrains motor signals), so there's diminishing returns above -1.0.
+
+### Using digital proximity sensors
+
+Many hobby robotics kits come with digital IR proximity modules that output HIGH or LOW instead of an analog voltage. If you have these, use **Digital Sensor** nodes instead and skip the Threshold nodes entirely — digital sensors already output 0 or 100, which is exactly what a threshold would produce. Wire them directly into the summation nodes with weight -1.0.
+
+## What you've learned
+
+This tutorial introduced two important patterns:
+
+- **Threshold nodes** convert continuous sensor readings into binary decisions, which is essential for noisy or nonlinear sensors where proportional control doesn't work well
+- **Negative weights** create inhibition — one part of the circuit suppressing another. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
+
+## What's next
+
+[Line Follower](./line-follower) — another classic robot behavior using digital sensors and same-side wiring, where the robot tracks a dark line on a light surface.

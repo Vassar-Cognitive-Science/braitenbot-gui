@@ -1,0 +1,110 @@
+---
+sidebar_position: 2
+title: "Tutorial: Light Follower"
+---
+
+# Light Follower
+
+In the previous tutorial, the robot drove straight toward a light source but couldn't steer. If the light moved to one side, the robot would just keep going straight — it had no way to tell left from right.
+
+The fix is surprisingly simple: add a second sensor and cross the wires. Mount one photoresistor on the left side of the robot and one on the right. Then connect each sensor to the **opposite** motor. When more light hits the left sensor, the right wheel spins faster, and the robot turns left — toward the light. This is Braitenberg's Vehicle 2b, and it's the basis for real-world light-seeking robots used in everything from solar panel alignment to insect behavior research.
+
+**Time:** 10 minutes
+**Prerequisites:** Completed [Your First Vehicle](./your-first-vehicle)
+
+## The physical setup
+
+Mount two photoresistors (or phototransistors) on the front of the robot, angled slightly outward — one pointing left, one pointing right. Wire them to analog pins A0 and A1 through voltage dividers. When a light source is to the left of the robot, the left sensor gets more photons and reads a higher voltage. When it's to the right, the right sensor reads higher.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={500}
+  height={310}
+  robot={{ x: 250, y: 220, radius: 80 }}
+  nodes={[
+    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Light', x: 80, y: 30, meta: 'A0' },
+    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Light', x: 280, y: 30, meta: 'A1' },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 96, y: 210 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 256, y: 210 },
+  ]}
+  connections={[
+    { from: 'left-sensor', to: 'right-motor', weight: 0.7 },
+    { from: 'right-sensor', to: 'left-motor', weight: 0.7 },
+  ]}
+  caption="Each sensor drives the opposite motor (cross-wired)"
+/>
+
+## Why cross-wiring creates steering
+
+The key insight is that a two-wheeled robot steers by running its wheels at different speeds. If the right wheel spins faster than the left, the robot turns left — like a tank turning.
+
+Cross-wiring exploits this: when the light is to the left, the left sensor reads high and drives the **right** motor faster, which turns the robot **left** — toward the light. The stronger the light difference between the two sides, the sharper the turn. When the light is centered (both sensors read equally), both motors spin at the same speed and the robot drives straight.
+
+This is the same principle that a moth uses. It doesn't "decide" to fly toward a flame — when more light hits one side, the corresponding wing beats harder, curving its flight path toward the source.
+
+## Step 1: Add two analog sensors
+
+1. Drag two **Analog Sensor** nodes from the palette onto the canvas
+2. Position one above the left side of the robot and one above the right
+3. Configure each:
+   - Left sensor: port `A0`, label "Left Light"
+   - Right sensor: port `A1`, label "Right Light"
+
+## Step 2: Cross-wire the connections
+
+1. Connect **Left Light** → **Right Motor**
+2. Connect **Right Light** → **Left Motor**
+
+This is the opposite of what might seem intuitive (you might expect left-to-left), but the cross-wiring is what makes the robot turn *toward* the light rather than away from it.
+
+## Step 3: Set weights
+
+Click each connection and set the weight to **0.7**. A weight less than 1.0 limits the motor speed, which matters on a real robot — at full speed the robot may overshoot the light source and oscillate back and forth. Starting at 0.7 gives a good balance between responsiveness and stability.
+
+## Step 4: Test in trace mode
+
+1. Activate **Trace Signal Flow**
+2. Drag the **Left Light** slider to 80 and keep the right at 20
+
+The motors should show:
+- Right Motor: **56** (80 × 0.7) — fast
+- Left Motor: **14** (20 × 0.7) — slow
+
+The right wheel spins roughly 4× faster than the left, so the robot turns sharply left toward the stronger light. Now try centering both sliders at 50 — both motors show 35 and the robot drives straight.
+
+## Tuning for real hardware
+
+On a real robot, the two photoresistors won't be perfectly matched — one might read 10–15% higher than the other under identical lighting. This shows up as a subtle curve to one side when the robot should be driving straight. You can compensate by adjusting the weights independently:
+
+| Left weight | Right weight | Effect |
+|-------------|-------------|--------|
+| 0.7 | 0.7 | Balanced (ideal sensors) |
+| 0.7 | 0.6 | Compensates for a right sensor that reads high |
+| 0.5 | 0.5 | Slower, more controlled approach |
+| 1.0 | 1.0 | Maximum speed — may oscillate around the target |
+
+## Adding a baseline speed
+
+The basic Vehicle 2b stops when there's no light. On a real robot, you might want it to wander forward until it finds a light source. Add a Constant node to provide baseline drive:
+
+1. Drag a **Constant** node onto the canvas, set its value to **30**
+2. Add two **Summation** nodes — one for each motor
+3. Wire the constant into both summations (weight 1.0), and the cross-wired sensors into the appropriate summation (weight 0.7)
+4. Wire each summation to its motor
+
+Now the robot always drives forward at 30% speed. When it detects light to one side, the sensor signal adds to the baseline on the opposite motor, creating steering on top of the forward motion.
+
+## The "fearful" variant (Vehicle 2a)
+
+Swap the cross-wiring for same-side wiring (left sensor → left motor, right sensor → right motor) and the robot does the opposite: it turns **away** from light. Strong light on the left speeds up the left wheel, pushing the robot's nose to the right.
+
+This is useful for light-avoidance behaviors — for example, a robot that stays in the shadows or hides under furniture when a room light turns on.
+
+## What you've learned
+
+By changing only the wiring pattern — same-side vs. cross-wired — the same hardware produces opposite behaviors: attraction or avoidance. No programming logic changed; the behavior emerges entirely from which wire goes where.
+
+## What's next
+
+Light sensors give smooth, continuous readings. But many robot sensors are binary — a bumper switch is either pressed or not, an IR proximity sensor either sees an obstacle or doesn't. [Obstacle Avoidance](./obstacle-avoidance) shows how to work with these on/off signals using Threshold nodes.

@@ -1,0 +1,144 @@
+---
+sidebar_position: 6
+title: "Tutorial: Latches with Delay"
+---
+
+# Latches with Delay
+
+Put a bumper switch on the front of the obstacle-avoidance robot from the earlier tutorial and you'll discover a problem. The robot detects the wall with its IR sensors and turns away — but sometimes it doesn't turn far enough and clips the corner. The bumper clicks for a fraction of a second, then releases. The robot doesn't react because by the time the next loop iteration runs, the bumper is already open again. The event is gone.
+
+What you need is **memory**: a way for the robot to notice a brief event (the bumper click) and hold onto it for long enough to respond (reverse for two seconds). This tutorial introduces the latch — a feedback loop built from a Summation and a Delay node that captures transient events and sustains them.
+
+**Time:** 20 minutes
+**Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and familiar with [signal flow](../concepts/signal-flow)
+
+## The scenario: bump and reverse
+
+Here's the concrete behavior we're building:
+
+1. The robot drives forward at cruising speed
+2. Its front bumper hits a wall (momentary contact — maybe 50ms)
+3. The robot remembers the bump and reverses for 2 seconds
+4. After 2 seconds, the robot stops reversing and drives forward again
+
+The bumper is a momentary switch — it's only pressed for a few loop iterations. Without memory, the robot would reverse for those few iterations (imperceptibly) and then immediately drive forward again, right back into the wall.
+
+## How a latch works
+
+A latch is a feedback loop: a Summation node sends its output through a Delay node, which feeds the value back into the Summation one iteration later.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={500}
+  height={300}
+  nodes={[
+    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'pin 2' },
+    { id: 'sum', type: 'compute-summation', label: 'Latch', x: 176, y: 30 },
+    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 176, y: 170, meta: '20 ms' },
+    { id: 'motor', type: 'servo-cr', label: 'Right Motor', x: 340, y: 30 },
+  ]}
+  connections={[
+    { from: 'bumper', to: 'sum', weight: 1.0 },
+    { from: 'sum', to: 'motor', weight: 0.5 },
+    { from: 'sum', to: 'delay', weight: 1.0 },
+    { from: 'delay', to: 'sum', weight: 1.0, label: 'feedback' },
+  ]}
+  caption="Basic latch: summation + delay feedback loop"
+/>
+
+Walk through the loop iterations:
+
+1. **Before the bump**: Summation receives 0 from the bumper and 0 from the delay feedback. Output is 0. Motor is off.
+2. **Bumper pressed**: Bumper sends 100. Summation outputs 100. The delay captures 100.
+3. **Bumper released**: Bumper sends 0. But the delay feeds back the *previous* output (100). Summation receives 0 + 100 = 100. The latch holds.
+4. **Every subsequent iteration**: The delay keeps feeding back 100, and the summation keeps outputting 100. The latch remembers the bump indefinitely.
+
+The robot's motor stays active even though the bumper was only pressed for a moment. The feedback loop sustains the signal.
+
+## Step 1: Build the latch
+
+1. Drag a **Summation** node onto the canvas, label it "Latch"
+2. Drag a **Delay** node onto the canvas — set its delay to **20 ms** (one loop period, the minimum for a simple latch)
+3. Connect Summation → Delay (weight 1.0)
+4. Connect Delay → Summation (weight 1.0)
+
+## Step 2: Add the bumper trigger
+
+1. Drag a **Digital Sensor**, set port to `2`, label "Bumper"
+2. Connect Bumper → Summation (weight 1.0)
+
+On the physical robot, wire a pushbutton between pin 2 and ground, and enable INPUT_PULLUP on the sensor node. The button reads as 100 in BraitenBot when pressed (pullup mode inverts the signal so that pressing the button produces a HIGH reading).
+
+## Step 3: Connect to a motor
+
+Connect Summation → Right Motor (weight 0.5) to see the latch in action.
+
+## Step 4: Test with trace mode
+
+1. Activate **Trace Signal Flow**
+2. Click the **pulse button** (▶) next to the bumper — this sends a brief 200ms HIGH, simulating a momentary button press
+3. Watch the latch activate: the summation jumps to 100 and the motor to 50
+4. After the pulse ends, the bumper returns to 0 — but the latch holds. The motor stays at 50.
+
+The pulse button is specifically designed for testing circuits like this. It simulates the brief, transient events that you'd get from real bumper switches or momentary buttons.
+
+## Fixing the runaway problem
+
+You may notice the summation value keeps climbing: 100, 200, 300... Each iteration adds the feedback (100) to whatever the summation already is. This runaway doesn't affect the motor (it still drives at full speed), but it means the latch is numerically unstable.
+
+Fix it with a **clamping transfer curve** on the feedback connection:
+
+1. Click the Delay → Summation connection
+2. Switch to Non-linear transfer mode
+3. Set a step curve: points at (-100, 0), (0, 0), (1, 100), (100, 100)
+
+Now the feedback is always exactly 0 or 100 — any positive value clamps to 100, any negative to 0. The summation stabilizes at 100 when latched and 0 when cleared.
+
+## Making the latch time out
+
+An indefinite latch isn't useful for bump-and-reverse — you want the robot to reverse for a specific time and then drive forward again. Two approaches:
+
+### Approach 1: Decay feedback
+
+Change the feedback weight from 1.0 to **0.95**. Each iteration, the feedback is 95% of the previous value:
+
+100 → 95 → 90.25 → 85.7 → 81.5 → ... → eventually reaches 0
+
+Add a **Threshold** node (threshold = 10) after the summation to convert the decaying signal into a clean on/off. With a 20ms loop period, the signal drops below 10 after about 45 iterations — roughly 900ms. To hold for longer, use a smaller decay: a weight of 0.97 gives about 1.5 seconds, 0.98 gives about 2.3 seconds. Adjust the weight and threshold to control the duration.
+
+### Approach 2: Longer delay
+
+Set the delay time to **2000 ms** and use the clamping feedback from above. The delay buffer holds 100 iterations of history (2000ms / 20ms). When the bumper triggers, the latch holds for exactly 2 seconds (the time it takes the initial trigger to propagate through the buffer and disappear), then the feedback goes to zero and the latch releases.
+
+This is more precise than decay feedback and easier to reason about: delay time = hold time.
+
+## Building the complete bump-and-reverse
+
+Now combine the latch with the obstacle avoidance circuit:
+
+1. **Cruise circuit**: Constant (50) → Left Summation and Right Summation → Motors (same as obstacle avoidance)
+2. **Latch circuit**: Bumper → Summation → Delay → feedback, with a 2000ms delay and clamping feedback
+3. **Inhibition**: Wire the latch's Summation output through a Threshold (threshold = 10) → both motor summations with weight **-1.0**
+
+The physical behavior plays out like this:
+
+- **Normal driving**: The latch is off. The constant drives both motors at 50. The robot cruises forward.
+- **Bump happens**: The bumper clicks for 50ms. The latch captures it and holds for 2 seconds. The threshold fires, sending -100 to both motor summations. Motors get 50 + (-100) = -50 — the robot reverses.
+- **2 seconds later**: The latch times out, the threshold turns off, the inhibition stops. Motors return to 50 and the robot drives forward again.
+
+From the outside, the robot bonks into a wall, backs up for two seconds, and then resumes driving. The brief bumper contact got amplified into a sustained behavioral response — exactly what memory is for.
+
+## Resettable latch
+
+Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second Digital Sensor ("Reset", port `3`) and connect it to the latch summation with weight **-200**:
+
+When Reset fires: -200 + 100 (feedback) = -100 → the clamped feedback sees a negative and outputs 0 → the latch clears immediately, regardless of how much time was left.
+
+## What you've learned
+
+The latch pattern — summation + delay feedback — converts a transient event into a sustained state, giving the robot a form of short-term memory. This is what separates reactive behaviors (turn away from obstacles) from deliberate behaviors (reverse for two seconds after a bump).
+
+## What's next
+
+With latches, you can build individual behaviors that respond to events over time. But a real robot needs multiple behaviors that work together — cruise forward, avoid obstacles, and escape from collisions — with some way to decide which behavior wins when they conflict. [Subsumption Architecture](./subsumption-architecture) shows how to layer behaviors with priority arbitration.

@@ -1,0 +1,123 @@
+---
+sidebar_position: 8
+title: "Tutorial: Compound Reuse"
+---
+
+# Compound Reuse
+
+If you built the subsumption architecture from the previous tutorial, you probably noticed that the diagram got complex fast — dozens of nodes and connections sprawling across the canvas. The escape latch alone takes four nodes. Add avoidance, cruise, and the gating logic, and it becomes hard to see the overall structure.
+
+Compounds solve this. They let you take a cluster of nodes — like the entire escape behavior — and collapse it into a single box with named inputs and outputs. The internal wiring still exists, but it's tucked away behind a clean interface. You can also reuse compounds: build a "noise-filtered sensor" once and stamp out copies for every sensor on the robot.
+
+**Time:** 15 minutes
+**Prerequisites:** Completed at least [Obstacle Avoidance](./obstacle-avoidance)
+
+## Scenario: Multiple sensors need the same calibration
+
+Your robot has four IR proximity sensors — front-left, front-right, rear-left, rear-right — and each one needs the same preprocessing: a dead-zone transfer curve to filter noise below 15, followed by a threshold at 30 for binary obstacle detection. Without compounds, you'd duplicate this three-node circuit (sensor → transfer → threshold) four times. That's 12 nodes and 8 connections for what is conceptually the same operation.
+
+With compounds, you build the preprocessing once, group it, and drag out four instances.
+
+## Step 1: Build the preprocessing circuit
+
+Start with a single sensor:
+
+1. Add an **Analog Sensor** (port `A0`, label "Raw Sensor")
+2. Add a **Threshold** node (threshold 30, label "Detected")
+3. Connect Raw Sensor → Detected (weight 1.0)
+4. On this connection, switch to **Non-linear transfer** and set a dead-zone curve: points at (-100, 0), (15, 0), (100, 100)
+
+Test in trace mode: slide the sensor from 0 to 50. The threshold should output 0 for readings below 30, and 100 above — but the dead zone also ensures that noisy low readings (0–15) are zeroed out before they even reach the threshold.
+
+This is the kind of preprocessing you'd want on every sensor. Without it, electrical noise at sensor readings of 5–15 can cause spurious threshold triggers, making the robot twitch randomly.
+
+## Step 2: Group into a compound
+
+1. **Shift+click** both the sensor and threshold nodes to select them
+2. Click **Group 2** in the toolbar
+
+BraitenBot creates a compound type and replaces the two nodes with a single compound instance. The outgoing connection from the threshold becomes an **output port** on the compound.
+
+Rename the compound: click it, and in the config panel change the label to **"Calibrated Sensor."**
+
+## Step 3: Inspect the body
+
+**Double-click** the compound instance to enter the body editor. Inside you'll see:
+
+- The original Analog Sensor and Threshold nodes
+- A **Compound Output** port node, connected to the threshold's output
+- The dead-zone transfer curve is preserved on the internal connection
+
+This is the compound's "schematic." Any changes you make here — adjusting the threshold, modifying the transfer curve — will affect **every instance** of this compound type.
+
+Click the breadcrumb to return to the main canvas.
+
+## Step 4: Stamp out more instances
+
+In the **Node Palette**, a new **Compounds** section has appeared with your "Calibrated Sensor" type. Drag out three more instances — you now have four identical preprocessed sensors.
+
+To configure each instance for a different pin, double-click each one and change the internal sensor's Arduino Port: A0, A1, A2, A3.
+
+:::note Pin assignments inside compounds
+Because changes to the body affect all instances, changing the pin in one instance changes it in all of them. For truly independent pin assignments, use the alternative pattern below.
+:::
+
+### Better pattern: sensor outside, processing inside
+
+A cleaner approach keeps the physical sensor outside the compound and groups only the signal processing. Since grouping requires at least two nodes, use a Summation as a pass-through:
+
+1. Build: **Summation** (pass-through, weight 1.0) → **Threshold** (threshold 30, with dead-zone curve on the connection)
+2. Select both nodes and click **Group 2**. The compound now has one **input port** (the summation's input) and one **output port** (the threshold's output).
+3. Drag out four instances.
+4. Wire each external sensor to a different compound instance's input port.
+
+Now each compound instance receives from a different physical sensor, but they all apply the same internal calibration. Change the threshold in one compound body and all four sensors update — exactly the kind of consistency you want when calibrating a robot.
+
+## Step 5: Wire compound outputs to the diagram
+
+Wire each compound's output to the appropriate summation or motor node in your main diagram, just like any other connection:
+
+- Front-Left Calibrated Sensor → Right Motor summation (weight -1.0, cross-wired avoidance)
+- Front-Right Calibrated Sensor → Left Motor summation (weight -1.0)
+- Rear-Left → steering logic for backing up
+- Rear-Right → same
+
+The main canvas shows four clean boxes and their connections to the motors, instead of 12+ nodes of duplicated preprocessing.
+
+## Packaging behavior layers as compounds
+
+Compounds aren't just for sensor preprocessing. In the [subsumption tutorial](./subsumption-architecture), the escape behavior consists of a bumper sensor, a latch (summation + delay + feedback), a threshold, and a reverse constant. That's five nodes implementing a single concept: "reverse for 2 seconds when bumped."
+
+Select all five nodes and group them into an "Escape Behavior" compound with:
+
+- **Input port**: Bumper signal
+- **Output ports**: Motor Inhibition (the -100 signal), Is Active (the threshold output)
+
+Now the top level of your subsumption diagram shows three clean boxes — Escape, Avoid, Cruise — wired into the final motor summations. The intent of the architecture is immediately visible, and the implementation details are one double-click away.
+
+## Multi-port compounds
+
+Compounds can have any number of input and output ports. The avoidance behavior, for example, might have:
+
+- **Inputs**: Left Proximity, Right Proximity
+- **Outputs**: Left Motor Command, Right Motor Command, Is Active
+
+When you group nodes, BraitenBot automatically creates port anchors for every connection that crosses the selection boundary. You can also add port anchors manually inside the body by dragging **Compound Input** or **Compound Output** from the palette (these appear in the palette only while editing a compound body).
+
+Name the port nodes descriptively — "Left Proximity" rather than "Compound Input 1." These names appear as labels on the instance's connection handles, making it clear what each port expects.
+
+## Ungrouping
+
+Sometimes you need to modify one instance differently from the others — for example, the rear sensors need a different threshold than the front sensors. Select the compound instance, click **Ungroup**, and the body nodes are inlined back into the main diagram. The compound type still exists for other instances; ungrouping only affects the one you selected.
+
+## Design tips
+
+**Keep compounds focused.** "Calibrated Sensor" and "Escape Behavior" are good compound names because they describe a single concept. "Left Side Processing" is too broad — if you need to change the avoidance threshold independently from the sensor calibration, a single compound for both will get in the way.
+
+**One level of nesting is usually enough.** You can put compound instances inside compound bodies, and BraitenBot handles this correctly. But debugging a problem three levels deep is frustrating. For most robots, sensor preprocessing compounds + behavior compounds is sufficient.
+
+**Wheel motors stay outside.** The left and right wheel motors are always on the main canvas, attached to the robot overlay. They can't be inside compounds. All your compound outputs eventually wire into the motor summation nodes at the top level.
+
+## What you've learned
+
+Compounds are how you scale from simple Braitenberg vehicles to complex, multi-behavior robots without the diagram becoming unmanageable. They don't change the underlying circuit — they're purely an organizational tool — but they let you think at the right level of abstraction: individual sensor calibration, complete behavior modules, or the overall architecture.

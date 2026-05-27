@@ -1,0 +1,102 @@
+---
+sidebar_position: 3
+title: Transfer Functions
+---
+
+# Transfer Functions
+
+Transfer functions control how a signal is transformed as it travels along a connection. They let you shape behavior beyond simple linear scaling.
+
+import TransferCurveChart from '@site/src/components/TransferCurveChart';
+
+## Linear transfer (default)
+
+Every new connection starts in **linear** mode with a weight between -1 and +1:
+
+```
+output = input × weight
+```
+
+This is the simplest transfer: the weight scales the signal proportionally. A weight of 1 passes the signal unchanged, 0.5 halves it, -1 inverts it, and 0 blocks it entirely.
+
+### When to use linear transfer
+
+Linear weights are sufficient when you want:
+- Direct proportional control (sensor strength maps linearly to motor speed)
+- Simple inhibition (negative weight)
+- Signal attenuation (fractional weight)
+
+## Non-linear transfer (custom curves)
+
+For more sophisticated behavior, switch a connection to **Non-linear (curve)** mode in the config panel. This opens an interactive curve editor where you define a piecewise-linear transfer function.
+
+### The curve editor
+
+The editor is a 2D plot where:
+- **X axis** = input signal (-100 to 100)
+- **Y axis** = output signal (-100 to 100)
+
+You define the transfer function by placing control points:
+
+- **Click** on the canvas to add a point
+- **Drag** a point to move it
+- **Double-click** a point to remove it
+- **Endpoints** (x = -100 and x = 100) can be moved vertically but not removed
+
+The output is interpolated linearly between consecutive points.
+
+### Common curve shapes
+
+#### Dead zone
+
+Ignore small signals, respond only to strong ones:
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 100 }]}
+  caption="Dead zone: no output below input 50"
+/>
+
+Points: (-100, 0), (50, 0), (100, 100)
+
+This is useful for filtering out sensor noise — the vehicle won't react until the signal exceeds a threshold, then responds proportionally.
+
+#### Sigmoid-like response
+
+Smooth transition with saturation at extremes:
+
+<TransferCurveChart
+  points={[{ x: -100, y: -100 }, { x: -50, y: -100 }, { x: -10, y: 0 }, { x: 10, y: 0 }, { x: 50, y: 100 }, { x: 100, y: 100 }]}
+  caption="Sigmoid-like: narrow sensitive range around zero, clamped at extremes"
+/>
+
+Points: (-100, -100), (-50, -100), (-10, 0), (10, 0), (50, 100), (100, 100)
+
+This creates a narrow sensitive range around zero with clamped extremes.
+
+#### Inverted response
+
+High input produces low output and vice versa:
+
+<TransferCurveChart
+  points={[{ x: -100, y: 100 }, { x: 0, y: 0 }, { x: 100, y: -100 }]}
+  caption="Inverted: output decreases as input increases"
+/>
+
+Points: (-100, 100), (0, 0), (100, -100)
+
+Similar to a negative weight, but you can shape the curve asymmetrically.
+
+#### Step function
+
+Binary on/off at a specific threshold:
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 29, y: 0 }, { x: 31, y: 100 }, { x: 100, y: 100 }]}
+  caption="Step function: binary switch at input = 30"
+/>
+
+Points: (-100, 0), (29, 0), (31, 100), (100, 100)
+
+This behaves like a Threshold node but is defined on the connection itself, which can be useful when you want threshold behavior without adding an extra node.
+
+The simulation engine uses the same interpolation algorithm as the generated Arduino code, so what you see in trace mode matches what runs on the hardware. For details on how transfer functions are translated to C code, see the [generated code reference](../reference/generated-code#transfer-functions).

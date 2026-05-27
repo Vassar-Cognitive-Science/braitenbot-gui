@@ -1,0 +1,107 @@
+---
+sidebar_position: 1
+title: "Tutorial: Your First Vehicle"
+---
+
+# Your First Vehicle
+
+Imagine a moth drawn to a porch light. It doesn't plan a route or make decisions — it simply moves faster when light hits its sensors. That's the idea behind a Braitenberg vehicle: wire a sensor directly to a motor and behavior emerges from the connection itself.
+
+In this tutorial, you'll build the simplest version of this: a robot with one light sensor wired to both wheels. Shine a flashlight at it and it drives toward you. Cover the sensor and it stops. No code, no logic, no if-statements — just a direct connection.
+
+**Time:** 5 minutes
+**Prerequisites:** BraitenBot installed and open
+
+## What you'll build
+
+A photoresistor (or any analog light sensor) on pin A0, wired directly to both wheel motors. The brighter the light, the faster the robot drives — both wheels at equal speed, so it travels in a straight line.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={500}
+  height={280}
+  robot={{ x: 250, y: 200, radius: 80 }}
+  nodes={[
+    { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 176, y: 30, meta: 'A0' },
+    { id: 'left', type: 'servo-cr', label: 'Left Motor', x: 96, y: 190 },
+    { id: 'right', type: 'servo-cr', label: 'Right Motor', x: 256, y: 190 },
+  ]}
+  connections={[
+    { from: 'sensor', to: 'left', weight: 1.0 },
+    { from: 'sensor', to: 'right', weight: 1.0 },
+  ]}
+  caption="A single sensor driving both motors with weight 1.0"
+/>
+
+## Step 1: Observe the default canvas
+
+When you first open BraitenBot, the canvas already has two nodes: **Left Motor** and **Right Motor**, snapped to the robot wheel overlay. These represent the two motors that drive the robot's wheels. Every vehicle starts here.
+
+## Step 2: Add a sensor
+
+1. In the **Node Palette** on the left, find the **Sensors** section
+2. Drag **Analog Sensor** onto the canvas, dropping it above the robot
+3. The sensor appears as an orange-bordered node labeled "Analog Sensor 1"
+
+On the physical robot, this sensor is typically a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
+
+## Step 3: Configure the sensor pin
+
+1. Click the sensor node to select it — the config panel opens on the right
+2. In the **Arduino Port** field, type `A0` — this must match the analog pin your sensor is physically wired to on the Arduino
+3. Rename the label to "Light Sensor"
+
+## Step 4: Connect sensor to motors
+
+1. Hover over the sensor's **output handle** (the filled circle at the bottom of the node)
+2. Click and drag down toward the **Left Motor** node
+3. When the Left Motor's input handle glows, release to create the connection
+4. Repeat: drag from the sensor's output to the **Right Motor**
+
+You should now see two curved lines connecting the sensor to both motors. Each connection carries the sensor's signal to a motor — this is the "wire" in Braitenberg's thought experiment.
+
+## Step 5: Set connection weights
+
+Both connections default to a weight of 1.0, which means the sensor signal passes to the motors unmodified. A sensor reading of 75 (bright light) becomes a motor drive of 75 (fast forward). A reading of 10 (dim) becomes a slow crawl.
+
+To verify:
+1. Click on a connection line (or its weight badge)
+2. The config panel shows the **Weight** slider
+3. Confirm it's set to **1.0**
+
+If you set the weight to 0.5, the motor would receive half the sensor signal — the robot would move more slowly for the same light level. We'll use this in later tutorials to tune sensitivity.
+
+## Step 6: Test with trace simulation
+
+Before uploading to hardware, you can simulate the signal flow right in the browser:
+
+1. Click **Trace Signal Flow** in the toolbar
+2. A slider appears near your sensor node — this simulates the light level the sensor would read
+3. Drag the slider from 0 to 100 and watch both motor values change in real time
+4. At 0 (darkness): both motors read 0 — the robot is stopped
+5. At 50 (moderate light): both motors read 50 — moderate forward speed
+6. At 100 (bright light): both motors read 100 — full speed
+
+Since both motors always get the same value, the robot drives in a straight line. It can't steer yet — we'll fix that in the next tutorial.
+
+## Step 7: Generate and upload
+
+If you have an Arduino connected:
+
+1. Set the **Loop** period to `20` ms in the toolbar (this means the robot reads its sensor and updates its motors 50 times per second)
+2. Click **Generate** — BraitenBot validates your diagram and produces an Arduino sketch
+3. Select your board in the **Device** dropdown
+4. Click **Upload to Arduino**
+
+Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
+
+## What you've learned
+
+With just one sensor and two wires, you've created a vehicle that responds to its environment. There's no program logic — the behavior is entirely a product of the physical wiring. This is the core insight of Braitenberg vehicles: complex-looking behavior can emerge from very simple connections.
+
+But this vehicle has a limitation: it can only drive straight. To make it steer toward a light source, you need two sensors — one on each side — with crossed wiring. That's what we'll build next.
+
+## What's next
+
+[Light Follower](./light-follower) — add a second sensor and cross-wire them so the robot steers toward the brightest spot.

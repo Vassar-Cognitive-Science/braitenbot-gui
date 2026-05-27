@@ -1,0 +1,111 @@
+---
+sidebar_position: 5
+title: "Tutorial: Transfer Curves"
+---
+
+# Transfer Curves
+
+So far, every connection in our diagrams has used a linear weight: multiply the signal by a constant. But real sensors and real motors don't always have a linear relationship to the behavior you want. In this tutorial, you'll learn to use non-linear transfer curves to solve specific physical problems that linear weights can't handle.
+
+**Time:** 15 minutes
+**Prerequisites:** Completed at least [Obstacle Avoidance](./obstacle-avoidance)
+
+import TransferCurveChart from '@site/src/components/TransferCurveChart';
+
+## Problem 1: Sensor noise causing motor jitter
+
+Here's a situation you'll encounter almost immediately with a real robot. You build the light-follower circuit, upload it, and the robot works — mostly. But even when there's no light source nearby, the motors twitch. The robot jitters in place instead of sitting still.
+
+The cause: your photoresistors don't read exactly zero in a dark room. Ambient light, electrical noise, and sensor drift produce small readings — maybe 5 to 15 out of 100. With a linear weight of 0.7, those readings become motor signals of 3.5 to 10.5 — small, but enough to make the wheels visibly jerk.
+
+You could add a Threshold node, but then you lose proportional control — the robot would lurch from stopped to full speed with no in-between. What you want is to filter out the noise at the bottom of the range while keeping smooth proportional response above it.
+
+### The solution: a dead zone
+
+1. Click the connection between the sensor and the motor
+2. In the config panel, change **Transfer Function** from "Linear (weight)" to **"Non-linear (curve)"**
+3. The curve editor opens — a square plot with input (sensor reading) on the X axis and output (motor signal) on the Y axis
+
+Set control points to create a dead zone:
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 20, y: 0 }, { x: 100, y: 100 }]}
+  caption="Dead zone: inputs below 20 produce zero output"
+/>
+
+Points at (-100, 0), (20, 0), and (100, 100). Any sensor reading below 20 produces exactly 0 at the motor — no jitter. Above 20, the output ramps linearly to 100.
+
+**Test it:** In trace mode, slide the sensor from 0 to 30. The motor stays at 0 until the sensor passes 20, then starts increasing smoothly. The small random fluctuations your real sensor produces in the 0–15 range are completely filtered out.
+
+**On the real robot:** Upload this and the jittering stops. The robot sits still in a dark room, responds smoothly to nearby light, and still has full proportional control above the noise floor.
+
+## Problem 2: Robot overshoots the light source
+
+Another common issue with the light follower: the robot charges at the light source at full speed, overshoots, whips around, overshoots again, and oscillates. Lowering the weight to 0.3 fixes the overshoot but makes the robot sluggish from far away — it barely responds to light at a distance.
+
+What you actually want is for the robot to respond briskly when the light is distant (low reading) but limit its speed as it gets closer (high reading). This is Braitenberg's Vehicle 3 — the "love" vehicle — and it requires a capped response curve.
+
+### The solution: a speed cap
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 30, y: 60 }, { x: 60, y: 60 }, { x: 100, y: 60 }]}
+  caption="Speed cap: output plateaus at 60 regardless of input"
+/>
+
+Points at (-100, 0), (0, 0), (30, 60), (60, 60), (100, 60).
+
+The motor reaches 60% speed quickly (by sensor reading 30) but plateaus there. The robot approaches the light source briskly from a distance but can't overshoot because it's speed-limited near the source. Combined with contralateral wiring, it tracks the light smoothly and settles near the source instead of orbiting wildly around it.
+
+**On the real robot:** This is the difference between a robot that crashes into the light source and one that parks next to it. The curve shape encodes the behavior — approach fast, arrive gently.
+
+## Problem 3: Mixed behavior on the same sensor
+
+In the obstacle avoidance tutorial, we used Threshold nodes for binary obstacle detection. But sometimes you want one sensor to drive two different behaviors simultaneously: proportional steering (smooth turns) *and* binary emergency stop (hard brake when too close).
+
+Without transfer curves, you'd need to duplicate the sensor and add a Threshold node for the binary path. With a transfer curve, you can get binary behavior on a single connection.
+
+### The solution: a step function on a connection
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 49, y: 0 }, { x: 51, y: 100 }, { x: 100, y: 100 }]}
+  caption="Step function: binary on/off at input = 50"
+/>
+
+Points at (-100, 0), (49, 0), (51, 100), (100, 100).
+
+This connection behaves identically to a Threshold node set to 50, but it's defined on the wire itself — no extra node needed. Use a proportional (linear) connection from the same sensor to one motor for smooth steering, and this step-function connection to a summation node for emergency braking. Two different behaviors from one sensor, two connections.
+
+## Problem 4: Oscillator scanning with pauses
+
+BraitenBot has an **Oscillator** node that generates a repeating sine wave — useful for making the robot scan left and right while searching for a light source. But with the default settings, the sine wave swings continuously from -100 to +100. The robot sweeps constantly, which makes it hard to actually detect anything — the sensors are always in motion.
+
+A symmetric dead zone on the oscillator output creates a scan-pause-scan pattern:
+
+<TransferCurveChart
+  points={[{ x: -100, y: -100 }, { x: -30, y: 0 }, { x: 30, y: 0 }, { x: 100, y: 100 }]}
+  caption="Symmetric dead zone: no output between -30 and +30"
+/>
+
+Points at (-100, -100), (-30, 0), (30, 0), (100, 100).
+
+The sine wave passes through the ±30 dead zone twice per cycle. During those moments, the motor output is zero and the robot holds still — giving the sensors a stable moment to take a reading. At the extremes of the swing, the robot turns sharply to scan a new direction. The result is a deliberate scan-pause-scan rhythm that's much more effective for searching than continuous sweeping.
+
+## Using the curve editor
+
+Quick reference for the interactive editor:
+
+- **Click** on the plot to add a control point
+- **Drag** a point to move it
+- **Double-click** a point to remove it
+- The **endpoints** (x = -100 and x = 100) can be moved vertically but not removed
+- The output is linearly interpolated between consecutive points
+
+The curve editor and the trace simulation use exactly the same interpolation algorithm, so what you see in the simulation is what runs on the hardware.
+
+## What you've learned
+
+Transfer curves solve problems that come from the physical reality of sensors and motors: noise floors, nonlinear response curves, speed limits, and mixed behaviors on the same signal path. Each curve shape is a direct answer to a specific hardware problem — they're not abstract signal processing, they're calibration tools that make your robot behave the way you want in the real world.
+
+## What's next
+
+Every circuit so far is purely reactive: the output depends only on what the sensors read *right now*. But what happens when the robot hits a bumper and needs to remember that for the next few seconds — even after the bumper is released? [Latches with Delay](./latches-with-delay) introduces feedback loops that give the robot short-term memory.

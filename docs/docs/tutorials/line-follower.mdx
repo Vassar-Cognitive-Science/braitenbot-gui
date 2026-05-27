@@ -1,0 +1,130 @@
+---
+sidebar_position: 4
+title: "Tutorial: Line Follower"
+---
+
+# Line Follower
+
+Line following is one of the most practical beginner robotics projects. Warehouse robots, factory transport vehicles, and robot competition courses all use some form of line tracking. The idea is simple: put a strip of black tape on a white floor, mount sensors underneath the robot, and have it follow the tape.
+
+What makes this interesting in BraitenBot is that line following uses the same wiring pattern as [light avoidance](./light-follower#the-fearful-variant-vehicle-2a), just applied to the ground instead of the sky. Same-side wiring between line sensors and motors creates the correction behavior automatically.
+
+**Time:** 10 minutes
+**Prerequisites:** Familiar with [the editor](../getting-started/editor-overview)
+
+## The physical setup
+
+Mount two IR reflectance sensors (like TCRT5000 modules) on the underside of the robot, about 1–2 cm apart, straddling the line. These sensors shine an IR LED at the ground and measure how much light bounces back. A white surface reflects a lot (sensor outputs LOW), a black line absorbs most of it (sensor outputs HIGH).
+
+Most breakout boards for these sensors have a digital output: HIGH when over a reflective surface (white), LOW when over an absorptive one (black line). Wire them to digital pins 2 and 3.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={500}
+  height={310}
+  robot={{ x: 250, y: 220, radius: 80 }}
+  nodes={[
+    { id: 'left-sensor', type: 'sensor-digital', label: 'Left Line', x: 80, y: 30, meta: 'pin 2' },
+    { id: 'right-sensor', type: 'sensor-digital', label: 'Right Line', x: 280, y: 30, meta: 'pin 3' },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 96, y: 210 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 256, y: 210 },
+  ]}
+  connections={[
+    { from: 'left-sensor', to: 'left-motor', weight: 1.0 },
+    { from: 'right-sensor', to: 'right-motor', weight: 1.0 },
+  ]}
+  caption="Line follower: same-side wiring"
+/>
+
+## How line following emerges from the wiring
+
+The two sensors straddle the black line. When the robot is perfectly centered, both sensors see the white floor and both read HIGH — both motors spin equally and the robot drives straight.
+
+When the robot drifts to the right:
+- The **left** sensor moves off the white floor onto the black line → reads LOW → outputs 0
+- The **right** sensor is still on white → reads HIGH → outputs 100
+- Left motor stops (signal 0), right motor drives at full speed (signal 100)
+- The robot pivots left, back toward the center of the line
+
+The same logic works in reverse: drift left, and the right motor stops while the left drives, correcting rightward. The robot zig-zags along the line, constantly correcting small deviations. On a well-tuned robot, the oscillations are small enough that the movement looks smooth.
+
+## Step 1: Add digital sensors
+
+1. Drag two **Digital Sensor** nodes onto the canvas
+2. Configure:
+   - Left sensor: port `2`, label "Left Line"
+   - Right sensor: port `3`, label "Right Line"
+3. Enable **INPUT_PULLUP** on both sensors
+
+:::tip Sensor polarity
+The wiring above assumes sensors that read HIGH when over the white floor (no line) and LOW when over the black line. If your sensors are the opposite (HIGH on line), swap the motor connections to cross-wired, or use negative weights. Test in trace mode to figure out which way your sensors behave.
+:::
+
+## Step 2: Wire same-side
+
+1. Connect **Left Line** → **Left Motor** (weight **1.0**)
+2. Connect **Right Line** → **Right Motor** (weight **1.0**)
+
+Notice this is the opposite of the light follower's cross-wiring. With line following, we want the robot to turn *away* from the sensor that's reading high (the one over white floor), which is the same-side pattern.
+
+## Step 3: Add baseline speed
+
+With only the two sensor connections, the robot stops completely when both sensors are over the black line (both read LOW = 0). That's a problem — you want the robot to keep driving forward along the line, not stop on it.
+
+Add a constant to provide baseline drive:
+
+1. Drag a **Constant** node, set its value to **40** (moderate forward speed)
+2. Add two **Summation** nodes
+3. Wire:
+   - Constant → both Summations (weight 1.0)
+   - Left Line → Left Summation (weight 0.5)
+   - Right Line → Right Summation (weight 0.5)
+   - Each Summation → its Motor
+
+Now the robot always drives at 40%, with the sensor corrections adding 0 or 50 on top. When centered on the line (both sensors LOW), it drives straight at 40. When it drifts, the exposed sensor adds speed to its same-side motor, steering back.
+
+## Step 4: Test in trace mode
+
+Toggle the digital sensors in trace mode and verify:
+
+| Left Line | Right Line | Left Motor | Right Motor | What the robot does |
+|-----------|------------|------------|-------------|---------------------|
+| LOW (0) | LOW (0) | 40 | 40 | Centered on line — drives straight |
+| HIGH (100) | LOW (0) | 90 | 40 | Drifted right — corrects left |
+| LOW (0) | HIGH (100) | 40 | 90 | Drifted left — corrects right |
+| HIGH (100) | HIGH (100) | 90 | 90 | Completely off line — drives fast forward |
+
+The last row (both HIGH) means the robot has lost the line entirely. It drives forward at full speed hoping to find it again. For more robust recovery, see the three-sensor variant below.
+
+## Tuning for your track
+
+### Sensor weight vs. baseline speed
+
+These two values determine how the robot handles curves:
+
+- **High sensor weight (0.7–1.0), low baseline (30)**: the robot makes aggressive corrections and slows down on curves. Good for tight tracks with sharp turns, but may oscillate on straightaways.
+- **Low sensor weight (0.3), high baseline (60)**: the robot is fast on straights but may overshoot sharp curves and lose the line.
+
+Start with baseline 40, sensor weight 0.5, and adjust from there. On a real track, the best values depend on the curve radius, the sensor spacing, and the robot's mass.
+
+### Sensor spacing
+
+If your sensors are mounted too close together, both sensors may be over the line at the same time, giving no correction signal. If they're too far apart, the robot may oscillate widely. A good starting point is spacing them about 1.5× the width of your line.
+
+### Three-sensor variant
+
+For tracks with very sharp curves or intersections, add a center sensor:
+
+1. Add a third Digital Sensor ("Center Line", port `4`)
+2. Wire Center Line → both Summations with a small weight (0.2)
+
+The center sensor provides positive reinforcement when the robot is perfectly centered — a small speed boost that rewards staying on track. When the robot drifts, the center sensor goes HIGH (off the line) and adds even more correction.
+
+## What you've learned
+
+Line following demonstrates that the same Braitenberg wiring patterns apply to completely different physical situations. The light follower and the line follower are both just two sensors and two motors — the only difference is the wiring direction (cross vs. same-side) and the sensor type (analog photoresistors vs. digital IR reflectance).
+
+## What's next
+
+All four tutorials so far have used simple linear weights: the signal is multiplied by a constant. But what if your sensor's response isn't linear? What if you need a dead zone to filter noise, or a saturation curve to cap motor speed? [Transfer Curves](./transfer-curves) shows how to shape the signal with custom response profiles.
