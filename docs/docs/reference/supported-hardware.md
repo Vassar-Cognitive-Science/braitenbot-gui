@@ -30,8 +30,9 @@ The Uno R4 boards include a motor safety feature: while the USB host is actively
 |-----|----------|-------|
 | 0 | Serial RX | Used by USB communication — **never assign to sensors/outputs** |
 | 1 | Serial TX | Used by USB communication — **never assign to sensors/outputs** |
+| 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used by the motor safety indicator — **never assign to sensors/outputs** |
 
-BraitenBot's validation will report an error if you assign pin 0 or 1.
+BraitenBot's validation will report an error if you assign pin 0, 1, or 13.
 
 ### Analog pins
 
@@ -61,9 +62,9 @@ Used by: Digital Sensor, Continuous Servo, Positional Servo, Digital Output node
 
 Used by: Color Sensor (TCS34725), TM1637 Display. The I2C bus is shared — multiple I2C devices use the same two pins.
 
-### PWM pins
+### Servo pins
 
-Servo control requires PWM-capable pins. On most AVR Arduinos, PWM is available on pins 3, 5, 6, 9, 10, 11. However, the `Servo` library can drive servos on **any** digital pin using software timing, so this is not a strict limitation.
+Servo control typically uses PWM (pulse-width modulation) pins. On most Arduinos, these are pins 3, 5, 6, 9, 10, 11. However, the Servo library can drive servos on **any** digital pin using software timing, so you can use any available pin.
 
 ## Sensors
 
@@ -97,7 +98,7 @@ Currently supported:
 
 ### Continuous rotation servos
 
-The wheel motors use continuous rotation servos controlled via pulse-width modulation:
+The wheel motors use continuous rotation servos:
 
 - **Standard range**: 1000–2000 µs pulse width
 - **Neutral**: 1500 µs (stopped)

@@ -2,6 +2,7 @@ import type {
   CompoundTypeDefinition,
   DiagramNode,
   DiagramConnection,
+  NodeTypeId,
   PinFieldId,
 } from '../types/diagram';
 import {
@@ -15,7 +16,7 @@ const PIN_FIELD_LABEL: Record<PinFieldId, string> = {
   arduinoPort: 'Arduino port',
   servoPin: 'pin',
   clkPin: 'CLK pin',
-  dioPin: 'DIO pin',
+  gpioPin: 'GPIO pin',
 };
 
 /**
@@ -25,6 +26,17 @@ const PIN_FIELD_LABEL: Record<PinFieldId, string> = {
  */
 function isValidPinString(pin: string): boolean {
   return /^[Aa]?\d+$/.test(pin);
+}
+
+/**
+ * Whether a given pin field will be used as a digital pin on the board.
+ * The emitter always calls Serial.begin(), which claims pins 0 (RX) and 1
+ * (TX), so digital-pin fields wired to those pins silently fail.
+ */
+function isDigitalPinField(typeId: NodeTypeId, field: PinFieldId): boolean {
+  if (field === 'servoPin' || field === 'clkPin' || field === 'gpioPin') return true;
+  if (field === 'arduinoPort') return typeId === 'sensor-digital';
+  return false;
 }
 
 export interface ValidationError {
@@ -84,6 +96,10 @@ export function validateGraph(
   const errors: ValidationError[] = [];
 
   // 0. Duplicate node labels
+  // Compound instances of the same type intentionally share a label (synced
+  // from the type's displayName). The emitter already disambiguates them with
+  // numeric suffixes, so we only flag duplicates that aren't all the same
+  // compound type.
   const labelCounts = new Map<string, DiagramNode[]>();
   for (const node of nodes) {
     const existing = labelCounts.get(node.label) ?? [];
@@ -92,12 +108,20 @@ export function validateGraph(
   }
   for (const [label, dupes] of labelCounts) {
     if (dupes.length > 1) {
-      for (const node of dupes) {
-        errors.push({
-          nodeId: node.id,
-          message: `Duplicate node name '${label}' — each node must have a unique name`,
-          severity: 'error',
-        });
+      const firstTypeId = dupes[0].compoundTypeId;
+      const allSameCompound =
+        firstTypeId != null &&
+        dupes.every(
+          (n) => n.type === 'compound' && n.compoundTypeId === firstTypeId,
+        );
+      if (!allSameCompound) {
+        for (const node of dupes) {
+          errors.push({
+            nodeId: node.id,
+            message: `Duplicate node name '${label}' — each node must have a unique name`,
+            severity: 'error',
+          });
+        }
       }
     }
   }
@@ -134,6 +158,21 @@ export function validateGraph(
         errors.push({
           nodeId: node.id,
           message: `${typeDef.displayName} '${node.label}' has invalid ${PIN_FIELD_LABEL[field]} '${raw}' — must be a pin number like 9 or A0`,
+          severity: 'error',
+        });
+      } else if (isDigitalPinField(node.type, field) && (raw === '0' || raw === '1')) {
+        errors.push({
+          nodeId: node.id,
+          message: `${typeDef.displayName} '${node.label}' uses pin ${raw}, which is reserved by Serial (RX/TX). Pick a different digital pin.`,
+          severity: 'error',
+        });
+      } else if (isDigitalPinField(node.type, field) && raw === '13') {
+        // Pin 13 drives the board's built-in LED directly on the Uno R4 (no
+        // buffer like the R3 had), so the LED load corrupts signals on the
+        // line. The generated USB safeguard also blinks LED_BUILTIN (= 13).
+        errors.push({
+          nodeId: node.id,
+          message: `${typeDef.displayName} '${node.label}' uses pin 13, which is wired to the board's built-in LED. Pick a different digital pin.`,
           severity: 'error',
         });
       }
@@ -206,6 +245,25 @@ export function validateGraph(
 
   // 2d. Compound-type recursion (would cause the flattener to throw).
   errors.push(...detectCompoundTypeRecursion(compoundTypes));
+
+  // 3. Connection limits — nodes with maxInputs must not exceed the cap.
+  const incomingCounts = new Map<string, number>();
+  for (const conn of connections) {
+    incomingCounts.set(conn.to, (incomingCounts.get(conn.to) ?? 0) + 1);
+  }
+  for (const node of nodes) {
+    const typeDef = TYPE_BY_ID[node.type];
+    if (typeDef.maxInputs !== undefined) {
+      const count = incomingCounts.get(node.id) ?? 0;
+      if (count > typeDef.maxInputs) {
+        errors.push({
+          nodeId: node.id,
+          message: `${typeDef.displayName} '${node.label}' has ${count} incoming connections but only accepts ${typeDef.maxInputs}. Use a Summation node to combine signals.`,
+          severity: 'error',
+        });
+      }
+    }
+  }
 
   // 4. Output unreachable from any sensor (BFS forward from sensors)
   const reachable = new Set<string>();

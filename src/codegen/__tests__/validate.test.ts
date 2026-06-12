@@ -95,6 +95,67 @@ describe('validateGraph', () => {
     }
   });
 
+  it('rejects digital pin 0 or 1 (reserved by Serial)', () => {
+    for (const pin of ['0', '1']) {
+      const nodes: DiagramNode[] = [
+        makeSensor({
+          id: 'dig-1',
+          type: 'sensor-digital',
+          label: 'Bumper',
+          arduinoPort: pin,
+        }),
+        makeMotor(),
+      ];
+      const errors = validateGraph(nodes, [
+        makeConnection({ from: 'dig-1' }),
+      ]);
+      expect(
+        errors.some(
+          (e) => e.severity === 'error' && e.message.includes('reserved by Serial'),
+        ),
+        `pin ${pin} should have been flagged`,
+      ).toBe(true);
+    }
+  });
+
+  it('allows analog pin "0" because it maps to A0, not the Serial RX pin', () => {
+    const nodes = [makeSensor({ arduinoPort: '0' }), makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(errors.some((e) => e.message.includes('reserved by Serial'))).toBe(false);
+  });
+
+  it('flags servo and TM1637 pin fields on pins 0/1 too', () => {
+    const display: DiagramNode = {
+      id: 'disp-1', type: 'display-tm1637', label: 'Display',
+      x: 0, y: 0, clkPin: '0', gpioPin: '7',
+    };
+    const nodes = [makeSensor(), makeMotor({ servoPin: '1' }), display];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    const serialErrors = errors.filter((e) => e.message.includes('reserved by Serial'));
+    expect(serialErrors.some((e) => e.message.includes('Left Wheel'))).toBe(true);
+    expect(serialErrors.some((e) => e.message.includes('Display'))).toBe(true);
+  });
+
+  it('rejects digital pin 13 (built-in LED)', () => {
+    const display: DiagramNode = {
+      id: 'disp-1', type: 'display-tm1637', label: 'Display',
+      x: 0, y: 0, clkPin: '13', gpioPin: '12',
+    };
+    const nodes = [makeSensor(), makeMotor({ servoPin: '13' }), display];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    const ledErrors = errors.filter(
+      (e) => e.severity === 'error' && e.message.includes('built-in LED'),
+    );
+    expect(ledErrors.some((e) => e.message.includes('Left Wheel'))).toBe(true);
+    expect(ledErrors.some((e) => e.message.includes('Display'))).toBe(true);
+  });
+
+  it('allows analog pin "13" because A13 is not the LED pin', () => {
+    const nodes = [makeSensor({ arduinoPort: '13' }), makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(errors.some((e) => e.message.includes('built-in LED'))).toBe(false);
+  });
+
   it('warns on edges with unknown fromPort', () => {
     const colorSensor: DiagramNode = {
       id: 'color-1',
@@ -195,6 +256,52 @@ describe('validateGraph', () => {
     expect(
       errors.some((e) => e.severity === 'error' && e.message.includes('Compound type recursion')),
     ).toBe(true);
+  });
+
+  it('allows compound instances of the same type to share a label', () => {
+    const typeDef = {
+      id: 'pass',
+      displayName: 'Pass',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input' as const, label: 'in', x: 0, y: 0 },
+          { id: 'out', type: 'compound-output' as const, label: 'out', x: 0, y: 0 },
+        ],
+        connections: [],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      {
+        id: 'inst-1', type: 'compound', compoundTypeId: 'pass',
+        label: 'Pass', x: 0, y: 0,
+      },
+      {
+        id: 'inst-2', type: 'compound', compoundTypeId: 'pass',
+        label: 'Pass', x: 100, y: 0,
+      },
+      makeMotor(),
+    ];
+    const connections = [
+      makeConnection({ id: 'c1', from: 'sensor-1', to: 'inst-1', toPort: 'in' }),
+      makeConnection({ id: 'c2', from: 'inst-1', to: 'motor-left', fromPort: 'out' }),
+    ];
+    const errors = validateGraph(nodes, connections, [typeDef]);
+    expect(
+      errors.some((e) => e.severity === 'error' && e.message.includes('Duplicate')),
+    ).toBe(false);
+  });
+
+  it('still reports duplicate labels between non-compound nodes', () => {
+    const nodes = [
+      makeSensor({ id: 'sensor-1', label: 'Foo' }),
+      makeSensor({ id: 'sensor-2', label: 'Foo', arduinoPort: 'A1' }),
+      makeMotor(),
+    ];
+    const errors = validateGraph(nodes, []);
+    expect(
+      errors.filter((e) => e.severity === 'error' && e.message.includes('Duplicate')),
+    ).toHaveLength(2);
   });
 
   it('reports orphan compute node as warning', () => {

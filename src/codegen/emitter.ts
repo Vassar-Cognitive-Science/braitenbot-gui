@@ -376,7 +376,7 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
   'display-tm1637': {
     declareGlobal: (node) => {
       const sid = readableId(node);
-      return `TM1637Display display_${sid}(TM1637_${sid}_CLK, TM1637_${sid}_GPIO, 5);`;
+      return `TM1637Display display_${sid}(TM1637_${sid}_CLK, TM1637_${sid}_GPIO);`;
     },
     setup: (node, { indent }) => {
       const sid = readableId(node);
@@ -506,6 +506,7 @@ function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
     '  // off the bench. Other behaviors (servos, displays, sensor reads) still',
     '  // run normally. The built-in LED blinks while the safeguard is active',
     '  // so it\'s obvious at a glance that the bot is "disarmed".',
+    '  // (Validation guarantees no node claims pin 13, so the LED is ours.)',
     '  //',
     '  // We read DVSQ (Device State, bits 6:4 of INTSTS0). 0b011 = Configured,',
     '  // i.e. host has enumerated and is talking. When the cable is removed',

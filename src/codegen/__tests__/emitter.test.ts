@@ -405,7 +405,7 @@ describe('generateSketch', () => {
     expect(code).toContain('#include <TM1637Display.h>');
     expect(code).toContain('const int TM1637_Readout_CLK = 2;');
     expect(code).toContain('const int TM1637_Readout_GPIO = 3;');
-    expect(code).toContain('TM1637Display display_Readout(TM1637_Readout_CLK, TM1637_Readout_GPIO, 5);');
+    expect(code).toContain('TM1637Display display_Readout(TM1637_Readout_CLK, TM1637_Readout_GPIO);');
     expect(code).toContain('display_Readout.setBrightness(5);');
     expect(code).toContain('display_Readout.clear();');
     // Aggregated input rounded and clamped to 4-digit display range.
