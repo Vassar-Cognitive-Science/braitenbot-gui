@@ -192,8 +192,10 @@ pub async fn compile_and_upload(
 const REQUIRED_CORES: &[&str] = &["arduino:avr", "arduino:renesas_uno"];
 
 /// Third-party Arduino libraries we require for generated sketches:
+///   - Servo  — Arduino's official Servo library (not bundled with arduino-cli,
+///              required by motor/servo node codegen)
 ///   - TM1637 — Avishay Orpaz's driver for 4-digit 7-segment displays
-const REQUIRED_LIBS: &[&str] = &["TM1637"];
+const REQUIRED_LIBS: &[&str] = &["Servo", "TM1637"];
 
 async fn check_installed_libs(app: &AppHandle) -> ArduinoResult<bool> {
     let (stdout, stderr, success) =

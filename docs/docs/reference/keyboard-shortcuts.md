@@ -34,4 +34,4 @@ All toolbar actions are button-based — there are no keyboard shortcuts for too
 - **Ungroup** — expand selected compound into body nodes
 - **Trace Signal Flow** — toggle simulation mode
 - **Generate** — validate and generate Arduino code
-- **Upload to Arduino** — compile and upload (desktop only)
+- **Upload to Arduino** — compile and upload

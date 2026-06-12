@@ -11,9 +11,9 @@ When you launch BraitenBot for the first time, a setup dialog will check that th
 
 BraitenBot bundles its own copy of `arduino-cli` (the official Arduino command-line tool). On first run, it uses this to install:
 
-1. **Board cores** — the compiler toolchain for your Arduino
-   - `arduino:avr` — for Arduino Uno, Nano, and classic boards
-   - `arduino:renesas_uno` — for Arduino Uno R4 boards
+1. **Board cores** — the software that lets BraitenBot compile sketches for your Arduino
+   - Arduino Uno, Nano, and classic boards
+   - Arduino Uno R4 boards
 2. **Libraries**
    - `Servo` — motor and servo control
    - `TM1637` — 7-segment display driver (if you use display nodes)
@@ -34,7 +34,7 @@ This is a one-time process. On subsequent launches, setup completes silently.
 1. Plug your Arduino into a USB port
 2. In the toolbar, look for the **Device** section (right side)
 3. The board selector dropdown lists detected Arduinos with their port and name
-4. Select your board — BraitenBot auto-detects the board type (FQBN)
+4. Select your board — BraitenBot auto-detects the board type
 5. If your board doesn't appear, click **Refresh** to re-scan serial ports
 
 ### Status indicator

@@ -43,7 +43,7 @@ Each section is color-coded to match the node kind:
 The canvas is where you build your circuit. It shows:
 
 - **Nodes** — rectangular blocks representing sensors, compute elements, and outputs
-- **Connections** — curved lines (Bezier paths) linking node outputs to inputs
+- **Connections** — curved lines linking node outputs to inputs
 - **Robot overlay** — a top-down view of the robot body and wheels in the center of the canvas
 
 ### Navigation
@@ -87,7 +87,7 @@ The toolbar is divided into functional groups:
 - **Loop period** — set the Arduino main loop timing (1–1000 ms)
 - **Generate** — validate the diagram and generate Arduino code
 
-### Device (desktop only)
+### Device
 - **Board selector** — dropdown showing detected Arduino boards
 - **Refresh** — re-scan serial ports
 - **Upload to Arduino** — compile and upload the generated sketch
@@ -114,7 +114,7 @@ Depending on the node type, you'll see:
 
 ## Oscilloscope (bottom, trace mode only)
 
-When signal tracing is active, a collapsible oscilloscope panel appears at the bottom of the canvas. It shows a rolling 5-second history of signal values at each node, similar to a logic analyzer. Controls include pause/resume and clear history.
+When signal tracing is active, a collapsible oscilloscope panel appears at the bottom of the canvas. It plots a rolling 5-second history of signal values at each node over time, so you can see how signals change. Controls include pause/resume and clear history.
 
 ## Next steps
 

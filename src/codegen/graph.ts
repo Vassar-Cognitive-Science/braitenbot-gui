@@ -33,7 +33,7 @@ export interface GraphNode {
   frequencyHz?: number;
   amplitude?: number;
   clkPin?: string;
-  dioPin?: string;
+  gpioPin?: string;
   brightness?: number;
   wheelRole?: WheelRole;
 }
@@ -105,7 +105,7 @@ export function buildGraph(
       frequencyHz: node.frequencyHz,
       amplitude: node.amplitude,
       clkPin: node.clkPin,
-      dioPin: node.dioPin,
+      gpioPin: node.gpioPin,
       brightness: node.brightness,
       wheelRole: wheelRoleFor(node.id, node.type),
     };

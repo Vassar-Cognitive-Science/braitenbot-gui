@@ -10,7 +10,7 @@ When you click **Generate** in the toolbar, BraitenBot translates your visual di
 ## The pipeline
 
 ```
-Diagram ──▶ Validate ──▶ Flatten ──▶ Topo Sort ──▶ Emit C Code
+Diagram ──▶ Validate ──▶ Flatten ──▶ Sort ──▶ Emit C Code
 ```
 
 ### 1. Validation

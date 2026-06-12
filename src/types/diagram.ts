@@ -28,7 +28,7 @@ export type NodeTypeId =
   | 'compound-input'
   | 'compound-output';
 
-export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'dioPin';
+export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'gpioPin';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -41,6 +41,8 @@ export interface NodeTypeDefinition {
   pinFields?: PinFieldId[];
   /** Whether the node consumes incoming edges. Sources (sensors, constants, oscillator, noise) are false. */
   hasInputs?: boolean;
+  /** Maximum number of incoming connections. Undefined = unlimited. */
+  maxInputs?: number;
   /** Whether the node breaks feedback cycles (delay nodes do; nothing else currently). */
   breaksCycles?: boolean;
   /** Type may only appear inside a compound body — never on the top-level diagram. */
@@ -67,7 +69,7 @@ export interface DiagramNode {
   /** Oscillator amplitude (0–100). Output ranges from -amplitude to +amplitude. */
   amplitude?: number;
   clkPin?: string;
-  dioPin?: string;
+  gpioPin?: string;
   brightness?: number;
   /** For type === 'compound': id of the CompoundTypeDefinition this node instantiates. */
   compoundTypeId?: string;
@@ -177,22 +179,22 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog', pinFields: ['arduinoPort'] },
   { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital', pinFields: ['arduinoPort'] },
   { id: 'sensor-color', kind: 'sensor', displayName: 'Color Sensor', metaLabel: 'TCS34725', protocol: 'i2c' },
-  { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold', hasInputs: true },
-  { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay', hasInputs: true, breaksCycles: true },
+  { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold', hasInputs: true, maxInputs: 1 },
+  { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay', hasInputs: true, maxInputs: 1, breaksCycles: true },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation', hasInputs: true },
   { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply', hasInputs: true },
   { id: 'compute-oscillator', kind: 'compute', displayName: 'Oscillator', metaLabel: 'oscillator', mode: 'oscillator' },
   { id: 'compute-noise', kind: 'compute', displayName: 'Noise', metaLabel: 'noise', mode: 'noise' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },
-  { id: 'servo-cr', kind: 'output', displayName: 'Continuous Servo', metaLabel: 'continuous servo', pinFields: ['servoPin'], hasInputs: true },
-  { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo', pinFields: ['servoPin'], hasInputs: true },
-  { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out', pinFields: ['servoPin'], hasInputs: true },
-  { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit', pinFields: ['clkPin', 'dioPin'], hasInputs: true },
+  { id: 'servo-cr', kind: 'output', displayName: 'Continuous Servo', metaLabel: 'continuous servo', pinFields: ['servoPin'], hasInputs: true, maxInputs: 1 },
+  { id: 'servo-positional', kind: 'output', displayName: 'Positional Servo', metaLabel: 'positional servo', pinFields: ['servoPin'], hasInputs: true, maxInputs: 1 },
+  { id: 'digital-out', kind: 'output', displayName: 'Digital Output', metaLabel: 'digital out', pinFields: ['servoPin'], hasInputs: true, maxInputs: 1 },
+  { id: 'display-tm1637', kind: 'output', displayName: '7-Segment Display', metaLabel: 'TM1637 4-digit', pinFields: ['clkPin', 'gpioPin'], hasInputs: true, maxInputs: 1 },
   // Compound instance — a placeholder node whose ports and behavior are defined by a CompoundTypeDefinition.
   { id: 'compound', kind: 'compound', displayName: 'Compound', metaLabel: 'compound', hasInputs: true },
   // Port anchors — only legal inside a compound body.
   { id: 'compound-input', kind: 'port', displayName: 'Compound Input', metaLabel: 'input port', bodyOnly: true },
-  { id: 'compound-output', kind: 'port', displayName: 'Compound Output', metaLabel: 'output port', bodyOnly: true, hasInputs: true },
+  { id: 'compound-output', kind: 'port', displayName: 'Compound Output', metaLabel: 'output port', bodyOnly: true, hasInputs: true, maxInputs: 1 },
 ];
 
 export const TYPE_BY_ID = Object.fromEntries(

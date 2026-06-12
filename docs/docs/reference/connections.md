@@ -5,7 +5,7 @@ title: Connections
 
 # Connections Reference
 
-Connections are the weighted, directed edges between nodes. Each connection carries a signal from one node's output to another node's input, transforming it along the way.
+Connections are the weighted links between nodes. Each connection carries a signal from one node's output to another node's input, transforming it along the way.
 
 ## Connection properties
 
@@ -55,7 +55,7 @@ The **weight** is a value from -1 to +1, set via slider or numeric input in the 
 
 ### Non-linear (custom curve)
 
-A piecewise-linear function defined by control points in the range (-100, -100) to (100, 100). The output is interpolated linearly between consecutive sorted points.
+A custom curve defined by control points in the range (-100, -100) to (100, 100). The output is interpolated in straight-line segments between consecutive points.
 
 Control points:
 

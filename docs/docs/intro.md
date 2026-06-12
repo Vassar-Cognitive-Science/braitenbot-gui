@@ -12,7 +12,7 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 ## What can you build?
 
-- **Braitenberg Vehicle 2a** — a light-seeking robot with two wires
+- **Light seekers** — a robot that steers toward brightness with just two wires
 - **Obstacle avoiders** — threshold-based steering away from walls
 - **Line followers** — digital sensors driving differential steering
 - **Latch circuits** — delay + summation feedback to "remember" events
@@ -31,13 +31,9 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 ```
 
 1. **Design** your circuit on the visual canvas
-2. **Simulate** signal flow in the browser to verify behavior
+2. **Simulate** signal flow to verify behavior
 3. **Generate** an Arduino sketch automatically
 4. **Upload** to your robot with one click
-
-## Desktop and web
-
-BraitenBot ships as a **Tauri desktop app** (macOS, Windows, Linux) that bundles `arduino-cli` for direct hardware upload. A **PWA web build** is also available for browser-based design and simulation — everything except hardware upload works in the browser.
 
 ## Next steps
 

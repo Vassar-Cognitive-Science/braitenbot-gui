@@ -76,4 +76,4 @@ Group a complete sensor-to-motor pathway (minus the wheel motors themselves) int
 
 ### Signal filter
 
-Group delay + summation nodes into a compound to create a reusable low-pass filter or latch circuit. See [latches with delay](../tutorials/latches-with-delay).
+Group delay + summation nodes into a compound to create a reusable latch circuit. See [latches with delay](../tutorials/latches-with-delay).

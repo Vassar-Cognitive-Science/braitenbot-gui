@@ -8,7 +8,7 @@ title: File Format
 BraitenBot diagrams are saved as JSON files. This page documents the file structure for anyone who wants to inspect, generate, or programmatically modify diagram files.
 
 :::caution Alpha format
-BraitenBot is pre-1.0 software. The file format may change between versions without migration support. If a saved file fails to load after an update, clear your browser's localStorage or re-create the diagram.
+BraitenBot is pre-1.0 software. The file format may change between versions without migration support. If a saved diagram fails to load after an update, use **File > New** to reset and re-create the diagram.
 :::
 
 ## Top-level structure
@@ -146,9 +146,9 @@ braitenbot-gui:diagram:v1
 
 The value is the same JSON format as the file. Saving is debounced (300ms delay after the last change).
 
-## File I/O (desktop only)
+## File I/O
 
-The desktop app supports saving/loading via the system file dialog:
+BraitenBot supports saving and loading diagrams via the system file dialog:
 
 - **Save**: serializes the diagram to JSON and writes to a user-chosen file
 - **Load**: reads a JSON file, validates the structure, and replaces the current diagram

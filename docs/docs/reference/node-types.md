@@ -274,7 +274,7 @@ Controls a standard positional servo. Maps the input signal (-100 to 100) to an 
 | Inputs | 1 (max) |
 | Outputs | 0 |
 
-Drives a GPIO pin HIGH or LOW based on a threshold comparison. Useful for LEDs, relays, and buzzers.
+Drives a digital pin HIGH or LOW based on a threshold comparison. Useful for LEDs, relays, and buzzers.
 
 **Configuration:**
 - **Pin** — the digital pin

@@ -5,9 +5,9 @@ title: Installation
 
 # Installation
 
-## Desktop app (recommended)
+## Download
 
-The desktop app includes everything you need: the visual editor, signal simulation, code generation, and built-in Arduino upload.
+The app includes everything you need: the visual editor, signal simulation, and built-in Arduino upload.
 
 ### Download
 
@@ -44,10 +44,6 @@ chmod +x BraitenBot_amd64.AppImage
 ./BraitenBot_amd64.AppImage
 ```
 
-## Web app
-
-A browser-based version is available at the project's GitHub Pages site. The web version supports diagram design, simulation, and code generation, but cannot upload sketches to hardware (that requires the desktop app).
-
 ## Building from source
 
 If you want to build BraitenBot yourself:
@@ -55,8 +51,8 @@ If you want to build BraitenBot yourself:
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) toolchain (for Tauri)
-- Platform-specific Tauri dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
+- [Rust](https://rustup.rs/) toolchain
+- Platform-specific build dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
 ### Steps
 
@@ -74,6 +70,4 @@ npm run tauri:dev             # launch the dev build
 |---------|-------------|
 | `npm run tauri:dev` | Run the desktop app in development mode |
 | `npm run tauri:build` | Build a distributable desktop binary |
-| `npm run dev` | Frontend-only Vite dev server (no Tauri shell) |
-| `npm run dev:web` | PWA/web build dev server |
-| `npm run build:web` | Production PWA build for GitHub Pages |
+| `npm run dev` | Frontend-only dev server (no desktop shell) |

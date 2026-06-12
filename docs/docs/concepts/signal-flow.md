@@ -5,7 +5,7 @@ title: Signal Flow
 
 # Signal Flow
 
-Every BraitenBot diagram is a directed graph where signals flow from sensors through compute nodes to motors. Understanding how signals propagate is key to designing effective behaviors.
+Every BraitenBot diagram is a circuit where signals flow in one direction: from sensors through compute nodes to motors. Understanding how signals propagate is key to designing effective behaviors.
 
 ## Signal range
 
@@ -77,7 +77,7 @@ The loop period is configurable in the toolbar (1–1000 ms). Shorter periods gi
 
 Feedback loops (cycles in the graph) are common in interesting vehicle designs — for example, a motor output feeding back to influence its own input. But a naive cycle has no valid execution order.
 
-BraitenBot breaks cycles with **Delay nodes**. A delay node reads from a ring buffer that stores values from previous iterations:
+BraitenBot breaks cycles with **Delay nodes**. A delay node stores past values and outputs the value from N iterations ago, instead of the current one:
 
 ```
         ┌─────────────────────────────┐

@@ -5,7 +5,7 @@ title: Trace Simulation
 
 # Trace Simulation
 
-Trace mode lets you simulate your diagram's signal flow in the browser, without hardware. It's the fastest way to verify that your wiring produces the behavior you expect.
+Trace mode lets you simulate your diagram's signal flow without hardware. It's the fastest way to verify that your wiring produces the behavior you expect.
 
 ## Activating trace mode
 
@@ -51,7 +51,7 @@ Connection badges show the signal after weight/transfer application. The connect
 
 ### Oscilloscope
 
-The oscilloscope panel at the bottom shows a rolling **5-second history** of all signal values, plotted over time like a logic analyzer. Controls:
+The oscilloscope panel at the bottom shows a rolling **5-second history** of all signal values plotted over time, so you can see how signals change across iterations. Controls:
 
 - **Pause/Resume** — freeze the display to inspect values
 - **Clear** — reset the history buffer
