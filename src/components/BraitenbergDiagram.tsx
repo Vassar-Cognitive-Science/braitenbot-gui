@@ -5,7 +5,8 @@ import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } f
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
-import { formatTraceValue, type TraceResult } from '../hooks/useTraceSimulation';
+import { NumberInput } from './NumberInput';
+import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { useScopeSimulation } from '../hooks/useScopeSimulation';
 import { Oscilloscope } from './Oscilloscope';
 import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
@@ -20,7 +21,7 @@ const MOTOR_PIN_PLACEHOLDER = '9';
 const SERVO_PIN_PLACEHOLDER = '10';
 const DIGITAL_OUT_PIN_PLACEHOLDER = '13';
 const TM1637_CLK_PLACEHOLDER = '2';
-const TM1637_DIO_PLACEHOLDER = '3';
+const TM1637_GPIO_PLACEHOLDER = '3';
 const TM1637_DEFAULT_BRIGHTNESS = 3;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
@@ -141,44 +142,6 @@ function getArduinoPortPlaceholder(protocol?: SensorProtocol): string {
 
 function clampWeight(value: number): number {
   return Math.max(-1, Math.min(1, value));
-}
-
-function WeightInput({ value, onChange }: { value: number; onChange: (next: number) => void }) {
-  const [text, setText] = useState(() => value.toString());
-  const lastCommitted = useRef(value);
-
-  useEffect(() => {
-    if (value !== lastCommitted.current) {
-      setText(value.toString());
-      lastCommitted.current = value;
-    }
-  }, [value]);
-
-  return (
-    <input
-      type="number"
-      min="-1"
-      max="1"
-      step="0.05"
-      value={text}
-      onChange={(event) => {
-        const next = event.target.value;
-        setText(next);
-        const parsed = Number.parseFloat(next);
-        if (Number.isFinite(parsed)) {
-          const clamped = clampWeight(parsed);
-          lastCommitted.current = clamped;
-          onChange(clamped);
-        }
-      }}
-      onBlur={() => {
-        const parsed = Number.parseFloat(text);
-        if (!Number.isFinite(parsed)) {
-          setText(value.toString());
-        }
-      }}
-    />
-  );
 }
 
 function weightToColor(weight: number): string {
@@ -446,75 +409,31 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
   const [scopeOpen, setScopeOpen] = useState(true);
 
-  // When editing a compound body whose type is instantiated in the
-  // parent diagram, we drive the body's trace from the LIVE top-level
-  // simulation rather than treating the body in isolation. tracePrefix
-  // is the concatenated chain of instance ids ("inst-1/inst-2/") needed
-  // to map a visible body node to its flattened sim id, or null when
-  // any level of editingPath has no matching instance (in which case
-  // we fall back to the body's own slider-driven simulation).
-  const tracePrefix = useMemo<string | null>(() => {
-    if (editingPath.length === 0) return '';
-    let prefix = '';
-    let scopeNodes: DiagramNode[] = topNodes;
-    for (const typeId of editingPath) {
-      const instance = scopeNodes.find(
-        (n) => n.type === 'compound' && n.compoundTypeId === typeId,
-      );
-      if (!instance) return null;
-      prefix = prefix + instance.id + '/';
-      const def = compoundTypes.find((c) => c.id === typeId);
-      if (!def) return null;
-      scopeNodes = def.body.nodes;
-    }
-    return prefix;
-  }, [editingPath, topNodes, compoundTypes]);
-  const useTopForTrace = tracePrefix !== null;
-
   const scope = useScopeSimulation(
-    traceMode ? (useTopForTrace ? topNodes : nodes) : [],
-    traceMode ? (useTopForTrace ? topConnections : connections) : [],
+    traceMode ? nodes : [],
+    traceMode ? connections : [],
     sensorValues,
     traceMode,
     loopPeriodMs,
     compoundTypes,
   );
 
-  // When the scope simulates the top level on behalf of a body view, the
-  // raw nodeValues / edgeSignals are keyed by flattened ids. Remap them
-  // back to the body's local ids so the existing display code (which
-  // looks up by visible-view ids) keeps working.
-  const traceResult = useMemo<TraceResult>(() => {
-    if (!useTopForTrace || !tracePrefix) return scope.current;
-    const nodeValues: Record<string, number> = {};
-    const edgeSignals: Record<string, number> = {};
-    const disconnected = new Set<string>();
-    for (const node of nodes) {
-      const fullId = tracePrefix + node.id;
-      if (fullId in scope.current.nodeValues) {
-        nodeValues[node.id] = scope.current.nodeValues[fullId];
-      }
-      if (scope.current.disconnected.has(fullId)) disconnected.add(node.id);
-    }
-    for (const conn of connections) {
-      const fullId = tracePrefix + conn.id;
-      if (fullId in scope.current.edgeSignals) {
-        edgeSignals[conn.id] = scope.current.edgeSignals[fullId];
-      }
-    }
-    return { nodeValues, edgeSignals, disconnected };
-  }, [scope.current, useTopForTrace, tracePrefix, nodes, connections]);
+  const traceResult = scope.current;
 
-  // Look up the trace value at a specific port handle on a compound
-  // instance. Used to draw per-port readouts on instance nodes.
   const lookupPortValue = useCallback(
     (nodeId: string, portId: string): number | undefined => {
-      const prefix = tracePrefix ?? '';
-      return scope.current.nodeValues[`${prefix}${nodeId}/${portId}`];
+      return scope.current.nodeValues[`${nodeId}/${portId}`];
     },
-    [tracePrefix, scope.current.nodeValues],
+    [scope.current.nodeValues],
   );
   const [pulsingId, setPulsingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<number>(0);
+  const showToast = useCallback((msg: string) => {
+    window.clearTimeout(toastTimerRef.current);
+    setToast(msg);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
+  }, []);
   const pulseSensor = useCallback(
     (id: string) => {
       scope.pulse(id, 100, 200);
@@ -547,6 +466,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   );
 
   const resetToDefault = useCallback(() => {
+    undoStackRef.current = [];
     setTopNodes(makeWheelNodes(robotLayout));
     setTopConnections(START_CONNECTIONS);
     setLoopPeriodMs(20);
@@ -561,7 +481,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   useDiagramPersistence({
     state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes },
     setters: {
-      setNodes: setTopNodes,
+      // Persistence only calls this for full replacements (mount restore,
+      // file load), where undoing back into the previous diagram would be
+      // wrong — so the undo history dies with the old diagram.
+      setNodes: (next) => {
+        undoStackRef.current = [];
+        setTopNodes(next);
+      },
       setConnections: setTopConnections,
       setLoopPeriodMs,
       setCompoundTypes,
@@ -1186,7 +1112,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           servoPin:
             nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
           clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
-          dioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          gpioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
           brightness:
             nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
           compoundTypeId: compoundTypeId ?? undefined,
@@ -1203,19 +1129,35 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const fromType = TYPE_BY_ID[from.type];
     const toType = TYPE_BY_ID[to.type];
     if (!canOutput(fromType) || !canInput(toType)) return false;
-    return !connections.some(
+    if (connections.some(
       (connection) =>
         connection.from === fromId &&
         connection.to === toId &&
         (connection.fromPort ?? undefined) === fromPort,
-    );
+    )) return false;
+    if (toType.maxInputs !== undefined) {
+      const existing = connections.filter((c) => c.to === toId).length;
+      if (existing >= toType.maxInputs) return false;
+    }
+    return true;
   };
 
   const completeLink = (toId: string, toPort?: string) => {
-    if (
-      !linkDraftSource ||
-      !canConnect(linkDraftSource.id, toId, linkDraftSource.port)
-    ) {
+    if (!linkDraftSource) {
+      setLinkDraftSource(null);
+      return;
+    }
+    if (!canConnect(linkDraftSource.id, toId, linkDraftSource.port)) {
+      const to = nodeMap[toId];
+      if (to) {
+        const toType = TYPE_BY_ID[to.type];
+        if (toType.maxInputs !== undefined) {
+          const existing = connections.filter((c) => c.to === toId).length;
+          if (existing >= toType.maxInputs) {
+            showToast(`${toType.displayName} only accepts ${toType.maxInputs} incoming connection${toType.maxInputs === 1 ? '' : 's'}. Use a Summation node to combine signals.`);
+          }
+        }
+      }
       setLinkDraftSource(null);
       return;
     }
@@ -1421,16 +1363,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <span className="toolbar-group-label">Sketch</span>
           <label className="toolbar-setting" title="Delay between sensor reads in the generated Arduino loop">
             <span className="toolbar-setting-label">Loop</span>
-            <input
-              type="number"
-              min="1"
-              max="1000"
-              step="1"
+            <NumberInput
+              min={1}
+              max={1000}
+              step={1}
+              integer
               value={loopPeriodMs}
-              onChange={(e) => {
-                const v = Number.parseInt(e.target.value, 10);
-                if (Number.isFinite(v) && v >= 1) setLoopPeriodMs(Math.min(1000, v));
-              }}
+              onChange={setLoopPeriodMs}
             />
             <span className="toolbar-setting-unit">ms</span>
           </label>
@@ -1667,18 +1606,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           const nodeType = TYPE_BY_ID[node.type];
           const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
           const isDisconnected = traceMode && traceResult.disconnected.has(node.id);
-          // Compound input anchors get the sensor-style slider only when
-          // there's no live outer signal driving them — i.e., when the
-          // user is editing a body in isolation (useTopForTrace=false).
-          // When an instance exists in the parent, the trace already
-          // reflects the real incoming value, so the slider would be a
-          // no-op and is hidden.
           const isCompoundInput = node.type === 'compound-input';
           const hasSlider =
             traceMode &&
             (nodeType.kind === 'sensor' ||
               nodeType.kind === 'constant' ||
-              (isCompoundInput && !useTopForTrace));
+              isCompoundInput);
 
           let nodeMeta: string;
           if (traceVal !== undefined) {
@@ -1695,8 +1628,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • ±${node.amplitude}`;
           } else if (nodeType.kind === 'constant' && node.constantValue !== undefined) {
             nodeMeta = `${nodeType.metaLabel} • ${node.constantValue}`;
-          } else if (nodeType.id === 'display-tm1637' && node.clkPin?.trim() && node.dioPin?.trim()) {
-            nodeMeta = `${nodeType.metaLabel} • CLK ${node.clkPin.trim()} / DIO ${node.dioPin.trim()}`;
+          } else if (nodeType.id === 'display-tm1637' && node.clkPin?.trim() && node.gpioPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • CLK ${node.clkPin.trim()} / GPIO ${node.gpioPin.trim()}`;
           } else if (nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' && node.servoPin?.trim()) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
@@ -1813,11 +1746,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     }}
                   />
                   <span className="trace-slider-label">100</span>
-                  {nodeType.kind === 'sensor' && (
+                  {(nodeType.kind === 'sensor' || isCompoundInput) && (
                     <button
                       type="button"
                       className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
-                      title="Pulse this sensor to 100 for 200ms"
+                      title="Pulse to 100 for 200ms"
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2063,21 +1996,18 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               {TYPE_BY_ID[selectedNode.type].mode === 'threshold' && (
                 <label>
                   Threshold Value
-                  <input
-                    type="number"
-                    min="-100"
-                    max="100"
-                    step="1"
+                  <NumberInput
+                    min={-100}
+                    max={100}
+                    step={1}
                     value={selectedNode.threshold ?? 50}
-                    onChange={(event) => {
-                      const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 50;
+                    onChange={(value) =>
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, threshold: value } : node,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
                 </label>
               )}
@@ -2085,21 +2015,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               {TYPE_BY_ID[selectedNode.type].mode === 'delay' && (
                 <label>
                   Delay (ms)
-                  <input
-                    type="number"
-                    min="0"
-                    max="10000"
-                    step="10"
+                  <NumberInput
+                    min={0}
+                    max={10000}
+                    step={10}
+                    integer
                     value={selectedNode.delayMs ?? 100}
-                    onChange={(event) => {
-                      const parsed = Number.parseInt(event.target.value, 10);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(10000, parsed)) : 100;
+                    onChange={(value) =>
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, delayMs: value } : node,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
                 </label>
               )}
@@ -2108,40 +2036,34 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 <>
                   <label>
                     Frequency (Hz)
-                    <input
-                      type="number"
-                      min="0"
-                      max="50"
-                      step="0.1"
+                    <NumberInput
+                      min={0}
+                      max={50}
+                      step={0.1}
                       value={selectedNode.frequencyHz ?? 1.0}
-                      onChange={(event) => {
-                        const parsed = Number.parseFloat(event.target.value);
-                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(50, parsed)) : 1.0;
+                      onChange={(value) =>
                         setNodes((prev) =>
                           prev.map((node) =>
                             node.id === selectedNode.id ? { ...node, frequencyHz: value } : node,
                           ),
-                        );
-                      }}
+                        )
+                      }
                     />
                   </label>
                   <label>
                     Amplitude
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
+                    <NumberInput
+                      min={0}
+                      max={100}
+                      step={1}
                       value={selectedNode.amplitude ?? 100}
-                      onChange={(event) => {
-                        const parsed = Number.parseFloat(event.target.value);
-                        const value = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 100;
+                      onChange={(value) =>
                         setNodes((prev) =>
                           prev.map((node) =>
                             node.id === selectedNode.id ? { ...node, amplitude: value } : node,
                           ),
-                        );
-                      }}
+                        )
+                      }
                     />
                   </label>
                 </>
@@ -2150,21 +2072,18 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               {TYPE_BY_ID[selectedNode.type].mode === 'noise' && (
                 <label>
                   Amplitude
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
+                  <NumberInput
+                    min={0}
+                    max={100}
+                    step={1}
                     value={selectedNode.amplitude ?? 50}
-                    onChange={(event) => {
-                      const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 50;
+                    onChange={(value) =>
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, amplitude: value } : node,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
                 </label>
               )}
@@ -2172,21 +2091,18 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               {TYPE_BY_ID[selectedNode.type].kind === 'constant' && (
                 <label>
                   Constant Value
-                  <input
-                    type="number"
-                    min="-100"
-                    max="100"
-                    step="1"
+                  <NumberInput
+                    min={-100}
+                    max={100}
+                    step={1}
                     value={selectedNode.constantValue ?? 0}
-                    onChange={(event) => {
-                      const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 0;
+                    onChange={(value) =>
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, constantValue: value } : node,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
                 </label>
               )}
@@ -2221,21 +2137,18 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               {selectedNode.type === 'digital-out' && (
                 <label>
                   Threshold
-                  <input
-                    type="number"
-                    min="-100"
-                    max="100"
-                    step="1"
+                  <NumberInput
+                    min={-100}
+                    max={100}
+                    step={1}
                     value={selectedNode.threshold ?? 50}
-                    onChange={(event) => {
-                      const parsed = Number.parseFloat(event.target.value);
-                      const value = Number.isFinite(parsed) ? Math.max(-100, Math.min(100, parsed)) : 50;
+                    onChange={(value) =>
                       setNodes((prev) =>
                         prev.map((node) =>
                           node.id === selectedNode.id ? { ...node, threshold: value } : node,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
                 </label>
               )}
@@ -2260,16 +2173,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     />
                   </label>
                   <label>
-                    DIO Pin
+                    GPIO Pin
                     <input
                       type="text"
-                      value={selectedNode.dioPin ?? ''}
-                      placeholder={TM1637_DIO_PLACEHOLDER}
+                      value={selectedNode.gpioPin ?? ''}
+                      placeholder={TM1637_GPIO_PLACEHOLDER}
                       onChange={(event) =>
                         setNodes((prev) =>
                           prev.map((node) =>
                             node.id === selectedNode.id
-                              ? { ...node, dioPin: event.target.value.trimStart() }
+                              ? { ...node, gpioPin: event.target.value.trimStart() }
                               : node,
                           ),
                         )
@@ -2278,23 +2191,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   </label>
                   <label>
                     Brightness (0–7)
-                    <input
-                      type="number"
-                      min="0"
-                      max="7"
-                      step="1"
+                    <NumberInput
+                      min={0}
+                      max={7}
+                      step={1}
+                      integer
                       value={selectedNode.brightness ?? TM1637_DEFAULT_BRIGHTNESS}
-                      onChange={(event) => {
-                        const parsed = Number.parseInt(event.target.value, 10);
-                        const value = Number.isFinite(parsed)
-                          ? Math.max(0, Math.min(7, parsed))
-                          : TM1637_DEFAULT_BRIGHTNESS;
+                      onChange={(value) =>
                         setNodes((prev) =>
                           prev.map((node) =>
                             node.id === selectedNode.id ? { ...node, brightness: value } : node,
                           ),
-                        );
-                      }}
+                        )
+                      }
                     />
                   </label>
                 </>
@@ -2360,7 +2269,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   </label>
                   <label>
                     Numeric Weight
-                    <WeightInput
+                    <NumberInput
+                      min={-1}
+                      max={1}
+                      step={0.05}
                       value={selectedConnection.weight}
                       onChange={(value) =>
                         setConnections((prev) =>
@@ -2558,6 +2470,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           )}
         </div>
       </dialog>
+      {toast && (
+        <div className="toast" role="status">{toast}</div>
+      )}
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { ask, message } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '../lib/tauri';
 import { parse, serialize, type DiagramState } from '../lib/diagramFile';
 import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
@@ -77,9 +78,11 @@ export function useDiagramPersistence({
     let disposed = false;
     const unlistenFns: UnlistenFn[] = [];
 
-    const confirmReplace = (message: string): boolean => {
+    // window.confirm/alert are silent no-ops inside Tauri's WebView, so all
+    // dialogs here must go through the dialog plugin's async API.
+    const confirmReplace = async (prompt: string, title: string): Promise<boolean> => {
       if (isPristineRef.current) return true;
-      return window.confirm(message);
+      return ask(prompt, { title, kind: 'warning' });
     };
 
     const handleSave = async () => {
@@ -87,7 +90,7 @@ export function useDiagramPersistence({
         const contents = serialize(stateRef.current);
         await invoke<string | null>('save_diagram', { contents });
       } catch (err) {
-        window.alert(`Failed to save diagram: ${String(err)}`);
+        await message(`Failed to save diagram: ${String(err)}`, { kind: 'error' });
       }
     };
 
@@ -96,15 +99,15 @@ export function useDiagramPersistence({
         const contents = await invoke<string | null>('load_diagram');
         if (contents === null) return;
         const file = parse(contents);
-        if (!confirmReplace('Replace the current diagram with the loaded file?')) return;
+        if (!(await confirmReplace('Replace the current diagram with the loaded file?', 'Load Diagram'))) return;
         applyFile(file, settersRef.current);
       } catch (err) {
-        window.alert(`Failed to load diagram: ${String(err)}`);
+        await message(`Failed to load diagram: ${String(err)}`, { kind: 'error' });
       }
     };
 
-    const handleNew = () => {
-      if (!confirmReplace('Discard the current diagram and start fresh?')) return;
+    const handleNew = async () => {
+      if (!(await confirmReplace('Discard the current diagram and start fresh?', 'New Diagram'))) return;
       resetRef.current();
     };
 
