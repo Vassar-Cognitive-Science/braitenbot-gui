@@ -227,8 +227,12 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
   'compound-output': {},
   // --- Sensors ---
   'sensor-analog': {
-    loop: (node, { indent }) =>
-      `${indent}float ${varName(node)} = analogRead(SENSOR_${readableId(node)}) * (100.0 / 1023.0);`,
+    loop: (node, { indent }) => {
+      const read = `analogRead(SENSOR_${readableId(node)}) * (100.0 / 1023.0)`;
+      // Invert so a brighter/closer reading produces a higher signal.
+      const expr = node.invert ? `100.0 - (${read})` : read;
+      return `${indent}float ${varName(node)} = ${expr};`;
+    },
   },
   'sensor-digital': {
     setup: (node, { indent }) => {

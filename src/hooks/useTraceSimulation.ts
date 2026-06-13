@@ -113,7 +113,8 @@ export function simulateGraph(
         const raw = sensorValues[nodeId] ?? 0;
         nodeValues[nodeId] = raw >= 50 ? 100 : 0;
       } else {
-        nodeValues[nodeId] = sensorValues[nodeId] ?? 50;
+        const raw = sensorValues[nodeId] ?? 50;
+        nodeValues[nodeId] = node.invert ? 100 - raw : raw;
       }
       continue;
     }

@@ -73,6 +73,21 @@ describe('generateSketch', () => {
     expect(code).toContain('if (_elapsed < 20) delay(20 - _elapsed);');
   });
 
+  it('inverts an analog sensor read when invert is set', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ invert: true }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('100.0 - (analogRead(SENSOR_Sensor_1) * (100.0 / 1023.0))');
+  });
+
   it('inverts the right servo inside the drive() helper', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [

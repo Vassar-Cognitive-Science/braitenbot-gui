@@ -60,6 +60,9 @@ export interface DiagramNode {
   arduinoPort?: string;
   /** Use INPUT_PULLUP mode for digital sensors. Ignored for non-digital sensors. */
   pullup?: boolean;
+  /** Invert an analog sensor's signal (100 − value) so brighter/closer reads
+   *  higher. Ignored for non-analog sensors. */
+  invert?: boolean;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;

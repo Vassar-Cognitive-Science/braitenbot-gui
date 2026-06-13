@@ -1986,6 +1986,31 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </label>
               )}
 
+              {selectedNode.type === 'sensor-analog' && (
+                <>
+                  <label className="config-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedNode.invert ?? false}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, invert: event.target.checked }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                    Invert signal
+                  </label>
+                  <p className="config-description">
+                    Outputs 100 − value, so a brighter (or closer) reading
+                    produces a higher signal.
+                  </p>
+                </>
+              )}
+
               {selectedNode.type === 'sensor-color' && (
                 <p className="config-description">
                   This sensor exposes four output anchors — clear, red, green, blue.

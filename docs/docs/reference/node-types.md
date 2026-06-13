@@ -25,10 +25,15 @@ Reads an analog pin (0–1023) and scales the value to **0–100**.
 
 **Configuration:**
 - **Arduino Port** — the analog pin (e.g., `A0`, `A1`, ..., `A5`)
+- **Invert signal** — checkbox that outputs `100 − value`, so a brighter (or closer) reading produces a higher signal. Useful when a photoresistor divider reads lower as light increases.
 
 **Generated code:**
 ```cpp
+// Without invert
 float sig_sensor = analogRead(SENSOR_PIN) * (100.0 / 1023.0);
+
+// With invert
+float sig_sensor = 100.0 - (analogRead(SENSOR_PIN) * (100.0 / 1023.0));
 ```
 
 ---

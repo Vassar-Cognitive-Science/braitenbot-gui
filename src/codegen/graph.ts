@@ -26,6 +26,7 @@ export interface GraphNode {
   arduinoPort?: string;
   protocol?: SensorProtocol;
   pullup?: boolean;
+  invert?: boolean;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
@@ -98,6 +99,7 @@ export function buildGraph(
       arduinoPort: node.arduinoPort,
       protocol: typeDef.protocol,
       pullup: node.pullup,
+      invert: node.invert,
       threshold: node.threshold,
       delayMs: node.delayMs,
       servoPin: node.servoPin,
