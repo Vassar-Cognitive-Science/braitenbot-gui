@@ -1,8 +1,21 @@
-name: Deploy to GitHub Pages
+name: Deploy docs to GitHub Pages
+
+# Builds the Docusaurus site in docs/ (the project's main website) and deploys
+# it to GitHub Pages.
+#
+# Before building, scripts/fetch-latest-release.mjs bakes the current release's
+# per-platform download links into the Install page. The site is rebuilt on
+# every release publish so those links stay current.
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/fetch-latest-release.mjs'
+      - '.github/workflows/deploy.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -24,14 +37,24 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: docs/package-lock.json
 
-      - run: npm ci
+      - name: Bake latest-release download links into the Install page
+        run: node scripts/fetch-latest-release.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: npm run build:web
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build docs site
+        working-directory: docs
+        run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: docs/build
 
   deploy:
     needs: build

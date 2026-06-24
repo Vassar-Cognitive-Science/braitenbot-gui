@@ -11,7 +11,9 @@ The app includes everything you need: the visual editor, signal simulation, and 
 
 ### Download
 
-Download the latest release for your platform from the [GitHub releases page](https://github.com/jspsych/braitenbot-gui/releases).
+The easiest way to get the latest build is the [**Install page**](/install),
+which links directly to the newest downloads for each platform. You can also
+browse every release on the [GitHub releases page](https://github.com/Vassar-Cognitive-Science/braitenbot-gui/releases).
 
 | Platform | File |
 |----------|------|
@@ -57,7 +59,7 @@ If you want to build BraitenBot yourself:
 ### Steps
 
 ```bash
-git clone https://github.com/jspsych/braitenbot-gui.git
+git clone https://github.com/Vassar-Cognitive-Science/braitenbot-gui.git
 cd braitenbot-gui
 npm install
 npm run fetch:arduino-cli    # download arduino-cli binary for your platform

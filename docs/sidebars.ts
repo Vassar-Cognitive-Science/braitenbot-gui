@@ -1,7 +1,7 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 const sidebars: SidebarsConfig = {
-  docsSidebar: [
+  softwareSidebar: [
     'intro',
     {
       type: 'category',
@@ -24,9 +24,6 @@ const sidebars: SidebarsConfig = {
         'concepts/trace-simulation',
       ],
     },
-  ],
-
-  tutorialSidebar: [
     {
       type: 'category',
       label: 'Tutorials',
@@ -41,9 +38,6 @@ const sidebars: SidebarsConfig = {
         'tutorials/compound-reuse',
       ],
     },
-  ],
-
-  referenceSidebar: [
     {
       type: 'category',
       label: 'Reference',
@@ -56,6 +50,13 @@ const sidebars: SidebarsConfig = {
         'reference/supported-hardware',
       ],
     },
+  ],
+
+  hardwareSidebar: [
+    'hardware/overview',
+    'hardware/bill-of-materials',
+    'hardware/3d-models',
+    'hardware/assembly',
   ],
 };
 

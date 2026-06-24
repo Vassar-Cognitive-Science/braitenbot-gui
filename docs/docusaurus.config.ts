@@ -2,6 +2,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
+const githubRepo = 'https://github.com/Vassar-Cognitive-Science/braitenbot-gui';
+
 const config: Config = {
   title: 'BraitenBot',
   tagline: 'Visual wiring diagrams for Braitenberg vehicles',
@@ -11,10 +13,10 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://braitenbot.github.io',
+  url: 'https://vassar-cognitive-science.github.io',
   baseUrl: '/braitenbot-gui/',
 
-  organizationName: 'braitenbot',
+  organizationName: 'Vassar-Cognitive-Science',
   projectName: 'braitenbot-gui',
 
   onBrokenLinks: 'throw',
@@ -30,7 +32,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          routeBasePath: '/',
+          routeBasePath: '/docs',
         },
         blog: false,
         theme: {
@@ -50,24 +52,23 @@ const config: Config = {
       items: [
         {
           type: 'docSidebar',
-          sidebarId: 'docsSidebar',
+          sidebarId: 'softwareSidebar',
           position: 'left',
-          label: 'Docs',
+          label: 'Software',
         },
         {
           type: 'docSidebar',
-          sidebarId: 'tutorialSidebar',
+          sidebarId: 'hardwareSidebar',
           position: 'left',
-          label: 'Tutorials',
+          label: 'Hardware',
         },
         {
-          type: 'docSidebar',
-          sidebarId: 'referenceSidebar',
+          to: '/install',
+          label: 'Install',
           position: 'left',
-          label: 'Reference',
         },
         {
-          href: 'https://github.com/jspsych/braitenbot-gui',
+          href: githubRepo,
           label: 'GitHub',
           position: 'right',
         },
@@ -77,20 +78,26 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Documentation',
+          title: 'Software',
           items: [
-            { label: 'Getting Started', to: '/getting-started/installation' },
-            { label: 'Tutorials', to: '/tutorials/your-first-vehicle' },
-            { label: 'Reference', to: '/reference/node-types' },
+            { label: 'Getting Started', to: '/docs/getting-started/installation' },
+            { label: 'Tutorials', to: '/docs/tutorials/your-first-vehicle' },
+            { label: 'Reference', to: '/docs/reference/node-types' },
+          ],
+        },
+        {
+          title: 'Hardware',
+          items: [
+            { label: 'Overview', to: '/docs/hardware/overview' },
+            { label: 'Bill of Materials', to: '/docs/hardware/bill-of-materials' },
+            { label: '3D Models', to: '/docs/hardware/3d-models' },
           ],
         },
         {
           title: 'More',
           items: [
-            {
-              label: 'GitHub',
-              href: 'https://github.com/jspsych/braitenbot-gui',
-            },
+            { label: 'Install', to: '/install' },
+            { label: 'GitHub', href: githubRepo },
           ],
         },
       ],

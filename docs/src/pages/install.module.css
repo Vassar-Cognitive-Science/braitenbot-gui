@@ -1,0 +1,60 @@
+.lede {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-800);
+  max-width: 44rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin: 2rem 0;
+}
+
+.platformCard {
+  padding: 1.5rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 12px;
+  background: var(--ifm-background-surface-color);
+  text-align: center;
+}
+
+.platformLabel {
+  font-size: 1.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.platformHint {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.assetName {
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ifm-color-emphasis-600);
+  word-break: break-all;
+  background: none;
+  border: none;
+}
+
+.unavailable {
+  color: var(--ifm-color-emphasis-500);
+  font-style: italic;
+}
+
+.fallback {
+  margin: 2rem 0;
+  padding: 2rem;
+  border: 1px dashed var(--ifm-color-emphasis-300);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.allReleases {
+  margin-top: 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+}
