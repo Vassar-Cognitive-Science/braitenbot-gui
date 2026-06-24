@@ -327,21 +327,39 @@ describe('generateSketch', () => {
     expect(code).toContain('TCS34725_ADDR = 0x29');
     expect(code).toContain('struct TCS34725Sample { uint16_t c, r, g, b; };');
     expect(code).toContain('TCS34725Sample tcs34725_read_all()');
-    expect(code).toContain('void tcs34725_begin()');
-    // setup() initializes the chip.
-    expect(code).toContain('tcs34725_begin();');
-    // Single bulk read per loop, then four derived channel variables.
+    expect(code).toContain('void tcs34725_begin(uint8_t gain)');
+    // setup() initializes the chip with the default 16x gain (CONTROL 0x02).
+    expect(code).toContain('tcs34725_begin(0x02);');
+    // Single bulk read per loop, then four derived channel variables, each
+    // normalized against the ADC's real full-scale count (not 65535).
+    expect(code).toContain('const float TCS34725_FULL_SCALE = 44032.0;');
     expect(code).toContain('TCS34725Sample sample_Front_Color = tcs34725_read_all();');
-    expect(code).toContain('float sig_Front_Color_clear = sample_Front_Color.c * (100.0 / 65535.0);');
-    expect(code).toContain('float sig_Front_Color_red   = sample_Front_Color.r * (100.0 / 65535.0);');
-    expect(code).toContain('float sig_Front_Color_green = sample_Front_Color.g * (100.0 / 65535.0);');
-    expect(code).toContain('float sig_Front_Color_blue  = sample_Front_Color.b * (100.0 / 65535.0);');
+    expect(code).toContain('float sig_Front_Color_clear = sample_Front_Color.c * (100.0 / TCS34725_FULL_SCALE);');
+    expect(code).toContain('float sig_Front_Color_red   = sample_Front_Color.r * (100.0 / TCS34725_FULL_SCALE);');
+    expect(code).toContain('float sig_Front_Color_green = sample_Front_Color.g * (100.0 / TCS34725_FULL_SCALE);');
+    expect(code).toContain('float sig_Front_Color_blue  = sample_Front_Color.b * (100.0 / TCS34725_FULL_SCALE);');
     // Edges resolve to the port-specific variable, not a single sig_Front_Color.
     expect(code).toContain('input_Left_Wheel += sig_Front_Color_red * 1.0000;');
     expect(code).toContain('input_Right_Wheel += sig_Front_Color_clear * 0.5000;');
     // No bare `sig_Front_Color` without a port suffix — every reference must
     // go through one of the four channel-suffixed variables.
     expect(code).not.toMatch(/sig_Front_Color[^_a-zA-Z0-9]/);
+  });
+
+  it('maps the configured color-sensor gain to the CONTROL register', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined, colorGain: 60 }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+      { ...conn({ id: 'c2', from: 'color-1', to: 'motor-right', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // 60x → CONTROL register 0x03.
+    expect(code).toContain('tcs34725_begin(0x03);');
   });
 
   it('falls back to a declared channel when fromPort is unknown', () => {

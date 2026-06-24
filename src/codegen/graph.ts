@@ -27,6 +27,7 @@ export interface GraphNode {
   protocol?: SensorProtocol;
   pullup?: boolean;
   invert?: boolean;
+  colorGain?: number;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
@@ -100,6 +101,7 @@ export function buildGraph(
       protocol: typeDef.protocol,
       pullup: node.pullup,
       invert: node.invert,
+      colorGain: node.colorGain,
       threshold: node.threshold,
       delayMs: node.delayMs,
       servoPin: node.servoPin,

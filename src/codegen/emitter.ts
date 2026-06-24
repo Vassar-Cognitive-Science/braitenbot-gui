@@ -1,6 +1,18 @@
-import { getOutputPorts, TYPE_BY_ID } from '../types/diagram';
+import { getOutputPorts, TYPE_BY_ID, DEFAULT_COLOR_GAIN } from '../types/diagram';
 import type { NodeTypeId, PinFieldId } from '../types/diagram';
 import type { WiringGraph, GraphNode, GraphEdge } from './graph';
+
+// TCS34725 RGBC gain multiplier → CONTROL-register (0x0F) value.
+const COLOR_GAIN_REGISTER: Record<number, string> = {
+  1: '0x00',
+  4: '0x01',
+  16: '0x02',
+  60: '0x03',
+};
+
+function colorGainRegister(gain?: number): string {
+  return COLOR_GAIN_REGISTER[gain ?? DEFAULT_COLOR_GAIN] ?? COLOR_GAIN_REGISTER[DEFAULT_COLOR_GAIN];
+}
 
 // C identifier conventions (built from readableId, which sanitizes the
 // node label and disambiguates duplicates with _1/_2/… suffixes):
@@ -253,12 +265,14 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
     // variable so downstream edges can pick via their fromPort.
     loop: (node, { indent }) => {
       const rid = readableId(node);
+      // Normalize against the ADC's actual full-scale count at this integration
+      // time (TCS34725_FULL_SCALE), so a saturated channel reads 100.
       return [
         `${indent}TCS34725Sample sample_${rid} = tcs34725_read_all();`,
-        `${indent}float sig_${rid}_clear = sample_${rid}.c * (100.0 / 65535.0);`,
-        `${indent}float sig_${rid}_red   = sample_${rid}.r * (100.0 / 65535.0);`,
-        `${indent}float sig_${rid}_green = sample_${rid}.g * (100.0 / 65535.0);`,
-        `${indent}float sig_${rid}_blue  = sample_${rid}.b * (100.0 / 65535.0);`,
+        `${indent}float sig_${rid}_clear = sample_${rid}.c * (100.0 / TCS34725_FULL_SCALE);`,
+        `${indent}float sig_${rid}_red   = sample_${rid}.r * (100.0 / TCS34725_FULL_SCALE);`,
+        `${indent}float sig_${rid}_green = sample_${rid}.g * (100.0 / TCS34725_FULL_SCALE);`,
+        `${indent}float sig_${rid}_blue  = sample_${rid}.b * (100.0 / TCS34725_FULL_SCALE);`,
       ].join('\n');
     },
   },
@@ -407,7 +421,7 @@ function emitSetup(graph: WiringGraph, ctx: EmitCtx): string {
   if (i2cTypes.length) lines.push('  Wire.begin();');
   for (const typeId of i2cTypes) {
     const init = I2C_DRIVERS[typeId]?.setupInit;
-    if (init) lines.push(`  ${init}`);
+    if (init) lines.push(`  ${init(graph)}`);
   }
   for (const node of graph.nodes) {
     const fragment = NODE_EMITTERS[node.typeId].setup?.(node, ctx);
@@ -431,16 +445,25 @@ function emitSetup(graph: WiringGraph, ctx: EmitCtx): string {
 interface I2cDriver {
   /** File-scope C: address constant, struct, read/write helpers, begin(). */
   decl: string;
-  /** Optional one-shot init call placed inside setup(), after Wire.begin(). */
-  setupInit?: string;
+  /** Optional one-shot init call placed inside setup(), after Wire.begin().
+   *  Receives the graph so it can read device config (e.g. gain) off a node. */
+  setupInit?: (graph: WiringGraph) => string;
 }
 
 const I2C_DRIVERS: Partial<Record<NodeTypeId, I2cDriver>> = {
   'sensor-color': {
-    setupInit: 'tcs34725_begin();',
+    // Gain is a device-wide setting (single sensor at 0x29); read it off the
+    // first color-sensor node in the graph.
+    setupInit: (graph) => {
+      const node = graph.nodes.find((n) => n.typeId === 'sensor-color');
+      return `tcs34725_begin(${colorGainRegister(node?.colorGain)});`;
+    },
     decl: [
       '// --- TCS34725 color sensor driver (I2C, address 0x29) ---',
       'const uint8_t TCS34725_ADDR = 0x29;',
+      '// Max RGBC count at the configured integration time (ATIME=0xD5):',
+      '// (256 - 0xD5) * 1024 = 44032. Channels saturate here, not at 65535.',
+      'const float TCS34725_FULL_SCALE = 44032.0;',
       '',
       'struct TCS34725Sample { uint16_t c, r, g, b; };',
       '',
@@ -475,9 +498,9 @@ const I2C_DRIVERS: Partial<Record<NodeTypeId, I2cDriver>> = {
       '  return s;',
       '}',
       '',
-      'void tcs34725_begin() {',
+      'void tcs34725_begin(uint8_t gain) {',
       '  tcs34725_write8(0x01, 0xD5); // ATIME: ~101 ms integration',
-      '  tcs34725_write8(0x0F, 0x01); // CONTROL: gain = 4x',
+      '  tcs34725_write8(0x0F, gain); // CONTROL: RGBC gain (0x00=1x,0x01=4x,0x02=16x,0x03=60x)',
       '  tcs34725_write8(0x00, 0x01); // ENABLE: PON',
       '  delay(3);',
       '  tcs34725_write8(0x00, 0x03); // ENABLE: PON | AEN (RGBC enable)',

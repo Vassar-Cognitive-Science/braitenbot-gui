@@ -75,14 +75,17 @@ float sig_sensor = digitalRead(PIN) == LOW ? 100.0 : 0.0;
 | Outputs | 4 (clear, red, green, blue) |
 | Protocol | i2c |
 
-Reads a TCS34725 color sensor over I2C and outputs four channels, each scaled to **0–100**:
+Reads a TCS34725 color sensor over I2C and outputs four channels, each scaled to **0–100** (normalized against the ADC's full-scale count of 44032 at the configured integration time, so a saturated channel reads 100):
 
 - `clear` — ambient light intensity
 - `red` — red channel
 - `green` — green channel
 - `blue` — blue channel
 
-**Configuration:** None (I2C address is fixed).
+**Configuration:**
+- **Gain** — RGBC gain multiplier: 1×, 4×, 16×, or 60× (default: 16×). Higher gain lifts readings in dim light; lower gain avoids saturation under bright light. The I2C address (0x29) is fixed.
+
+Gain is a device-wide setting — if a diagram has more than one color-sensor node they share the single physical sensor, so the gain is taken from the first one.
 
 Each outgoing connection specifies which port it reads from via the `fromPort` field. You can route each channel to different targets independently.
 

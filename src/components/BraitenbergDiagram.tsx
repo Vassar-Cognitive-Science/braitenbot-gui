@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
-import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
+import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel, COLOR_GAINS, DEFAULT_COLOR_GAIN } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
@@ -1987,35 +1987,52 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               )}
 
               {selectedNode.type === 'sensor-analog' && (
-                <>
-                  <label className="config-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedNode.invert ?? false}
-                      onChange={(event) =>
-                        setNodes((prev) =>
-                          prev.map((node) =>
-                            node.id === selectedNode.id
-                              ? { ...node, invert: event.target.checked }
-                              : node,
-                          ),
-                        )
-                      }
-                    />
-                    Invert signal
-                  </label>
-                  <p className="config-description">
-                    Outputs 100 − value, so a brighter (or closer) reading
-                    produces a higher signal.
-                  </p>
-                </>
+                <label className="config-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedNode.invert ?? false}
+                    onChange={(event) =>
+                      setNodes((prev) =>
+                        prev.map((node) =>
+                          node.id === selectedNode.id
+                            ? { ...node, invert: event.target.checked }
+                            : node,
+                        ),
+                      )
+                    }
+                  />
+                  Invert signal
+                </label>
               )}
 
               {selectedNode.type === 'sensor-color' && (
-                <p className="config-description">
-                  This sensor exposes four output anchors — clear, red, green, blue.
-                  Drag from the specific anchor to wire that channel.
-                </p>
+                <>
+                  <label>
+                    Gain
+                    <select
+                      value={selectedNode.colorGain ?? DEFAULT_COLOR_GAIN}
+                      onChange={(event) => {
+                        const gain = Number(event.target.value);
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id ? { ...node, colorGain: gain } : node,
+                          ),
+                        );
+                      }}
+                    >
+                      {COLOR_GAINS.map((g) => (
+                        <option key={g} value={g}>
+                          {g}×
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="config-description">
+                    This sensor exposes four output anchors — clear, red, green, blue.
+                    Drag from the specific anchor to wire that channel. Raise the
+                    gain if readings are too low in dim light.
+                  </p>
+                </>
               )}
 
               {TYPE_BY_ID[selectedNode.type].mode === 'threshold' && (

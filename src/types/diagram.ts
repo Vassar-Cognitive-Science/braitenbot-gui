@@ -2,6 +2,10 @@ export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound'
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
+/** TCS34725 RGBC gain multipliers the UI offers; the emitter maps each to a
+ *  CONTROL-register value. 16× is a good default for indoor/classroom light. */
+export const COLOR_GAINS = [1, 4, 16, 60] as const;
+export const DEFAULT_COLOR_GAIN = 16;
 /**
  * Identifier for a port on a node. Color sensor channels are a fixed enum;
  * compound-node ports are user-defined strings. Runtime port validity is
@@ -63,6 +67,9 @@ export interface DiagramNode {
   /** Invert an analog sensor's signal (100 − value) so brighter/closer reads
    *  higher. Ignored for non-analog sensors. */
   invert?: boolean;
+  /** TCS34725 color-sensor RGBC gain multiplier (1, 4, 16, or 60). Higher gain
+   *  lifts low-light readings. Ignored for non-color sensors. */
+  colorGain?: number;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
