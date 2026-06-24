@@ -49,10 +49,14 @@ concurrency:
 jobs:
   version:
     runs-on: ubuntu-latest
+    # Surface the secret as an env var so the step `if` can gate on it — the
+    # `secrets` context is not available in `if` conditions, but `env` is.
+    env:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
     steps:
       - name: Generate GitHub App token
         id: app-token
-        if: ${{ secrets.RELEASE_APP_ID != '' }}
+        if: ${{ env.RELEASE_APP_ID != '' }}
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
@@ -65,7 +69,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci

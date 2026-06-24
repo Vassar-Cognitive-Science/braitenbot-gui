@@ -20,6 +20,24 @@ const pkg = JSON.parse(
 );
 const tag = `v${pkg.version}`;
 
+// Only cut a tag when the HEAD commit actually bumped the version (i.e. a
+// merged "Version Packages" PR). The Changesets action runs this publish step
+// on EVERY push to main with no pending changesets, so without this guard an
+// ordinary push would tag whatever version is in package.json.
+const headBumpedVersion = (() => {
+  try {
+    const diff = run('git diff HEAD~1 HEAD -- package.json');
+    return /^\+\s*"version":/m.test(diff);
+  } catch {
+    return false; // no parent commit (e.g. very first commit) — nothing to release
+  }
+})();
+
+if (!headBumpedVersion) {
+  console.log('HEAD did not change the package version; no release tag.');
+  process.exit(0);
+}
+
 const alreadyTagged = run('git ls-remote --tags origin')
   .split('\n')
   .some((line) => line.endsWith(`refs/tags/${tag}`));
