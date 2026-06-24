@@ -133,6 +133,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Make beforeBuildCommand's fetch:arduino-cli download the sidecar for
+          # this job's --target, not the runner's host arch (needed for the
+          # x86_64-apple-darwin cross-compile on the Apple Silicon runner).
+          ARDUINO_CLI_TARGET: ${{ matrix.rust-target }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}

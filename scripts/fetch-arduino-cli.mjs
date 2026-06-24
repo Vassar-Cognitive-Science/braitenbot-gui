@@ -64,6 +64,29 @@ function currentPlatformKey() {
   return `${process.platform}-${process.arch}`;
 }
 
+// Reverse lookup: Rust target triple -> platform key. Used to fetch the binary
+// for a cross-compilation target rather than the host (e.g. building the
+// x86_64-apple-darwin bundle on an Apple Silicon CI runner).
+const TRIPLE_TO_KEY = Object.fromEntries(
+  Object.entries(PLATFORMS).map(([key, spec]) => [spec.targetTriple, key]),
+);
+
+// When ARDUINO_CLI_TARGET names a Rust target triple, fetch that target's
+// sidecar; otherwise fall back to the host platform. The CI release matrix sets
+// this so each job downloads the binary matching its --target.
+function targetPlatformKey() {
+  const triple = process.env.ARDUINO_CLI_TARGET?.trim();
+  if (!triple) return currentPlatformKey();
+  const key = TRIPLE_TO_KEY[triple];
+  if (!key) {
+    throw new Error(
+      `No arduino-cli mapping for target triple: ${triple}\n` +
+        `  Supported: ${Object.keys(TRIPLE_TO_KEY).join(', ')}`,
+    );
+  }
+  return key;
+}
+
 function sidecarPath(spec) {
   const isExe = spec.binaryName.endsWith('.exe');
   const stem = isExe ? spec.binaryName.slice(0, -4) : spec.binaryName;
@@ -142,7 +165,7 @@ async function main() {
   const fetchAll = args.has('--all');
   const force = args.has('--force');
 
-  const targets = fetchAll ? Object.keys(PLATFORMS) : [currentPlatformKey()];
+  const targets = fetchAll ? Object.keys(PLATFORMS) : [targetPlatformKey()];
 
   for (const key of targets) {
     if (!PLATFORMS[key]) {
