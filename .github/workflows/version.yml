@@ -13,14 +13,25 @@ name: Version (Changesets)
 #      the `publish` step (scripts/tag-release.mjs) pushes a vX.Y.Z tag, which
 #      triggers .github/workflows/release.yml to build and draft the release.
 #
-# IMPORTANT — token for step 3:
+# Authentication — uses a GitHub App (not a personal PAT):
 #   A tag pushed with the default GITHUB_TOKEN will NOT trigger release.yml
-#   (GitHub blocks workflow runs from triggering other workflows). To get the
-#   release build to start automatically, create a Personal Access Token (or
-#   GitHub App token) with `contents: write` + `workflows` scope and save it as
-#   a repository secret named RELEASE_PAT. Without it, the tag is still pushed,
-#   but you must start release.yml manually from the Actions tab (it accepts a
-#   tag via workflow_dispatch).
+#   (GitHub blocks workflow runs from triggering other workflows), and the
+#   default token's PR-creation is gated by org policy. Both problems are solved
+#   by minting a short-lived installation token from a GitHub App, which is not
+#   tied to any individual's account.
+#
+#   One-time setup:
+#     1. Create a GitHub App (org Settings -> Developer settings -> GitHub Apps).
+#        Repository permissions: Contents = Read & write, Pull requests =
+#        Read & write. No webhook needed.
+#     2. Install the App on this repository.
+#     3. Store the App's credentials as repository (or org) secrets:
+#          RELEASE_APP_ID          = the App's numeric App ID
+#          RELEASE_APP_PRIVATE_KEY = the App's generated .pem private key
+#
+#   If the secrets are absent the workflow falls back to GITHUB_TOKEN: the
+#   Version PR still works (given org policy allows it), but the release tag
+#   must be built manually via release.yml's workflow_dispatch.
 
 on:
   push:
@@ -39,10 +50,18 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ secrets.RELEASE_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -59,4 +78,4 @@ jobs:
           commit: 'chore: version packages'
           title: 'chore: version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
