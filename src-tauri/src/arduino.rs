@@ -195,7 +195,9 @@ const REQUIRED_CORES: &[&str] = &["arduino:avr", "arduino:renesas_uno"];
 ///   - Servo  — Arduino's official Servo library (not bundled with arduino-cli,
 ///              required by motor/servo node codegen)
 ///   - TM1637 — Avishay Orpaz's driver for 4-digit 7-segment displays
-const REQUIRED_LIBS: &[&str] = &["Servo", "TM1637"];
+///   - STM32duino VL53L4CD — STMicroelectronics' driver for the VL53L4CD
+///                           time-of-flight distance sensor (ToF Distance node)
+const REQUIRED_LIBS: &[&str] = &["Servo", "TM1637", "STM32duino VL53L4CD"];
 
 async fn check_installed_libs(app: &AppHandle) -> ArduinoResult<bool> {
     let (stdout, stderr, success) =

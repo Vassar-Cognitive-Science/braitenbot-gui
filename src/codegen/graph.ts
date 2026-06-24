@@ -28,6 +28,8 @@ export interface GraphNode {
   pullup?: boolean;
   invert?: boolean;
   colorGain?: number;
+  xshutPin?: string;
+  maxDistanceMm?: number;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
@@ -102,6 +104,8 @@ export function buildGraph(
       pullup: node.pullup,
       invert: node.invert,
       colorGain: node.colorGain,
+      xshutPin: node.xshutPin,
+      maxDistanceMm: node.maxDistanceMm,
       threshold: node.threshold,
       delayMs: node.delayMs,
       servoPin: node.servoPin,

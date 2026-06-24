@@ -60,7 +60,9 @@ Used by: Digital Sensor, Continuous Servo, Positional Servo, Digital Output node
 | SDA | SDA | Uno R4 (dedicated header) |
 | SCL | SCL | Uno R4 (dedicated header) |
 
-Used by: Color Sensor (TCS34725), TM1637 Display. The I2C bus is shared — multiple I2C devices use the same two pins.
+Used by: Color Sensor (TCS34725), ToF Distance (VL53L4CD), TM1637 Display. The I2C bus is shared — multiple I2C devices use the same two pins (SDA/SCL); they are daisy-chained, not given individual ports.
+
+Because the bus is addressed rather than pinned, devices must have distinct I2C addresses. The VL53L4CD ships at the same address (0x29) as every other VL53L4CD **and** as the TCS34725, so BraitenBot reassigns each ToF sensor to a unique address at startup using its XSHUT pin (see [ToF Distance](node-types#tof-distance-vl53l4cd)). Each ToF node therefore needs its own digital XSHUT pin in addition to the shared SDA/SCL lines.
 
 ### Servo pins
 
@@ -93,6 +95,7 @@ Any sensor with a HIGH/LOW output works with a Digital Sensor node:
 Currently supported:
 
 - **TCS34725** — RGB color sensor (via Color Sensor node)
+- **VL53L4CD** — time-of-flight distance sensor (via ToF Distance node). Multiple units are supported on the same bus; each needs its own XSHUT pin for the startup address-assignment sequence.
 
 ## Outputs
 
@@ -132,4 +135,5 @@ BraitenBot automatically installs the following libraries during [Arduino setup]
 |---------|---------|---------|
 | Servo | (bundled with core) | All servo and motor nodes |
 | TM1637 | latest | TM1637 Display nodes |
+| STM32duino VL53L4CD | latest | ToF Distance nodes |
 | Wire | (bundled with core) | I2C sensors |

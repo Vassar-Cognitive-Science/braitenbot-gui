@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
-import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel, COLOR_GAINS, DEFAULT_COLOR_GAIN } from '../types/diagram';
+import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { TransferCurveEditor } from './TransferCurveEditor';
@@ -22,6 +22,7 @@ const SERVO_PIN_PLACEHOLDER = '10';
 const DIGITAL_OUT_PIN_PLACEHOLDER = '13';
 const TM1637_CLK_PLACEHOLDER = '2';
 const TM1637_GPIO_PLACEHOLDER = '3';
+const TOF_XSHUT_PLACEHOLDER = '4';
 const TM1637_DEFAULT_BRIGHTNESS = 3;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
@@ -1113,6 +1114,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
           clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
           gpioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+          xshutPin: nodeType.id === 'sensor-tof' ? '' : undefined,
+          maxDistanceMm: nodeType.id === 'sensor-tof' ? DEFAULT_TOF_MAX_MM : undefined,
           brightness:
             nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
           compoundTypeId: compoundTypeId ?? undefined,
@@ -1634,6 +1637,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             nodeMeta = `${nodeType.metaLabel} • pin ${node.servoPin.trim()}`;
           } else if (nodeType.id === 'sensor-color') {
             nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
+          } else if (nodeType.id === 'sensor-tof' && node.xshutPin?.trim()) {
+            nodeMeta = `${nodeType.metaLabel} • XSHUT ${node.xshutPin.trim()}`;
           } else {
             nodeMeta = nodeType.metaLabel;
           }
@@ -2031,6 +2036,70 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                     This sensor exposes four output anchors — clear, red, green, blue.
                     Drag from the specific anchor to wire that channel. Raise the
                     gain if readings are too low in dim light.
+                  </p>
+                </>
+              )}
+
+              {selectedNode.type === 'sensor-tof' && (
+                <>
+                  <label>
+                    XSHUT Pin
+                    <input
+                      type="text"
+                      value={selectedNode.xshutPin ?? ''}
+                      placeholder={TOF_XSHUT_PLACEHOLDER}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, xshutPin: event.target.value.trimStart() }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Max Distance (mm)
+                    <NumberInput
+                      min={10}
+                      max={4000}
+                      step={10}
+                      integer
+                      value={selectedNode.maxDistanceMm ?? DEFAULT_TOF_MAX_MM}
+                      onChange={(value) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, maxDistanceMm: value }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="config-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedNode.invert ?? false}
+                      onChange={(event) =>
+                        setNodes((prev) =>
+                          prev.map((node) =>
+                            node.id === selectedNode.id
+                              ? { ...node, invert: event.target.checked }
+                              : node,
+                          ),
+                        )
+                      }
+                    />
+                    Invert (far reads higher)
+                  </label>
+                  <p className="config-description">
+                    Distance sensor (VL53L4CD). By default a closer object reads
+                    higher, ramping to 0 at the max distance. Each ToF node needs
+                    its own XSHUT pin — they share the I2C bus, so the generated
+                    sketch brings them up one at a time and assigns each a unique
+                    address.
                   </p>
                 </>
               )}

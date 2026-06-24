@@ -1,4 +1,4 @@
-import { getOutputPorts, TYPE_BY_ID, DEFAULT_COLOR_GAIN } from '../types/diagram';
+import { getOutputPorts, TYPE_BY_ID, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
 import type { NodeTypeId, PinFieldId } from '../types/diagram';
 import type { WiringGraph, GraphNode, GraphEdge } from './graph';
 
@@ -178,6 +178,7 @@ function emitProductAggregation(
  * convention here (and existing types preserve their historical names).
  */
 function pinConstantName(typeId: NodeTypeId, field: PinFieldId, sid: string): string {
+  if (field === 'xshutPin') return `XSHUT_${sid}`;
   if (typeId === 'sensor-analog' || typeId === 'sensor-digital') return `SENSOR_${sid}`;
   if (typeId === 'display-tm1637') {
     return field === 'clkPin' ? `TM1637_${sid}_CLK` : `TM1637_${sid}_GPIO`;
@@ -258,6 +259,43 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
         ? `(1 - digitalRead(SENSOR_${readableId(node)}))`
         : `digitalRead(SENSOR_${readableId(node)})`;
       return `${indent}float ${varName(node)} = ${read} * 100.0;`;
+    },
+  },
+  'sensor-tof': {
+    // One VL53L4CD object per node; constructed with its XSHUT pin so the
+    // library can sequence power-up during setup (see I2C_DRIVERS).
+    declareGlobal: (node) =>
+      `VL53L4CD tof_${readableId(node)}(&Wire, XSHUT_${readableId(node)});`,
+    // Non-blocking read: the main loop runs faster than a ranging cycle, so we
+    // poll for new data and hold the last valid distance between iterations.
+    loop: (node, { indent }) => {
+      const rid = readableId(node);
+      const max = node.maxDistanceMm ?? DEFAULT_TOF_MAX_MM;
+      const maxLit = max.toFixed(1);
+      // Default: near = high signal. Invert flips it so far = high.
+      const norm = node.invert
+        ? `(dist_${rid} / ${maxLit})`
+        : `(1.0 - dist_${rid} / ${maxLit})`;
+      return [
+        `${indent}uint8_t ready_${rid} = 0;`,
+        `${indent}static float dist_${rid} = ${maxLit}; // distance (mm); starts far`,
+        `${indent}tof_${rid}.VL53L4CD_CheckForDataReady(&ready_${rid});`,
+        `${indent}if (ready_${rid}) {`,
+        `${indent}  tof_${rid}.VL53L4CD_ClearInterrupt();`,
+        `${indent}  VL53L4CD_Result_t res_${rid};`,
+        `${indent}  tof_${rid}.VL53L4CD_GetResult(&res_${rid});`,
+        `${indent}  // Resolve every frame to a usable distance so robot logic never`,
+        `${indent}  // sees a faulty reading:`,
+        `${indent}  //   0-2  valid / low-confidence -> use the measured distance`,
+        `${indent}  //   3    target below min range -> 0 mm (closest possible)`,
+        `${indent}  //   4-7  wraparound / fault      -> max (nothing detected)`,
+        `${indent}  uint8_t status_${rid} = res_${rid}.range_status;`,
+        `${indent}  if (status_${rid} <= 2) dist_${rid} = res_${rid}.distance_mm;`,
+        `${indent}  else if (status_${rid} == 3) dist_${rid} = 0.0;`,
+        `${indent}  else dist_${rid} = ${maxLit};`,
+        `${indent}}`,
+        `${indent}float ${varName(node)} = constrain(${norm} * 100.0, 0.0, 100.0);`,
+      ].join('\n');
     },
   },
   'sensor-color': {
@@ -443,14 +481,43 @@ function emitSetup(graph: WiringGraph, ctx: EmitCtx): string {
 // ============================================================================
 
 interface I2cDriver {
-  /** File-scope C: address constant, struct, read/write helpers, begin(). */
-  decl: string;
+  /** File-scope C: address constant, struct, read/write helpers, begin().
+   *  Optional — library-backed devices (VL53L4CD) declare nothing here. */
+  decl?: string;
   /** Optional one-shot init call placed inside setup(), after Wire.begin().
    *  Receives the graph so it can read device config (e.g. gain) off a node. */
   setupInit?: (graph: WiringGraph) => string;
 }
 
 const I2C_DRIVERS: Partial<Record<NodeTypeId, I2cDriver>> = {
+  // VL53L4CD ToF sensors (STM32duino VL53L4CD library). Every sensor powers up
+  // at the default address 0x52 (= 7-bit 0x29), which collides both with the
+  // other ToF sensors and with the TCS34725 at 0x29. The fix is the library's
+  // documented multi-sensor trick: begin() drives every XSHUT line low to hold
+  // all sensors in reset, then we bring them up one at a time and reassign each
+  // to its own address. This runs before the TCS34725 init (see i2cTypesIn
+  // ordering), so by the time the color sensor is configured the bus is clean.
+  'sensor-tof': {
+    setupInit: (graph) => {
+      const tofs = graph.nodes.filter((n) => n.typeId === 'sensor-tof');
+      const lines: string[] = [
+        '// VL53L4CD ToF sensors: hold all in reset, then bring up one at a',
+        '// time and assign each a unique I2C address (default 0x52 is shared).',
+      ];
+      // begin() on every sensor first → all XSHUT low (held in shutdown).
+      for (const n of tofs) lines.push(`tof_${readableId(n)}.begin();`);
+      // Then power up + readdress each in turn. While one boots at 0x52 the
+      // rest are still in reset, so there is never an address clash.
+      tofs.forEach((n, i) => {
+        const rid = readableId(n);
+        const addr = `0x${(0x54 + i * 2).toString(16).toUpperCase()}`;
+        lines.push(`tof_${rid}.InitSensor(${addr}); // 7-bit 0x${(0x2a + i).toString(16).toUpperCase()}`);
+        lines.push(`tof_${rid}.VL53L4CD_SetRangeTiming(50, 0);`);
+        lines.push(`tof_${rid}.VL53L4CD_StartRanging();`);
+      });
+      return lines.join('\n  ');
+    },
+  },
   'sensor-color': {
     // Gain is a device-wide setting (single sensor at 0x29); read it off the
     // first color-sensor node in the graph.
@@ -509,13 +576,20 @@ const I2C_DRIVERS: Partial<Record<NodeTypeId, I2cDriver>> = {
   },
 };
 
-/** Distinct I2C-device types present in this graph (preserves first-occurrence order). */
+// Setup ordering for I2C devices. ToF sensors must be readdressed off the
+// default 0x29/0x52 before the TCS34725 (fixed at 0x29) is initialized, so the
+// bus is unambiguous by the time the color sensor is configured.
+const I2C_TYPE_ORDER: NodeTypeId[] = ['sensor-tof', 'sensor-color'];
+
+/** Distinct I2C-device types present in this graph, in setup order. */
 function i2cTypesIn(graph: WiringGraph): NodeTypeId[] {
   const seen = new Set<NodeTypeId>();
   for (const node of graph.nodes) {
     if (node.protocol === 'i2c') seen.add(node.typeId);
   }
-  return [...seen];
+  return [...seen].sort(
+    (a, b) => I2C_TYPE_ORDER.indexOf(a) - I2C_TYPE_ORDER.indexOf(b),
+  );
 }
 
 function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
@@ -566,6 +640,7 @@ export function generateSketch(graph: WiringGraph): string {
 
   const i2cTypes = i2cTypesIn(graph);
   const hasI2C = i2cTypes.length > 0;
+  const hasTof = graph.nodes.some((n) => n.typeId === 'sensor-tof');
   const hasServo = graph.nodes.some(
     (n) => n.typeId === 'servo-cr' || n.typeId === 'servo-positional',
   );
@@ -578,6 +653,7 @@ export function generateSketch(graph: WiringGraph): string {
   sections.push('// --- Auto-generated by BraitenBot GUI ---');
   sections.push('// Signal convention: sensors output 0.0–100.0, internal signals -100.0–100.0');
   if (hasI2C) sections.push('#include <Wire.h>');
+  if (hasTof) sections.push('#include <vl53l4cd_class.h>');
   if (hasServo) sections.push('#include <Servo.h>');
   if (hasTm1637) sections.push('#include <TM1637Display.h>');
   sections.push('');
@@ -592,7 +668,7 @@ export function generateSketch(graph: WiringGraph): string {
   // I2C device drivers — one block per distinct I2C-protocol type in use.
   for (const typeId of i2cTypes) {
     const driver = I2C_DRIVERS[typeId];
-    if (driver) {
+    if (driver?.decl) {
       sections.push(driver.decl);
       sections.push('');
     }

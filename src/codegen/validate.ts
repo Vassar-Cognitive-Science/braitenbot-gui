@@ -17,6 +17,7 @@ const PIN_FIELD_LABEL: Record<PinFieldId, string> = {
   servoPin: 'pin',
   clkPin: 'CLK pin',
   gpioPin: 'GPIO pin',
+  xshutPin: 'XSHUT pin',
 };
 
 /**
@@ -34,7 +35,7 @@ function isValidPinString(pin: string): boolean {
  * (TX), so digital-pin fields wired to those pins silently fail.
  */
 function isDigitalPinField(typeId: NodeTypeId, field: PinFieldId): boolean {
-  if (field === 'servoPin' || field === 'clkPin' || field === 'gpioPin') return true;
+  if (field === 'servoPin' || field === 'clkPin' || field === 'gpioPin' || field === 'xshutPin') return true;
   if (field === 'arduinoPort') return typeId === 'sensor-digital';
   return false;
 }

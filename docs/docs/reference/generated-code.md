@@ -14,8 +14,9 @@ Every generated sketch follows the same template:
 ```cpp
 // 1. Includes
 #include <Servo.h>
-// #include <Wire.h>          — if I2C sensors used
-// #include <TM1637Display.h> — if display nodes used
+// #include <Wire.h>           — if I2C sensors used
+// #include <vl53l4cd_class.h> — if ToF distance nodes used
+// #include <TM1637Display.h>  — if display nodes used
 
 // 2. Pin constants
 const int SENSOR_LEFT_LIGHT = A0;
@@ -62,6 +63,7 @@ Labels are converted to C identifiers by lowercasing and replacing spaces/specia
 | `OUTPUT_<LABEL>_PIN` | `OUTPUT_LED_PIN` | Digital output pin |
 | `TM1637_<LABEL>_CLK` | `TM1637_DISPLAY_CLK` | Display clock pin |
 | `TM1637_<LABEL>_GPIO` | `TM1637_DISPLAY_GPIO` | Display data pin |
+| `XSHUT_<LABEL>` | `XSHUT_LEFT_TOF` | ToF sensor shutdown pin |
 
 ## Per-node code generation
 
@@ -90,6 +92,25 @@ float sig_color_1_red   = tcs_color_1.red   * (100.0 / 65535.0);
 float sig_color_1_green = tcs_color_1.green * (100.0 / 65535.0);
 float sig_color_1_blue  = tcs_color_1.blue  * (100.0 / 65535.0);
 ```
+
+**ToF distance (I2C, VL53L4CD):**
+```cpp
+uint8_t ready_left_tof = 0;
+static float dist_left_tof = 500.0;        // distance (mm); no target reads as far
+tof_left_tof.VL53L4CD_CheckForDataReady(&ready_left_tof);
+if (ready_left_tof) {
+  tof_left_tof.VL53L4CD_ClearInterrupt();
+  VL53L4CD_Result_t res_left_tof;
+  tof_left_tof.VL53L4CD_GetResult(&res_left_tof);
+  uint8_t status_left_tof = res_left_tof.range_status;
+  if (status_left_tof <= 2) dist_left_tof = res_left_tof.distance_mm; // valid
+  else if (status_left_tof == 3) dist_left_tof = 0.0;                 // too close
+  else dist_left_tof = 500.0;                                         // wrap/fault → far
+}
+float sig_left_tof = constrain((1.0 - dist_left_tof / 500.0) * 100.0, 0.0, 100.0);
+```
+
+Multiple ToF sensors are sequenced in `setup()` — every sensor is held in reset via XSHUT, then brought up one at a time and reassigned to a unique I2C address (0x2A, 0x2B, …) so they don't all collide on the default 0x29. See [ToF Distance](node-types#tof-distance-vl53l4cd).
 
 ### Compute nodes
 

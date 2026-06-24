@@ -346,6 +346,75 @@ describe('generateSketch', () => {
     expect(code).not.toMatch(/sig_Front_Color[^_a-zA-Z0-9]/);
   });
 
+  it('brings up multiple VL53L4CD ToF sensors one at a time with unique addresses', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'tof-1', type: 'sensor-tof', label: 'Left ToF', arduinoPort: undefined, xshutPin: '4', maxDistanceMm: 800 }),
+      makeSensor({ id: 'tof-2', type: 'sensor-tof', label: 'Right ToF', arduinoPort: undefined, xshutPin: '5' }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'tof-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'tof-2', to: 'motor-right', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Library include + per-sensor objects constructed with their XSHUT pins.
+    expect(code).toContain('#include <vl53l4cd_class.h>');
+    expect(code).toContain('const int XSHUT_Left_ToF = 4;');
+    expect(code).toContain('const int XSHUT_Right_ToF = 5;');
+    expect(code).toContain('VL53L4CD tof_Left_ToF(&Wire, XSHUT_Left_ToF);');
+    expect(code).toContain('VL53L4CD tof_Right_ToF(&Wire, XSHUT_Right_ToF);');
+
+    // The address trick: begin() ALL sensors (hold in reset) before any
+    // InitSensor(), then readdress each off the shared default 0x52.
+    const beginLeft = code.indexOf('tof_Left_ToF.begin();');
+    const beginRight = code.indexOf('tof_Right_ToF.begin();');
+    const initLeft = code.indexOf('tof_Left_ToF.InitSensor(0x54);');
+    const initRight = code.indexOf('tof_Right_ToF.InitSensor(0x56);');
+    expect(beginLeft).toBeGreaterThan(-1);
+    expect(beginRight).toBeGreaterThan(-1);
+    expect(initLeft).toBeGreaterThan(-1);
+    expect(initRight).toBeGreaterThan(-1);
+    // Both begins precede both inits.
+    expect(Math.max(beginLeft, beginRight)).toBeLessThan(Math.min(initLeft, initRight));
+    expect(code).toContain('tof_Left_ToF.VL53L4CD_StartRanging();');
+
+    // Non-blocking read holds the last valid distance, mapped near = high
+    // against the configured 800 mm full-scale.
+    expect(code).toContain('static float dist_Left_ToF = 800.0;');
+    // Status 0/1/2 use the measured distance; 3 (too close) → 0 mm; 4-7
+    // (wraparound/fault) → max, so robot logic never sees a faulty distance.
+    expect(code).toContain('if (status_Left_ToF <= 2) dist_Left_ToF = res_Left_ToF.distance_mm;');
+    expect(code).toContain('else if (status_Left_ToF == 3) dist_Left_ToF = 0.0;');
+    expect(code).toContain('else dist_Left_ToF = 800.0;');
+    expect(code).toContain('float sig_Left_ToF = constrain((1.0 - dist_Left_ToF / 800.0) * 100.0, 0.0, 100.0);');
+    // Second sensor uses the default 500 mm full-scale.
+    expect(code).toContain('static float dist_Right_ToF = 500.0;');
+  });
+
+  it('emits the ToF address trick before the TCS34725 init and inverts far = high', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'tof-1', type: 'sensor-tof', label: 'Front ToF', arduinoPort: undefined, xshutPin: '4', invert: true }),
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'tof-1', to: 'motor-left', weight: 1 }),
+      { ...conn({ id: 'c2', from: 'color-1', to: 'motor-right', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // ToF sensors must be readdressed off 0x29/0x52 before the TCS34725 (fixed
+    // at 0x29) is configured, so the shared bus is unambiguous.
+    expect(code.indexOf('tof_Front_ToF.InitSensor(0x54);')).toBeLessThan(
+      code.indexOf('tcs34725_begin(0x02);'),
+    );
+    // Invert → far reads higher.
+    expect(code).toContain('float sig_Front_ToF = constrain((dist_Front_ToF / 500.0) * 100.0, 0.0, 100.0);');
+  });
+
   it('maps the configured color-sensor gain to the CONTROL register', () => {
     const nodes: DiagramNode[] = [
       makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined, colorGain: 60 }),

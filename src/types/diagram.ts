@@ -6,6 +6,9 @@ export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
  *  CONTROL-register value. 16× is a good default for indoor/classroom light. */
 export const COLOR_GAINS = [1, 4, 16, 60] as const;
 export const DEFAULT_COLOR_GAIN = 16;
+/** Distance (mm) a VL53L4CD ToF sensor maps to full-scale signal. Objects at
+ *  or beyond this read 0 (near = high) — short enough to be useful indoors. */
+export const DEFAULT_TOF_MAX_MM = 500;
 /**
  * Identifier for a port on a node. Color sensor channels are a fixed enum;
  * compound-node ports are user-defined strings. Runtime port validity is
@@ -17,6 +20,7 @@ export type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
   | 'sensor-color'
+  | 'sensor-tof'
   | 'compute-threshold'
   | 'compute-delay'
   | 'compute-summation'
@@ -32,7 +36,7 @@ export type NodeTypeId =
   | 'compound-input'
   | 'compound-output';
 
-export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'gpioPin';
+export type PinFieldId = 'arduinoPort' | 'servoPin' | 'clkPin' | 'gpioPin' | 'xshutPin';
 
 export interface NodeTypeDefinition {
   id: NodeTypeId;
@@ -70,6 +74,13 @@ export interface DiagramNode {
   /** TCS34725 color-sensor RGBC gain multiplier (1, 4, 16, or 60). Higher gain
    *  lifts low-light readings. Ignored for non-color sensors. */
   colorGain?: number;
+  /** VL53L4CD ToF sensor's XSHUT (shutdown) pin. Each ToF node needs its own
+   *  so the setup sequence can bring sensors up one at a time and assign each a
+   *  unique I2C address. */
+  xshutPin?: string;
+  /** VL53L4CD distance (mm) that maps to full-scale signal. Defaults to
+   *  DEFAULT_TOF_MAX_MM. Ignored for non-ToF sensors. */
+  maxDistanceMm?: number;
   threshold?: number;
   delayMs?: number;
   servoPin?: string;
@@ -189,6 +200,7 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'sensor-analog', kind: 'sensor', displayName: 'Analog Sensor', metaLabel: 'analog', protocol: 'analog', pinFields: ['arduinoPort'] },
   { id: 'sensor-digital', kind: 'sensor', displayName: 'Digital Sensor', metaLabel: 'digital', protocol: 'digital', pinFields: ['arduinoPort'] },
   { id: 'sensor-color', kind: 'sensor', displayName: 'Color Sensor', metaLabel: 'TCS34725', protocol: 'i2c' },
+  { id: 'sensor-tof', kind: 'sensor', displayName: 'ToF Distance', metaLabel: 'VL53L4CD', protocol: 'i2c', pinFields: ['xshutPin'] },
   { id: 'compute-threshold', kind: 'compute', displayName: 'Threshold', metaLabel: 'threshold', mode: 'threshold', hasInputs: true, maxInputs: 1 },
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay', hasInputs: true, maxInputs: 1, breaksCycles: true },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation', hasInputs: true },

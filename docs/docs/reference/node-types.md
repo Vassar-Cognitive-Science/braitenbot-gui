@@ -91,6 +91,52 @@ Each outgoing connection specifies which port it reads from via the `fromPort` f
 
 ---
 
+### ToF Distance (VL53L4CD)
+
+| Property | Value |
+|----------|-------|
+| Type ID | `sensor-tof` |
+| Kind | sensor |
+| Inputs | 0 |
+| Outputs | 1 |
+| Protocol | i2c |
+
+Reads a VL53L4CD time-of-flight distance sensor over I2C and outputs a single signal scaled to **0–100**. By default a closer object reads higher, ramping down to 0 at the configured max distance.
+
+**Configuration:**
+- **XSHUT Pin** — a digital pin wired to the sensor's XSHUT (shutdown) line. **Each ToF node needs its own XSHUT pin** — this is what lets multiple sensors share the I2C bus (see below).
+- **Max Distance (mm)** — the distance that maps to full-scale signal (default: 500). Objects at or beyond this read 0.
+- **Invert (far reads higher)** — checkbox that flips the mapping so a farther object produces a higher signal.
+
+**Multiple sensors and the address trick:** every VL53L4CD powers up at the same default I2C address (0x52 / 7-bit 0x29), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
+
+**Generated code (per loop):**
+```cpp
+uint8_t ready_tof = 0;
+static float dist_tof = 500.0;            // distance (mm); no target reads as far
+tof.VL53L4CD_CheckForDataReady(&ready_tof);
+if (ready_tof) {
+  tof.VL53L4CD_ClearInterrupt();
+  VL53L4CD_Result_t res_tof;
+  tof.VL53L4CD_GetResult(&res_tof);
+  uint8_t status_tof = res_tof.range_status;
+  if (status_tof <= 2) dist_tof = res_tof.distance_mm; // valid / low-confidence
+  else if (status_tof == 3) dist_tof = 0.0;            // below min range → closest
+  else dist_tof = 500.0;                               // wraparound/fault → far
+}
+float sig_tof = constrain((1.0 - dist_tof / 500.0) * 100.0, 0.0, 100.0);
+```
+
+The read is non-blocking — the main loop runs faster than a ranging cycle, so when no new frame is ready the sensor keeps its previous distance. Every frame that *is* ready is resolved to a usable distance so robot logic never has to handle a faulty reading:
+
+- **`range_status` 0–2** (valid, plus the sigma/signal-low warnings — a weak return from a real wall a few hundred mm away) → the measured distance is used.
+- **`range_status` 3** (target below the minimum detection range, i.e. right up against the sensor) → treated as 0 mm, the closest possible reading.
+- **`range_status` 4–7** (wraparound, out of range, hardware fault — bogus distances) → treated as the configured max distance, i.e. "nothing detected."
+
+These resolve to *distances*, so the node's **Invert** setting still applies: in the default near-reads-high orientation, status 3 yields signal 100 and status 4–7 yield 0; with Invert on, they flip.
+
+---
+
 ## Compute Nodes
 
 Compute nodes process signals between sensors and outputs.
