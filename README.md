@@ -1,8 +1,7 @@
 # BraitenBot GUI
 
 A **Tauri desktop application** for designing Braitenberg-style robot wiring
-diagrams and uploading them to Arduino-compatible hardware. A web build for
-GitHub Pages is also available for demo/classroom use.
+diagrams and uploading them to Arduino-compatible hardware.
 
 ---
 
@@ -21,8 +20,7 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 | **Connections by dragging** | Drag links from node outputs to valid node inputs |
 | **Intermediate compute nodes** | Threshold, delay, summation, and multiply nodes |
 | **Arduino code generation** | Emit a `.ino` sketch from the diagram |
-| **Desktop upload** | Upload to the robot via bundled `arduino-cli` (Tauri build) |
-| **Web fallback** | Installable PWA for demo/classroom use — diagram editing and code generation only (no device upload) |
+| **Desktop upload** | Upload to the robot via bundled `arduino-cli` |
 
 ## Getting Started
 
@@ -42,14 +40,6 @@ npm run tauri:build   # produce a distributable desktop bundle
 
 `npm run tauri:dev` automatically runs the frontend dev server via Vite; you do
 not need to run `npm run dev` separately.
-
-### Web build (secondary, for GitHub Pages)
-
-```bash
-npm run dev:web       # Vite dev server with the PWA plugin enabled
-npm run build:web     # static site output in dist/ (base path /braitenbot-gui/)
-npm run preview       # preview the built site locally
-```
 
 ## Project Structure
 

@@ -14,9 +14,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# PWA generated files
-dev-dist
-
 # TypeScript composite build output (from `tsc -b`)
 *.tsbuildinfo
 vite.config.js

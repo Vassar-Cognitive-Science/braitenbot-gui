@@ -6,13 +6,14 @@ BraitenBot GUI is a Tauri desktop application for visually designing
 Braitenberg vehicle wiring diagrams. Users drag-and-drop sensor, compute, and
 motor nodes onto a canvas, connect them with weighted links, and upload
 generated Arduino sketches to the robot via a bundled `arduino-cli`. A
-secondary PWA build targets GitHub Pages for browser-based demo use.
+Docusaurus documentation site in `docs/` is published to GitHub Pages as the
+project's main website.
 
 ## Tech Stack
 
 - **Framework**: React 18 + TypeScript 5
 - **Shell**: Tauri 2 (Rust) — primary distribution target
-- **Build**: Vite 5 (default = Tauri frontend; `--mode web` enables `vite-plugin-pwa`)
+- **Build**: Vite 5 (Tauri frontend)
 - **Styling**: Plain CSS (dark theme, CSS variables in `src/App.css`)
 - **Rendering**: DOM-based (positioned divs + SVG paths for connections — no `<canvas>`)
 
@@ -24,8 +25,6 @@ npm run tauri:dev    # run the desktop app (primary dev workflow)
 npm run tauri:build  # produce a distributable desktop bundle
 npm run dev          # frontend-only Vite dev server (Tauri mode, no shell)
 npm run build        # frontend-only production build for Tauri
-npm run dev:web      # PWA/web build dev server
-npm run build:web    # PWA/web production build for GitHub Pages
 ```
 
 ## Architecture

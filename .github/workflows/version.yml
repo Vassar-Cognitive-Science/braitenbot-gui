@@ -1,0 +1,62 @@
+name: Version (Changesets)
+
+# Semantic versioning via Changesets.
+#
+# Workflow:
+#   1. Contributors add a changeset to their PR with `npx changeset` (this
+#      records the bump type + a changelog entry under .changeset/).
+#   2. When changes land on `main`, this workflow opens (or updates) a
+#      "Version Packages" PR that consumes the changesets: it bumps the version
+#      in package.json and writes CHANGELOG.md. src-tauri/tauri.conf.json picks
+#      up the new version automatically via its "version": "../package.json".
+#   3. Merging that PR runs this workflow again with no pending changesets, so
+#      the `publish` step (scripts/tag-release.mjs) pushes a vX.Y.Z tag, which
+#      triggers .github/workflows/release.yml to build and draft the release.
+#
+# IMPORTANT — token for step 3:
+#   A tag pushed with the default GITHUB_TOKEN will NOT trigger release.yml
+#   (GitHub blocks workflow runs from triggering other workflows). To get the
+#   release build to start automatically, create a Personal Access Token (or
+#   GitHub App token) with `contents: write` + `workflows` scope and save it as
+#   a repository secret named RELEASE_PAT. Without it, the tag is still pushed,
+#   but you must start release.yml manually from the Actions tab (it accepts a
+#   tag via workflow_dispatch).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: changesets-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Create Version PR or push release tag
+        uses: changesets/action@v1
+        with:
+          version: npx changeset version
+          publish: node scripts/tag-release.mjs
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
