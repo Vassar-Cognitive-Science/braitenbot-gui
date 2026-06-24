@@ -13,7 +13,7 @@ project's main website.
 
 - **Framework**: React 18 + TypeScript 5
 - **Shell**: Tauri 2 (Rust) — primary distribution target
-- **Build**: Vite 5 (Tauri frontend)
+- **Build**: Vite 8 (Tauri frontend)
 - **Styling**: Plain CSS (dark theme, CSS variables in `src/App.css`)
 - **Rendering**: DOM-based (positioned divs + SVG paths for connections — no `<canvas>`)
 
