@@ -1,0 +1,248 @@
+/* The colophon footer — the monograph's dark inside-back-cover. Always ink,
+   regardless of site color mode; warm-tinted to match the brand neutrals. */
+
+.footer {
+  --fc-ground: oklch(15% 0.012 64);
+  --fc-grid: oklch(20% 0.012 66);
+  --fc-paper: oklch(83% 0.014 80);
+  --fc-soft: oklch(68% 0.014 76);
+  --fc-faint: oklch(55% 0.014 72);
+  --fc-signal: oklch(78% 0.11 151);
+  --fc-line: oklch(32% 0.013 66);
+
+  position: relative;
+  color: var(--fc-soft);
+  background-color: var(--fc-ground);
+  /* faint graph-paper ground, echoing the body — half the body's contrast */
+  background-image:
+    linear-gradient(var(--fc-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fc-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+  border-top: 1px solid var(--fc-line);
+  font-family: var(--bb-font-body);
+}
+
+.inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 4rem) var(--ifm-spacing-horizontal) clamp(1.75rem, 3vw, 2.5rem);
+}
+
+/* -------------------------------------------------------------- Top band */
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+
+/* --- Brand block: figure-label, Fraunces wordmark, italic tagline --- */
+
+.brand {
+  max-width: 26rem;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.1rem;
+  font-family: var(--bb-font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fc-signal);
+}
+
+.label::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--fc-line);
+}
+
+.wordmarkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wordmark {
+  font-family: var(--bb-font-display);
+  font-weight: 600;
+  font-size: clamp(1.9rem, 3.4vw, 2.4rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fc-paper);
+  font-variation-settings: 'opsz' 80, 'WONK' 1;
+}
+
+.mark {
+  width: clamp(48px, 7vw, 60px);
+  height: auto;
+  flex: none;
+  overflow: visible;
+}
+
+.markTrail {
+  stroke: var(--fc-signal);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 5;
+  opacity: 0.7;
+}
+
+.markBody {
+  fill: var(--fc-ground);
+  stroke: var(--fc-soft);
+  stroke-width: 1.4;
+}
+
+.markWheel {
+  fill: var(--fc-soft);
+}
+
+.markStalk {
+  stroke: var(--fc-soft);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.markSensor {
+  fill: var(--fc-signal);
+  stroke: var(--fc-ground);
+  stroke-width: 1;
+}
+
+.tagline {
+  margin: 1.1rem 0 0;
+  font-family: var(--bb-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  color: var(--fc-paper);
+  text-wrap: pretty;
+}
+
+.meta {
+  margin: 1.4rem 0 0;
+  font-family: var(--bb-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fc-faint);
+}
+
+/* --- Link columns: headed like figure labels, ruled by hairlines --- */
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.column {
+  min-width: 0;
+}
+
+.columnTitle {
+  margin: 0 0 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--fc-line);
+  font-family: var(--bb-font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fc-faint);
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  margin: 0;
+}
+
+.item + .item {
+  margin-top: 0.55rem;
+}
+
+.link {
+  display: inline-block;
+  color: var(--fc-soft);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.link:hover {
+  color: var(--fc-paper);
+  text-decoration: none;
+  transform: translateX(3px);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--fc-signal);
+  outline-offset: 3px;
+  border-radius: 2px;
+  color: var(--fc-paper);
+}
+
+/* ------------------------------------------------------------- Bottom rule */
+
+.bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--fc-line);
+  font-family: var(--bb-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--fc-faint);
+}
+
+.copyright {
+  color: var(--fc-soft);
+}
+
+/* --------------------------------------------------------------- Responsive */
+
+@media (max-width: 900px) {
+  .top {
+    grid-template-columns: 1fr;
+    gap: 2.75rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .columns {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem 1.5rem;
+  }
+  .wordmarkRow {
+    justify-content: flex-start;
+    gap: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link {
+    transition: color 0.2s ease;
+  }
+  .link:hover {
+    transform: none;
+  }
+}

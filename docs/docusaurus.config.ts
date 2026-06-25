@@ -89,8 +89,8 @@ const config: Config = {
         },
       ],
     },
+    // Rendered by the swizzled colophon component in src/theme/Footer.
     footer: {
-      style: 'dark',
       links: [
         {
           title: 'Software',
@@ -116,7 +116,6 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} BraitenBot. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
