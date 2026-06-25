@@ -1,0 +1,69 @@
+---
+sidebar_position: 2
+title: Parts List
+---
+
+import BuyLink from '@site/src/components/BuyLink';
+
+# Parts List
+
+Everything you need to build one BraitenBot — what to buy, where to buy it, and
+roughly what it costs. Many parts are sold in multi-packs, so a single robot
+leaves you with spares (handy if you're building a few, or breaking a few).
+
+:::note Prices are approximate — *as of June 25, 2026*
+Most parts are bought from Amazon, which doesn't expose live prices to automated
+tools, so the figures below are **estimates** unless marked ✓ (taken from the
+linked supplier's own page). Treat them as ballpark and confirm in your cart.
+Items marked † are sold in a pack whose exact count we haven't confirmed.
+:::
+
+## The list
+
+| Part | Buy | Per robot | Sold in | Approx. price | Cost per robot | One-build cost |
+|---|---|---|---|---|---|---|
+| Arduino UNO R4 Minima | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0C78K4CD4" /><BuyLink supplier="arduino" href="https://store-usa.arduino.cc/products/uno-r4-minima" /> | 1 | single | ≈ $27.50 | ≈ $27.50 | ≈ $27.50 |
+| Sensor shield (V5.0) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B01MXRXCAW" /> | 1 | 3-pack | ≈ $11.00 | ≈ $3.67 | ≈ $11.00 |
+| Power switch | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B09WK4P3W4" /> | 1 | multipack † | ≈ $8.00 | ≈ $1.60 | ≈ $8.00 |
+| ToF distance sensor (VL53L4CD, STEMMA QT) | <BuyLink supplier="adafruit" href="https://www.adafruit.com/product/5396" /> | 2 | single | $14.95 ✓ | $29.90 | $29.90 |
+| RGB color sensor (TCS34725) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B087Z3K6P5" /> | 1 | 3-pack | ≈ $13.00 | ≈ $4.33 | ≈ $13.00 |
+| Photocell / light-sensor board | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0CF5443Q2" /> | 2 | 2-pack † | ≈ $8.00 | ≈ $8.00 | ≈ $8.00 |
+| AA NiMH rechargeable batteries (2400 mAh) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B07NWWHK1J" /> | 6 | 24-pack | ≈ $45.00 | ≈ $11.25 | ≈ $45.00 |
+| Bump switches (lever microswitch) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0BDDCYTPP" /> | 4 | 10-pack | ≈ $9.00 | ≈ $3.60 | ≈ $9.00 |
+| LEGO Technic–compatible axles & pins | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0DMW8F9VY" /> | a few | assortment † | ≈ $10.00 | ≈ $3.00 | ≈ $10.00 |
+| Ping-pong balls (caster balls) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0BYDBDKHZ" /> | 2 | 20-pack | ≈ $8.00 | ≈ $0.80 | ≈ $8.00 |
+| Continuous-rotation servos (MG996R) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B08743N181" /> | 2 | 2-pack | ≈ $14.00 | ≈ $14.00 | ≈ $14.00 |
+| Servo hubs / horns (25T) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0FDG3NY4S" /> | 2 | 6-pack | ≈ $9.00 | ≈ $3.00 | ≈ $9.00 |
+| M3 & M2.5 screws | — | a few | assortment | ≈ $12.00 | ≈ $2.00 | ≈ $12.00 |
+| Female–female jumper wires | — | a few | 40-pack | ≈ $6.00 | ≈ $1.50 | ≈ $6.00 |
+| Qwiic / STEMMA QT cables | — | 3 | multipack † | ≈ $8.00 | ≈ $4.80 | ≈ $8.00 |
+| Battery holder (6×AA) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B0768P78P1" /> | 1 | 3-pack | ≈ $8.00 | ≈ $2.67 | ≈ $8.00 |
+| 7-segment LED display (TM1637) | <BuyLink supplier="amazon" href="https://www.amazon.com/dp/B07MCGDST2" /> | 1 | 5-pack | $10.99 ✓ | ≈ $2.20 | ≈ $10.99 |
+
+✓ price confirmed from the linked supplier · † pack count not yet confirmed
+
+## What it costs
+
+| | Total |
+|---|---|
+| **Cost per robot** (parts actually used, packs amortized) | **≈ $124** |
+| **Buy everything for one build** (one of each pack; you'll have spares) | **≈ $237** |
+
+The gap between the two numbers is the multi-pack overhead: a single build forces
+you to buy a 24-pack of batteries, a 10-pack of switches, a 20-pack of ping-pong
+balls, and so on. If you're building a classroom set, the **per-robot** figure is
+the one that matters — the spares get absorbed across robots.
+
+## Notes
+
+- **Spares after one build:** 18 batteries, 6 bump switches, 18 ping-pong balls,
+  2 sensor shields, 2 color sensors, 4 servo horns, and 4 LED displays. Enough
+  bump switches and displays for several more robots; the batteries alone nearly
+  cover a second build.
+- **The R4 Minima** is also sold by [Arduino directly](https://store-usa.arduino.cc/products/uno-r4-minima)
+  for **$20.00** — cheaper than the Amazon listing if you don't mind a separate order.
+- **Parts without a buy link** (screws, jumper wires, Qwiic/STEMMA QT cables) are
+  generic and available from any electronics supplier; quantities and prices are
+  rough.
+- **Servos:** the MG996R pack ships with horns and screws, so the separate servo
+  hubs are only needed if you want a specific wheel-mount style.

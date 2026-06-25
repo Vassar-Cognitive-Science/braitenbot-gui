@@ -20,7 +20,7 @@ A typical BraitenBot build consists of:
 This section will grow into a complete do-it-yourself guide so you can build a
 BraitenBot from scratch:
 
-- **[Bill of Materials](./bill-of-materials)** — the parts you need and where to get them
+- **[Parts List](./bill-of-materials)** — the parts you need and where to get them
 - **[3D Models](./3d-models)** — printable chassis and mount files
 - **[Assembly](./assembly)** — step-by-step build instructions
 

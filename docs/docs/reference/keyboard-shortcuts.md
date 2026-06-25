@@ -14,8 +14,9 @@ title: Keyboard Shortcuts
 | **Click** connection | Select connection, open config panel |
 | **Click** empty canvas | Deselect all |
 | **Drag** on empty canvas | Pan the view |
+| **Scroll** / two-finger swipe | Pan the view |
 | **Ctrl/Cmd + Scroll** | Zoom in/out (0.3× to 3×) |
-| **Delete** or **Backspace** | Delete selected node or connection |
+| **Delete** or **Backspace** | Delete the node or connection currently open in the config panel |
 | **Ctrl/Cmd + Z** | Undo |
 | **Double-click** compound | Enter compound body editor |
 

@@ -24,7 +24,7 @@ Sensor nodes read values from the physical world and output signals into the dia
 Reads an analog pin (0–1023) and scales the value to **0–100**.
 
 **Configuration:**
-- **Arduino Port** — the analog pin (e.g., `A0`, `A1`, ..., `A5`)
+- **Arduino Port** — a free-text field for the analog pin label (e.g., `A0`)
 - **Invert signal** — checkbox that outputs `100 − value`, so a brighter (or closer) reading produces a higher signal. Useful when a photoresistor divider reads lower as light increases.
 
 **Generated code:**
@@ -51,7 +51,7 @@ float sig_sensor = 100.0 - (analogRead(SENSOR_PIN) * (100.0 / 1023.0));
 Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 
 **Configuration:**
-- **Arduino Port** — the digital pin number (e.g., `2`, `3`, ..., `13`)
+- **Arduino Port** — a free-text field for the digital pin number (e.g., `2`)
 - **INPUT_PULLUP** — checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
 
 **Generated code:**
@@ -174,9 +174,9 @@ float sig_node = (input > 50.0) ? 100.0 : 0.0;
 Delays the input signal by a configurable time. Uses a ring buffer to store past values. Critically, **Delay is the only node type that can break feedback cycles** — it reads from the previous iteration, allowing cycles in the graph.
 
 **Configuration:**
-- **Delay** — time in milliseconds, 1–10000 (default: 100)
+- **Delay** — time in milliseconds, 0–10000 (default: 100)
 
-The buffer size is calculated as `ceil(delay_ms / loop_period_ms)`.
+The buffer size is calculated as `max(1, round(delay_ms / loop_period_ms))`.
 
 **Execution:** Two-phase:
 1. **Read phase** (normal order): output the buffered value from N iterations ago

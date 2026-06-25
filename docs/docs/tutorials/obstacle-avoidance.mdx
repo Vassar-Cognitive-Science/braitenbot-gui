@@ -115,7 +115,8 @@ The weight on the inhibitory connections controls how sharply the robot turns:
 
 - **-0.5**: the opposite motor slows to 0 but doesn't reverse — gentle, wide turns. Good for open spaces.
 - **-1.0**: the opposite motor reverses to -50 — sharp pivot turns. Good for tight spaces like corridors.
-- **-1.5**: even sharper reversal. The motor output clamps at -100 (BraitenBot constrains motor signals), so there's diminishing returns above -1.0.
+
+Weights are limited to the range -1 to +1, so **-1.0 is the sharpest single-connection inhibition available**. If you need an even harder turn, lower the Cruise constant (so there's less forward drive to overcome) rather than reaching for a weight below -1.
 
 ### Using digital proximity sensors
 

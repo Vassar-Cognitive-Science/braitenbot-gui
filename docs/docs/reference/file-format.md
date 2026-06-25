@@ -40,15 +40,19 @@ BraitenBot is pre-1.0 software. The file format may change between versions with
   "y": 200,
   "arduinoPort": "A0",
   "pullup": false,
+  "invert": false,
   "threshold": 50,
   "delayMs": 100,
   "constantValue": 0,
-  "frequency": 1.0,
+  "frequencyHz": 1.0,
   "amplitude": 100,
   "servoPin": "",
   "clkPin": "",
   "gpioPin": "",
   "brightness": 3,
+  "colorGain": 16,
+  "xshutPin": "",
+  "maxDistanceMm": 500,
   "compoundTypeId": ""
 }
 ```
@@ -63,11 +67,15 @@ Only fields relevant to the node type are meaningful, but all fields are present
 | `x`, `y` | all | Canvas position |
 | `arduinoPort` | sensors | Pin assignment (e.g., `"A0"`, `"2"`) |
 | `pullup` | `sensor-digital` | Enable INPUT_PULLUP |
+| `invert` | `sensor-analog`, `sensor-digital`, `sensor-tof` | Invert the signal |
 | `threshold` | `compute-threshold`, `digital-out` | Threshold value |
 | `delayMs` | `compute-delay` | Delay time in ms |
-| `constantValue` | `constant` | Fixed output value |
-| `frequency` | `compute-oscillator` | Oscillation frequency in Hz |
+| `constantValue` | `constant` | Fixed output value (-100 to 100) |
+| `frequencyHz` | `compute-oscillator` | Oscillation frequency in Hz |
 | `amplitude` | `compute-oscillator`, `compute-noise` | Output amplitude |
+| `colorGain` | `sensor-color` | RGBC gain (1, 4, 16, or 60) |
+| `xshutPin` | `sensor-tof` | XSHUT control pin |
+| `maxDistanceMm` | `sensor-tof` | Distance (mm) that maps to full signal |
 | `servoPin` | servos, `digital-out` | Output pin number |
 | `clkPin` | `display-tm1637` | Clock pin |
 | `gpioPin` | `display-tm1637` | Data pin |

@@ -131,9 +131,13 @@ From the outside, the robot bonks into a wall, backs up for two seconds, and the
 
 ## Resettable latch
 
-Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second Digital Sensor ("Reset", port `3`) and connect it to the latch summation with weight **-200**:
+Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second Digital Sensor ("Reset", port `3`) and connect it to the latch summation with weight **-1.0**:
 
-When Reset fires: -200 + 100 (feedback) = -100 → the clamped feedback sees a negative and outputs 0 → the latch clears immediately, regardless of how much time was left.
+When Reset fires it contributes 100 × -1.0 = -100, exactly canceling the +100 of clamped feedback. The summation drops to 0, the delay captures 0, and on the next iteration the feedback is 0 — the latch clears immediately, regardless of how much time was left.
+
+:::note Weights are limited to ±1
+Connection weights are clamped to the range **-1 to +1**. A single connection can therefore scale a 0–100 signal to at most ±100. To "overpower" a signal more strongly than that, use a [non-linear transfer curve](./transfer-curves), a Threshold, or stack multiple connections — not a weight outside ±1.
+:::
 
 ## What you've learned
 

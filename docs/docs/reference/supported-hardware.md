@@ -32,7 +32,7 @@ The Uno R4 boards include a motor safety feature: while the USB host is actively
 | 1 | Serial TX | Used by USB communication — **never assign to sensors/outputs** |
 | 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used by the motor safety indicator — **never assign to sensors/outputs** |
 
-BraitenBot's validation will report an error if you assign pin 0, 1, or 13.
+BraitenBot's validation will report an error if you assign pin 0, 1, or 13 to a digital pin field.
 
 ### Analog pins
 

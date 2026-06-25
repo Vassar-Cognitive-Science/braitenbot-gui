@@ -58,7 +58,7 @@ The body nodes are inlined into the main diagram. Port anchors become summation 
 
 ## How compounds work under the hood
 
-Both the trace simulation and the code generator **flatten** compound instances before processing them — each instance is recursively expanded into its body nodes, with IDs prefixed to avoid collisions. The result is a single flat graph with no compound or port nodes. This means compounds are purely an organizational tool: there's no runtime overhead, and each instance gets its own copy of the internal computation. For details on how this flattening works in the generated Arduino sketch, see the [code generation reference](../concepts/code-generation).
+Both the trace simulation and the code generator **flatten** compound instances before processing them — each instance is recursively expanded into its body nodes, with IDs prefixed to avoid collisions. The result is a single flat graph with no compound or port nodes. This means compounds are purely an organizational tool: there's no runtime overhead, and each instance gets its own copy of the internal computation. For details on how this flattening works in the generated Arduino sketch, see the [code generation reference](./code-generation).
 
 ### Recursion prevention
 

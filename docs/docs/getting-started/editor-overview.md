@@ -26,7 +26,7 @@ The BraitenBot editor is a single-screen workspace with four main areas.
 
 The palette lists every node type you can add to your diagram, organized into collapsible sections:
 
-- **Sensors** — Analog Sensor, Digital Sensor, Color Sensor
+- **Sensors** — Analog Sensor, Digital Sensor, Color Sensor, ToF Distance
 - **Compute** — Threshold, Delay, Summation, Multiply, Oscillator, Noise, Constant
 - **Outputs** — Continuous Servo, Positional Servo, Digital Output, 7-Segment Display
 - **Compounds** — your custom compound node types (appears when you've created at least one)

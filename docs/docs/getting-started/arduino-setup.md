@@ -17,15 +17,16 @@ BraitenBot bundles its own copy of `arduino-cli` (the official Arduino command-l
 2. **Libraries**
    - `Servo` — motor and servo control
    - `TM1637` — 7-segment display driver (if you use display nodes)
+   - `STM32duino VL53L4CD` — driver for the ToF Distance sensor nodes
 
 ## The setup dialog
 
-When BraitenBot detects that cores or libraries are missing, the setup modal appears automatically:
+BraitenBot checks for the required cores and libraries before showing anything. If everything is already present, you go straight to the editor. If something is missing, the **One-time setup** dialog appears:
 
-1. **Checking...** — the app verifies which components are installed
-2. **Install** — click the button to install missing components
-3. **Progress** — installation output streams in real time
-4. **Done** — the dialog closes and you're ready to go
+1. **Install Arduino toolchains** — click this button to install the missing cores and libraries
+2. **Install log** — installation output streams live in the dialog as it runs
+3. **Continue** — once setup finishes, click this button to enter the editor
+4. **Retry** — if setup fails, an error is shown with a button to try again
 
 This is a one-time process. On subsequent launches, setup completes silently.
 

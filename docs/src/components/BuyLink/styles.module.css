@@ -1,0 +1,21 @@
+.buyLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 0;
+  transition: background-color 0.15s ease;
+}
+
+.buyLink + .buyLink {
+  margin-left: 4px;
+}
+
+.buyLink:hover {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+.buyLink svg {
+  display: block;
+}

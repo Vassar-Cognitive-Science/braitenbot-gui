@@ -33,7 +33,7 @@ When tracing is active, each sensor gets interactive controls:
 
 ### Pulse injection
 
-Each sensor also has a **pulse button** (▶). Clicking it injects the current slider value for 200ms, then returns to the previous state. This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
+Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for 200 ms, then returns to the slider value. This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
 
 ## Signal visualization
 
@@ -51,7 +51,7 @@ Connection badges show the signal after weight/transfer application. The connect
 
 ### Oscilloscope
 
-The oscilloscope panel at the bottom shows a rolling **5-second history** of all signal values plotted over time, so you can see how signals change across iterations. Controls:
+The oscilloscope panel at the bottom shows a rolling history (**5 seconds by default**) of all signal values plotted over time, so you can see how signals change across iterations. Controls:
 
 - **Pause/Resume** — freeze the display to inspect values
 - **Clear** — reset the history buffer

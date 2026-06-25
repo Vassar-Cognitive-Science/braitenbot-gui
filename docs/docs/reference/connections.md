@@ -31,7 +31,7 @@ Connections are the weighted links between nodes. Each connection carries a sign
 The editor prevents invalid connections:
 
 - **No self-loops** — a node can't connect to itself
-- **No duplicates** — only one connection allowed between the same source/target pair (and port)
+- **No duplicates** — only one connection allowed for a given (source node, source port, target node) combination; the target port is not part of the uniqueness check
 - **Input limits** — nodes with `maxInputs: 1` (Threshold, Delay, servos, digital output, display) reject a second incoming connection
 - **Type compatibility** — output-only nodes can't be connection sources (they have no output signal)
 

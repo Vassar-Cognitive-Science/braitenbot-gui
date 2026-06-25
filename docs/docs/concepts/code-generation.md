@@ -18,10 +18,12 @@ Diagram ──▶ Validate ──▶ Flatten ──▶ Sort ──▶ Emit C Cod
 Before generating code, BraitenBot checks for problems:
 
 **Errors** (block code generation):
-- No sensors or source nodes in the diagram
+- No source nodes (sensors, constants, oscillators, or noise) in the diagram
 - Missing or invalid pin assignments
 - Duplicate node labels
-- Pins 0 or 1 used (reserved for Serial RX/TX)
+- Pins 0 or 1 used on a digital pin field (reserved for Serial RX/TX)
+- Pin 13 used on a digital pin field (wired to the built-in LED)
+- A node exceeds its maximum number of inputs
 - Cycles without a Delay node to break them
 - Output nodes not reachable from any sensor
 - Invalid compound references
@@ -54,35 +56,31 @@ The sorted graph is translated into C/C++ code following a structured template.
 ## Generated sketch structure
 
 ```cpp
-// ── Includes ──
-#include <Servo.h>
-#include <Wire.h>        // if I2C sensors used
-#include <TM1637Display.h> // if display nodes used
+// ── Includes (each emitted only if used) ──
+#include <Wire.h>            // any I2C sensor (color or ToF)
+#include <vl53l4cd_class.h>  // any ToF distance node
+#include <Servo.h>           // any servo or wheel motor
+#include <TM1637Display.h>   // any display node
 
 // ── Pin constants ──
-const int SENSOR_LEFT = A0;
-const int SERVO_LEFT_WHEEL_PIN = 9;
+const int SENSOR_Left = A0;
+const int SERVO_Left_Wheel_PIN = 9;
 // ...
 
 // ── Global declarations ──
-Servo servo_left_wheel;
-// Delay ring buffers, I2C drivers, etc.
-
-// ── Transfer functions ──
-float transfer_sensor_to_threshold_0(float x) { ... }
+Servo servo_Left_Wheel;
+// I2C drivers, ToF instances, display objects, etc.
 
 // ── Drive helper ──
-void drive(float left, float right) {
-  left = constrain(left, -100.0, 100.0);
-  right = constrain(right, -100.0, 100.0);
-  servo_left_wheel.writeMicroseconds(1500 + (int)(left * 5.0));
-  servo_right_wheel.writeMicroseconds(1500 - (int)(right * 5.0));
-}
+void drive(float left, float right) { ... }
+
+// ── Transfer functions ──
+float transfer_Left_Sensor_Thresh_0(float x) { ... }
 
 // ── Setup ──
 void setup() {
   Serial.begin(115200);
-  servo_left_wheel.attach(SERVO_LEFT_WHEEL_PIN);
+  servo_Left_Wheel.attach(SERVO_Left_Wheel_PIN);
   // ...
 }
 
@@ -91,26 +89,31 @@ void loop() {
   unsigned long _loopStart = millis();
 
   // Sensors
-  float sig_left_sensor = analogRead(SENSOR_LEFT) * (100.0 / 1023.0);
+  float sig_Left_Sensor = analogRead(SENSOR_Left) * (100.0 / 1023.0);
 
-  // Compute nodes (in topological order)
-  float input_threshold = sig_left_sensor * 0.5000;
-  float sig_threshold = (input_threshold > 50.0) ? 100.0 : 0.0;
+  // Compute nodes (in topological order). Inputs accumulate into an
+  // input_<label> variable, one line per incoming connection.
+  float input_Thresh = 0.0;
+  input_Thresh += sig_Left_Sensor * 0.5000;
+  float sig_Thresh = (input_Thresh > 50.0000) ? 100.0 : 0.0;
 
   // Wheel inputs
-  float input_left_wheel = sig_threshold * 1.0000;
+  float input_Left_Wheel = 0.0;
+  input_Left_Wheel += sig_Thresh * 1.0000;
 
   // Deferred: delay buffer writes
   // ...
 
   // Drive
-  drive(input_left_wheel, input_right_wheel);
+  drive(input_Left_Wheel, input_Right_Wheel);
 
   // Timing
   unsigned long _elapsed = millis() - _loopStart;
   if (_elapsed < 20) delay(20 - _elapsed);
 }
 ```
+
+See the [Generated Code reference](../reference/generated-code) for the verbatim `drive()` helper (including the Renesas USB safety block) and per-node snippets.
 
 ## Signal variable naming
 
@@ -121,8 +124,10 @@ The generated code uses consistent naming:
 | `sig_<label>` | Output signal of a single-output node |
 | `sig_<label>_<port>` | Output signal of a specific port (e.g., color sensor channels) |
 | `input_<label>` | Aggregated input arriving at a node |
-| `SENSOR_<LABEL>` | Pin constant for a sensor |
-| `SERVO_<LABEL>_PIN` | Pin constant for a servo/motor |
+| `SENSOR_<label>` | Pin constant for a sensor |
+| `SERVO_<label>_PIN` | Pin constant for a servo/motor |
+
+Labels keep their original case — only spaces and other non-alphanumeric characters become underscores (e.g. `Left Light` → `Left_Light`).
 
 ## Wheel motor handling
 
@@ -132,6 +137,7 @@ The two wheel motors get special treatment:
 - The **left** wheel maps input directly: `1500 + input × 5` microseconds
 - The **right** wheel is **inverted**: `1500 - input × 5` microseconds (because the motors face opposite directions on the chassis)
 - Both values are constrained to the -100 to 100 range before conversion
+- On Arduino Uno R4 (Renesas) boards, `drive()` also holds the wheels neutral and blinks the built-in LED while a USB host is connected, so the robot can't drive off the bench during upload
 
 ## Delay node two-phase execution
 
@@ -148,8 +154,9 @@ The generated sketch may include:
 
 | Library | When included |
 |---------|--------------|
+| `Wire.h` | Any I2C sensor (color or ToF distance) |
+| `vl53l4cd_class.h` | Any ToF distance node |
 | `Servo.h` | Any servo or motor node |
-| `Wire.h` | Any I2C sensor (color sensor) |
 | `TM1637Display.h` | Any TM1637 display node |
 
 These libraries are automatically installed during [Arduino setup](../getting-started/arduino-setup).

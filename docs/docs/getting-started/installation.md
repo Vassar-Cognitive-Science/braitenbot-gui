@@ -17,11 +17,14 @@ browse every release on the [GitHub releases page](https://github.com/Vassar-Cog
 
 | Platform | File |
 |----------|------|
-| macOS (Apple Silicon) | `BraitenBot_aarch64.dmg` |
-| macOS (Intel) | `BraitenBot_x64.dmg` |
-| Windows | `BraitenBot_x64-setup.exe` |
-| Linux (Debian/Ubuntu) | `BraitenBot_amd64.deb` |
-| Linux (AppImage) | `BraitenBot_amd64.AppImage` |
+| macOS (Apple Silicon) | `BraitenBot.GUI_<version>_aarch64.dmg` |
+| macOS (Intel) | `BraitenBot.GUI_<version>_x64.dmg` |
+| Windows (installer) | `BraitenBot.GUI_<version>_x64-setup.exe` (an MSI, `BraitenBot.GUI_<version>_x64_en-US.msi`, is also provided) |
+| Linux (AppImage) | `BraitenBot.GUI_<version>_amd64.AppImage` |
+| Linux (Debian/Ubuntu) | `BraitenBot.GUI_<version>_amd64.deb` |
+| Linux (RPM) | `BraitenBot.GUI-<version>-1.x86_64.rpm` |
+
+`<version>` is the release version embedded in each filename (for example, `0.1.0`), so it changes from release to release. The [**Install page**](/install) is generated from the latest GitHub release and always links the current release's assets automatically, so you don't have to track the exact filenames.
 
 ### macOS
 
@@ -37,13 +40,13 @@ Run the installer `.exe` and follow the prompts. BraitenBot will be added to you
 
 For Debian/Ubuntu:
 ```bash
-sudo dpkg -i BraitenBot_amd64.deb
+sudo dpkg -i BraitenBot.GUI_<version>_amd64.deb
 ```
 
 Or use the AppImage directly:
 ```bash
-chmod +x BraitenBot_amd64.AppImage
-./BraitenBot_amd64.AppImage
+chmod +x BraitenBot.GUI_<version>_amd64.AppImage
+./BraitenBot.GUI_<version>_amd64.AppImage
 ```
 
 ## Building from source

@@ -95,6 +95,10 @@ Toggle the digital sensors in trace mode and verify:
 | LOW (0) | HIGH (100) | 40 | 90 | Drifted left — corrects right |
 | HIGH (100) | HIGH (100) | 90 | 90 | Completely off line — drives fast forward |
 
+:::note Pullup inversion and the trace
+The trace table shows the **logical** (post-inversion) sensor value — HIGH meaning "over the white floor." The in-app trace simulation doesn't model the `INPUT_PULLUP` inversion itself; the inversion is applied in the generated Arduino code, where pullup sensor reads are inverted. So the on-robot behavior matches the logical values shown here.
+:::
+
 The last row (both HIGH) means the robot has lost the line entirely. It drives forward at full speed hoping to find it again. For more robust recovery, see the three-sensor variant below.
 
 ## Tuning for your track

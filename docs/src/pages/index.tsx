@@ -172,7 +172,7 @@ export default function Home(): React.ReactElement {
 
           <div className={styles.platformLinks}>
             <Link className={styles.platformLink} to="/docs/hardware/overview">Hardware guide <Arrow /></Link>
-            <Link className={styles.platformLink} to="/docs/hardware/bill-of-materials">Bill of materials <Arrow /></Link>
+            <Link className={styles.platformLink} to="/docs/hardware/bill-of-materials">Parts list <Arrow /></Link>
             <Link className={styles.platformLink} to="/docs">Software docs <Arrow /></Link>
           </div>
         </section>

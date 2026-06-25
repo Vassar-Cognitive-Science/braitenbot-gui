@@ -105,11 +105,15 @@ Now when the bumper is pressed, Escape Active outputs 100 for approximately 2 se
 
 ### Wiring escape into the mix
 
-Escape needs to reverse both motors. Wire Escape Active → Left Mix (weight **-1.5**) and Escape Active → Right Mix (weight **-1.5**).
+Escape needs to reverse both motors. Wire Escape Active → Left Mix (weight **-1.0**) and Escape Active → Right Mix (weight **-1.0**).
 
-Why -1.5 instead of -1.0? Because escape needs to overpower *both* cruise and avoidance. In the worst case, cruise contributes +50 and avoidance contributes nothing (no obstacle). To reverse the motor we need the total to be negative: 50 + (-150) = -100. With -1.5, the escape signal of 100 becomes -150 after weighting, which overwhelms the +50 from cruise and drives the motors fully in reverse.
+Connection weights are capped at ±1, so the strongest pull a single connection can apply is -100 (a 0–100 signal times weight -1.0). When escape fires with no obstacle present, each Mix computes 50 (cruise) + (-100) (escape) = **-50** — both motors reverse together. Escape doesn't need a larger weight to take priority. Unlike avoidance, which inhibits only the *opposite* motor (producing a turn), escape inhibits *both* motors symmetrically (producing a straight reverse), and the latch holds it for a full 2 seconds. Escape's priority comes from its topology and timing, not from an out-of-range weight.
 
-If avoidance is also active during escape, one motor might see +50 (cruise) + (-100) (avoid) + (-150) (escape) = -200, which clamps to -100. That's fine — the motor reverses at full speed regardless.
+If avoidance is also active during escape, the motor on the obstacle side sees +50 (cruise) + (-100) (avoid) + (-100) (escape) = -150, which clamps to -100. The two inhibitory layers reinforce each other rather than fight — the robot backs away from the wall.
+
+:::note Why not -1.5?
+It's tempting to give escape a weight like -1.5 to "overpower" both lower layers at once, but that isn't possible — weights clamp to the range **-1 to +1**. A single connection can scale a 0–100 signal to at most ±100. To suppress a lower layer more aggressively than that, gate it (for example with a Multiply node) or restructure the layering — don't reach for a weight outside ±1.
+:::
 
 <DiagramView
   width={620}
@@ -141,12 +145,12 @@ If avoidance is also active during escape, one motor might see +50 (cruise) + (-
     { from: 'cruise', to: 'right-mix', weight: 1.0 },
     { from: 'left-detect', to: 'right-mix', weight: -1.0, label: '-1.0' },
     { from: 'right-detect', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'escape-active', to: 'left-mix', weight: -1.5, label: '-1.5' },
-    { from: 'escape-active', to: 'right-mix', weight: -1.5, label: '-1.5' },
+    { from: 'escape-active', to: 'left-mix', weight: -1.0, label: '-1.0' },
+    { from: 'escape-active', to: 'right-mix', weight: -1.0, label: '-1.0' },
     { from: 'left-mix', to: 'left-motor', weight: 1.0 },
     { from: 'right-mix', to: 'right-motor', weight: 1.0 },
   ]}
-  caption="Three-layer subsumption: cruise + avoid + escape. Escape uses weight -1.5 to overpower both lower layers."
+  caption="Three-layer subsumption: cruise + avoid + escape. Escape inhibits both motors (weight -1.0) to reverse the robot; the latch holds it for 2 seconds."
 />
 
 ## Testing the complete system
@@ -183,10 +187,10 @@ Pulse the bumper. Escape Active fires at 100 for 2 seconds. No obstacles present
 | Input to Left Mix | Value |
 |---|---|
 | Cruise | +50 |
-| Escape Active | -150 |
-| **Total** | **-100** |
+| Escape Active | -100 |
+| **Total** | **-50** |
 
-Both motors at -100. Full reverse for 2 seconds, then Escape Active turns off and motors return to 50.
+Both motors at -50. The robot reverses straight back (both wheels together) for 2 seconds, then Escape Active turns off and motors return to 50.
 
 ### Scenario 4: Bumper hit *while* avoiding an obstacle
 
@@ -196,16 +200,16 @@ Bumper pressed and Left IR at 80 simultaneously.
 |---|---|
 | Cruise | +50 |
 | Left Detect (avoid) | -100 |
-| Escape Active | -150 |
-| **Total** | **-200 → clamped to -100** |
+| Escape Active | -100 |
+| **Total** | **-150 → clamped to -100** |
 
 | Input to Left Mix | Value |
 |---|---|
 | Cruise | +50 |
-| Escape Active | -150 |
-| **Total** | **-100** |
+| Escape Active | -100 |
+| **Total** | **-50** |
 
-Both motors at -100. The escape behavior dominates. The avoidance layer is still active, but its contribution doesn't change the outcome — the robot is already reversing at maximum speed. Escape has effectively suppressed avoid.
+Right motor at -100, left motor at -50 — both wheels reverse, the right one harder because avoidance reinforces escape on that side. The robot backs away from the wall, curving as it goes. The two inhibitory layers stack rather than fight: escape sets the overall reverse, and avoidance biases the turn.
 
 ### Scenario 5: Escape ends, obstacle still present
 
@@ -222,13 +226,13 @@ The robot immediately begins steering right — avoidance picks up seamlessly wh
 
 ## Why this works
 
-The key insight is that suppression doesn't require any explicit "if-then" logic or mode switching. Every layer runs all the time, producing its output signal into the shared summation. Priority is encoded in the *weights*:
+The key insight is that suppression doesn't require any explicit "if-then" logic or mode switching. Every layer runs all the time, producing its output signal into the shared summation. Priority is encoded in the *weights* and the *wiring topology*:
 
-- Cruise contributes +50 (moderate)
-- Avoid contributes ±100 (strong enough to override cruise)
-- Escape contributes ±150 (strong enough to override cruise + avoid combined)
+- Cruise contributes +50 (moderate forward)
+- Avoid contributes -100 to one motor — strong enough to override cruise and pivot the robot
+- Escape contributes -100 to *both* motors — reversing the robot — and the latch holds it for 2 seconds
 
-The summation acts as the arbitration mechanism. Whichever layer has the strongest signal wins. When the strong signal disappears, the weaker one is automatically revealed.
+An inhibitory -100 connection always overrides the +50 cruise, so any active layer takes effective control. Escape sits at the top not because of a bigger weight (weights cap at ±1) but because it inhibits both wheels at once and sustains itself through the latch. The summation acts as the arbitration mechanism: whichever layers are active sum together, and when the strong inhibitory signals disappear, cruise is automatically revealed.
 
 This is subsumption's central virtue: **behaviors are independent modules that don't know about each other.** The avoid layer doesn't check whether escape is active. Escape doesn't turn off avoidance. They just produce signals, and the math sorts it out. You can add or remove layers without modifying the existing ones.
 
@@ -257,7 +261,7 @@ For each new layer, choose a weight magnitude that's stronger than the layers it
 
 The diagram has grown complex — 13 nodes. You can clean it up by grouping each behavior into a compound:
 
-- **Escape** compound: contains the bumper, latch, delay, and threshold. Exposes one output: the -150 suppression signal.
+- **Escape** compound: contains the bumper, latch, delay, and threshold. Exposes one output: the -100 suppression signal sent to both motors.
 - **Avoid** compound: contains the two IR sensors, two thresholds, and the cross-wired connections. Exposes two outputs: left and right inhibition signals.
 
 See [Compound Reuse](./compound-reuse) for how to do this.

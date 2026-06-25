@@ -67,7 +67,7 @@ Both connections default to a weight of 1.0, which means the sensor signal passe
 
 To verify:
 1. Click on a connection line (or its weight badge)
-2. The config panel shows the **Weight** slider
+2. The config panel shows the **Connection Weight** slider (with a separate **Numeric Weight** box)
 3. Confirm it's set to **1.0**
 
 If you set the weight to 0.5, the motor would receive half the sensor signal — the robot would move more slowly for the same light level. We'll use this in later tutorials to tune sensitivity.
@@ -90,9 +90,10 @@ Since both motors always get the same value, the robot drives in a straight line
 If you have an Arduino connected:
 
 1. Set the **Loop** period to `20` ms in the toolbar (this means the robot reads its sensor and updates its motors 50 times per second)
-2. Click **Generate** — BraitenBot validates your diagram and produces an Arduino sketch
-3. Select your board in the **Device** dropdown
-4. Click **Upload to Arduino**
+2. Select each wheel motor (**Left Wheel** / **Right Wheel**) and set its **Servo Pin** — for example, `9` for the left wheel and `10` for the right (otherwise Generate fails with a "has no pin configured" validation error)
+3. Click **Generate** — BraitenBot validates your diagram and produces an Arduino sketch
+4. Select your board in the **Device** dropdown
+5. Click **Upload to Arduino**
 
 Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
 
