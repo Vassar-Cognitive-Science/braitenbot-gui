@@ -1,0 +1,33 @@
+.figure {
+  margin: 1.5rem 0;
+}
+
+.viewer {
+  display: block;
+  width: 100%;
+  height: 420px;
+  /* Neutral grey studio backdrop so light/white prints stay visible. */
+  background: radial-gradient(circle at 50% 38%, #54585f 0%, #2c2f34 100%);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  --poster-color: transparent;
+}
+
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.downloads {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-weight: 600;
+  white-space: nowrap;
+}

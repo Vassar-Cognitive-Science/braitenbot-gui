@@ -1,0 +1,5 @@
+trimesh>=4
+numpy
+scipy
+networkx
+lxml
