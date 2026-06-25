@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BraitenBot app icon — "a figure plate from Vehicles, on the dock."
+
+  A warm monograph-paper squircle (the site's signature graph-paper ground)
+  carrying the buggy: a top-down Braitenberg vehicle with two green excitatory
+  sensor eyes. Colors are the brand palette flattened to sRGB; no CSS filters so
+  it rasterizes crisply from 1024px down to 16px. The vehicle is large and
+  centered so its silhouette stays legible at the smallest sizes.
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f0e4"/>
+      <stop offset="1" stop-color="#e9dfcd"/>
+    </linearGradient>
+    <clipPath id="plateClip">
+      <rect x="112" y="112" width="800" height="800" rx="179" ry="179"/>
+    </clipPath>
+  </defs>
+
+  <!-- Plate: warm paper ground with a hairline schematic frame -->
+  <rect x="112" y="112" width="800" height="800" rx="179" ry="179" fill="url(#paper)"/>
+
+  <!-- Faint graph-paper grid, clipped to the plate (texture; fades out small) -->
+  <g clip-path="url(#plateClip)" stroke="#ddd1bb" stroke-width="2.5">
+    <path d="M208 112V912 M304 112V912 M400 112V912 M496 112V912 M592 112V912 M688 112V912 M816 112V912"/>
+    <path d="M208 112H912 M304 112H912 M400 112H912 M496 112H912 M592 112H912 M688 112H912 M816 112H912" transform="translate(0 0)"/>
+    <path d="M112 208H912 M112 304H912 M112 400H912 M112 496H912 M112 592H912 M112 688H912 M112 816H912"/>
+  </g>
+
+  <g clip-path="url(#plateClip)">
+    <!-- The vehicle, top-down and centered (front = up) -->
+    <g transform="translate(512 592) scale(2.15)">
+      <!-- wheels straddling the left/right edges -->
+      <rect x="-122" y="-62" width="34" height="124" rx="16" fill="#2b2620"/>
+      <rect x="88" y="-62" width="34" height="124" rx="16" fill="#2b2620"/>
+      <!-- body -->
+      <rect x="-96" y="-104" width="192" height="208" rx="56" fill="#fdfaf3" stroke="#2b2620" stroke-width="12"/>
+      <!-- sensor stalks + excitatory green eyes, leading the turn -->
+      <g stroke="#2b2620" stroke-width="12" stroke-linecap="round">
+        <line x1="-50" y1="-100" x2="-50" y2="-140"/>
+        <line x1="50" y1="-100" x2="50" y2="-140"/>
+      </g>
+      <circle cx="-50" cy="-152" r="26" fill="#2f9c5c" stroke="#2b2620" stroke-width="9"/>
+      <circle cx="50" cy="-152" r="26" fill="#2f9c5c" stroke="#2b2620" stroke-width="9"/>
+    </g>
+  </g>
+
+  <!-- Hairline frame, drawn last so it sits above the grid/art edges -->
+  <rect x="112" y="112" width="800" height="800" rx="179" ry="179" fill="none" stroke="#cdc1a9" stroke-width="3"/>
+</svg>
