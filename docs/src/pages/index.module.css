@@ -1,80 +1,418 @@
+/* Homepage — asymmetric monograph layout with a live vehicle schematic. */
+
+.page {
+  --measure: 34rem;
+  overflow-x: clip;
+}
+
+/* ------------------------------------------------------------------ Hero */
+
 .hero {
-  padding: 5rem 0 4rem;
-  text-align: center;
-  background: linear-gradient(
-    180deg,
-    var(--ifm-background-surface-color) 0%,
-    var(--ifm-background-color) 100%
-  );
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(3rem, 7vw, 6rem) var(--ifm-spacing-horizontal) clamp(2.5rem, 5vw, 4rem);
 }
 
-.heroTitle {
-  font-size: 3.5rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  margin-bottom: 0.25rem;
+.heroText {
+  max-width: 36rem;
 }
 
-.heroTagline {
-  font-size: 1.5rem;
-  color: var(--ifm-color-primary-light);
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
 
-.heroBlurb {
-  max-width: 42rem;
-  margin: 0 auto 2rem;
-  font-size: 1.125rem;
-  line-height: 1.6;
-  color: var(--ifm-color-emphasis-700);
+.eyebrow::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--bb-line);
 }
 
-.heroButtons {
+.title {
+  font-family: var(--bb-font-display);
+  font-weight: 600;
+  font-size: clamp(3.4rem, 9vw, 6rem);
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  margin: 0 0 1rem;
+  font-variation-settings: 'opsz' 144, 'SOFT' 0, 'WONK' 1;
+}
+
+.tagline {
+  font-family: var(--bb-font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(1.25rem, 2.4vw, 1.6rem);
+  line-height: 1.25;
+  color: var(--bb-signal-text);
+  margin: 0 0 1.5rem;
+}
+
+.lede {
+  font-size: 1.16rem;
+  line-height: 1.6;
+  color: var(--bb-ink-soft);
+  margin: 0 0 2rem;
+  max-width: 32rem;
+}
+
+.actions {
   display: flex;
-  gap: 1rem;
-  justify-content: center;
   flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
 }
 
-.cards {
-  padding: 4rem 0;
+/* Primary CTA: a "stamped" ink button — high contrast, the green stays for signal. */
+.ctaPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.4rem;
+  background: var(--bb-ink);
+  color: var(--bb-paper);
+  font-family: var(--bb-font-mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--bb-ink);
+  border-radius: var(--ifm-global-radius);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 0.25s ease;
 }
 
-.card {
-  height: 100%;
-  padding: 2rem;
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: var(--ifm-card-border-radius, 12px);
-  background: var(--ifm-background-surface-color);
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.card:hover {
-  border-color: var(--ifm-color-primary);
+.ctaPrimary:hover {
+  color: var(--bb-paper);
+  text-decoration: none;
   transform: translateY(-2px);
+  background: color-mix(in oklab, var(--bb-ink) 86%, var(--bb-signal));
 }
 
-.cardTitle {
-  font-size: 1.75rem;
-  margin-bottom: 0.75rem;
+.ctaGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.2rem;
+  color: var(--bb-ink);
+  font-family: var(--bb-font-mono);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--bb-line);
+  border-radius: var(--ifm-global-radius);
+  background: transparent;
+  transition: border-color 0.25s ease, color 0.25s ease;
 }
 
-.cardDescription {
-  color: var(--ifm-color-emphasis-700);
-  line-height: 1.6;
-  margin-bottom: 1.25rem;
+.ctaGhost:hover {
+  text-decoration: none;
+  color: var(--bb-signal-text);
+  border-color: var(--bb-signal);
 }
 
-.cardLink {
+.ctaArrow {
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ctaGhost:hover .ctaArrow {
+  transform: translateX(3px);
+}
+
+.meta {
+  margin-top: 1.5rem;
+  font-family: var(--bb-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--bb-ink-faint);
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------- Schematic figure */
+
+/* Frameless: the illustration sits directly on the page's graph-paper grid,
+   as if drawn onto the page. No box, no surface — just art + a caption rule. */
+.figure {
+  margin: 0;
+  position: relative;
+}
+
+.scene {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--bb-line);
+  font-family: var(--bb-font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bb-ink-faint);
+}
+
+.figcaption strong {
+  color: var(--bb-ink-soft);
   font-weight: 600;
 }
 
-@media (max-width: 768px) {
-  .heroTitle {
-    font-size: 2.5rem;
-  }
+/* --- Hand-drawn phototaxis scene --- */
 
-  .heroTagline {
-    font-size: 1.25rem;
+.trajectory {
+  fill: none;
+  stroke: var(--bb-signal);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 11;
+  animation: bb-flow 1.1s linear infinite;
+}
+
+.startDot {
+  fill: var(--bb-signal);
+}
+
+.rays {
+  stroke: oklch(74% 0.14 72);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.lampInk {
+  /* hand-inked lamp outline + rays */
+}
+
+.lampGlow {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.55;
+  animation: bb-breathe 3.6s ease-in-out infinite;
+}
+
+/* the vehicle, driving the plotted curve */
+.vehicle {
+  transform-box: fill-box;
+  transform-origin: center;
+  offset-path: path('M 58 314 C 150 316, 214 300, 258 258 S 330 150, 360 102');
+  offset-rotate: auto;
+  offset-distance: 0%;
+  animation: bb-drive 9s cubic-bezier(0.42, 0, 0.28, 1) infinite;
+}
+
+.vBody {
+  fill: var(--bb-surface);
+  stroke: var(--bb-ink);
+  stroke-width: 1.4;
+}
+.vWheel {
+  fill: var(--bb-ink);
+}
+.vStalk {
+  stroke: var(--bb-ink);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.vSensor {
+  fill: var(--bb-signal);
+  stroke: var(--bb-ink);
+  stroke-width: 1.1;
+}
+
+.note {
+  font-family: 'Caveat', cursive;
+  font-size: 22px;
+  fill: var(--bb-ink-soft);
+}
+
+.noteArrow {
+  fill: none;
+  stroke: var(--bb-ink-soft);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+@keyframes bb-drive {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  72% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  82% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+  100% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+}
+
+@keyframes bb-flow {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+@keyframes bb-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.78;
+    transform: scale(1.14);
+  }
+}
+
+/* Reduced motion: park the vehicle mid-path, hold the lamp, drop the flow. */
+@media (prefers-reduced-motion: reduce) {
+  .vehicle {
+    animation: none;
+    offset-distance: 56%;
+    opacity: 1;
+  }
+  .lampGlow {
+    animation: none;
+    opacity: 0.6;
+  }
+  .trajectory {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------- Section shell */
+
+.section {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 5rem) var(--ifm-spacing-horizontal);
+  border-top: 1px solid var(--bb-line);
+}
+
+.sectionHead {
+  margin-bottom: 2.5rem;
+}
+
+.sectionHead h2 {
+  font-size: clamp(1.9rem, 3.5vw, 2.6rem);
+  margin: 0.6rem 0 0;
+}
+
+/* Open-platform section: a spec list (labeled rows on hairlines), not ad cards. */
+.sectionLede {
+  max-width: 58ch;
+  margin: 1rem 0 0;
+  font-size: 1.08rem;
+  line-height: 1.6;
+  color: var(--bb-ink-soft);
+  text-wrap: pretty;
+}
+
+.specs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2.5rem;
+  row-gap: 0;
+  margin-top: 2.75rem;
+}
+
+.spec {
+  padding: 1.4rem 0;
+  border-top: 1px solid var(--bb-line);
+}
+
+.specTerm {
+  font-family: var(--bb-font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--bb-ink);
+  margin-bottom: 0.4rem;
+}
+
+.specDesc {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--bb-ink-soft);
+  font-size: 0.98rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.platformLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  margin-top: 2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--bb-line);
+}
+
+.platformLink {
+  font-family: var(--bb-font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--bb-signal-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.platformLink:hover {
+  text-decoration: none;
+  color: var(--bb-ink);
+}
+
+.platformLink:hover .ctaArrow {
+  transform: translateX(3px);
+}
+
+/* --------------------------------------------------------------- Motion */
+
+.rise {
+  animation: bb-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes bb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --------------------------------------------------------------- Responsive */
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+  .figure {
+    order: -1;
+  }
+  .specs {
+    grid-template-columns: 1fr;
   }
 }

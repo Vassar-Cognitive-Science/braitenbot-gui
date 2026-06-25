@@ -1,24 +1,273 @@
+/**
+ * BraitenBot site theme — "a page from Vehicles, brought to life."
+ *
+ * A mid-century cybernetics monograph: graph-paper ground, hairline schematic
+ * frames, figure-caption typography, and wiring drawn in domain-true signal
+ * colors (excitatory green / inhibitory rust). Built on Infima but deliberately
+ * not stock Docusaurus.
+ *
+ * Type: Fraunces (display serif) · Hanken Grotesk (body) · IBM Plex Mono (labels)
+ * Color: OKLCH, neutrals tinted toward the signal-green hue for cohesion.
+ */
+
+/* ============================================================ Brand tokens */
+
 :root {
-  --ifm-color-primary: #6aab7a;
-  --ifm-color-primary-dark: #579c67;
-  --ifm-color-primary-darker: #4e9360;
-  --ifm-color-primary-darkest: #40794f;
-  --ifm-color-primary-light: #7db88b;
-  --ifm-color-primary-lighter: #86be93;
-  --ifm-color-primary-lightest: #a2cfab;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  /* Type families */
+  --bb-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --bb-font-body: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --bb-font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+
+  /* --- Light: warm monograph paper, sepia-black ink. Neutrals tinted warm
+     (hue ~60-83); green is reserved strictly for the signal accent. --- */
+  --bb-paper: oklch(96.5% 0.014 83);
+  --bb-surface: oklch(98.6% 0.011 83);
+  --bb-ink: oklch(27% 0.022 58);
+  --bb-ink-soft: oklch(42% 0.02 56);
+  --bb-ink-faint: oklch(48% 0.019 58);
+  --bb-signal: oklch(54% 0.115 150);          /* excitatory — wires, accents */
+  --bb-signal-text: oklch(46% 0.12 151);      /* AA on paper for links */
+  --bb-inhibit: oklch(50% 0.135 33);          /* inhibitory — secondary accent */
+  --bb-line: oklch(80% 0.02 78);              /* hairline rules */
+  --bb-grid: oklch(91.5% 0.016 80);           /* faint graph-paper grid */
+
+  font-optical-sizing: auto;
+  font-kerning: normal;
 }
 
 [data-theme='dark'] {
-  --ifm-color-primary: #6aab7a;
-  --ifm-color-primary-dark: #579c67;
-  --ifm-color-primary-darker: #4e9360;
-  --ifm-color-primary-darkest: #40794f;
-  --ifm-color-primary-light: #7db88b;
-  --ifm-color-primary-lighter: #86be93;
-  --ifm-color-primary-lightest: #a2cfab;
-  --ifm-background-color: #1a1b16;
-  --ifm-background-surface-color: #22231e;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  /* --- Dark: aged paper under a reading lamp — warm charcoal, not green --- */
+  --bb-paper: oklch(20% 0.011 66);
+  --bb-surface: oklch(24% 0.012 66);
+  --bb-ink: oklch(91% 0.012 84);
+  --bb-ink-soft: oklch(74% 0.014 78);
+  --bb-ink-faint: oklch(62% 0.014 72);
+  --bb-signal: oklch(74% 0.115 150);
+  --bb-signal-text: oklch(78% 0.11 151);
+  --bb-inhibit: oklch(66% 0.13 34);
+  --bb-line: oklch(34% 0.013 66);
+  --bb-grid: oklch(25.5% 0.012 67);
+}
+
+/* ===================================================== Infima remapping */
+
+:root {
+  --ifm-font-family-base: var(--bb-font-body);
+  --ifm-font-family-monospace: var(--bb-font-mono);
+  --ifm-heading-font-family: var(--bb-font-display);
+
+  --ifm-font-size-base: 17px;
+  --ifm-line-height-base: 1.65;
+  --ifm-font-weight-bold: 700;
+  --ifm-heading-font-weight: 600;
+
+  --ifm-background-color: var(--bb-paper);
+  --ifm-background-surface-color: var(--bb-surface);
+  --ifm-font-color-base: var(--bb-ink);
+  --ifm-heading-color: var(--bb-ink);
+
+  --ifm-color-primary: oklch(50% 0.12 150);
+  --ifm-color-primary-dark: oklch(45% 0.12 150);
+  --ifm-color-primary-darker: oklch(42% 0.12 150);
+  --ifm-color-primary-darkest: oklch(37% 0.11 150);
+  --ifm-color-primary-light: oklch(58% 0.11 150);
+  --ifm-color-primary-lighter: oklch(63% 0.1 150);
+  --ifm-color-primary-lightest: oklch(72% 0.08 150);
+
+  --ifm-link-color: var(--bb-signal-text);
+  --ifm-link-hover-color: var(--bb-ink);
+  --ifm-link-hover-decoration: underline;
+
+  /* Borders & rules ride the hairline token */
+  --ifm-color-emphasis-100: var(--bb-surface);
+  --ifm-color-emphasis-200: var(--bb-line);
+  --ifm-color-emphasis-300: var(--bb-line);
+  --ifm-color-emphasis-600: var(--bb-ink-faint);
+  --ifm-color-emphasis-700: var(--bb-ink-soft);
+  --ifm-color-emphasis-800: var(--bb-ink-soft);
+  --ifm-toc-border-color: var(--bb-line);
+  --ifm-table-border-color: var(--bb-line);
+  --ifm-hr-border-color: var(--bb-line);
+  --ifm-hr-border-width: 1px;
+
+  --ifm-navbar-background-color: color-mix(in oklab, var(--bb-paper) 88%, transparent);
+  --ifm-navbar-link-color: var(--bb-ink-soft);
+  --ifm-navbar-link-hover-color: var(--bb-ink);
+  --ifm-navbar-shadow: none;
+
+  --ifm-footer-background-color: var(--bb-ink);
+  --ifm-footer-color: color-mix(in oklab, var(--bb-paper) 78%, var(--bb-ink));
+  --ifm-footer-link-color: color-mix(in oklab, var(--bb-paper) 70%, var(--bb-ink));
+  --ifm-footer-title-color: var(--bb-paper);
+
+  --ifm-code-font-size: 0.86em;
+  --ifm-code-background: color-mix(in oklab, var(--bb-signal) 12%, var(--bb-surface));
+  --ifm-code-border-radius: 3px;
+  --docusaurus-highlighted-code-line-bg: color-mix(in oklab, var(--bb-signal) 16%, transparent);
+
+  --ifm-card-border-radius: 0;
+  --ifm-global-radius: 4px;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: oklch(74% 0.115 150);
+  --ifm-color-primary-dark: oklch(69% 0.115 150);
+  --ifm-color-primary-darker: oklch(65% 0.115 150);
+  --ifm-color-primary-darkest: oklch(58% 0.1 150);
+  --ifm-color-primary-light: oklch(79% 0.1 150);
+  --ifm-color-primary-lighter: oklch(83% 0.09 150);
+  --ifm-color-primary-lightest: oklch(88% 0.07 150);
+
+  --ifm-footer-background-color: oklch(14% 0.011 64);
+  --ifm-footer-color: var(--bb-ink-soft);
+  --ifm-footer-link-color: var(--bb-ink-soft);
+  --ifm-footer-title-color: var(--bb-ink);
+}
+
+/* ====================================================== Graph-paper ground */
+
+html,
+body {
+  background-color: var(--bb-paper);
+  background-image:
+    linear-gradient(var(--bb-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bb-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+}
+
+/* ============================================================ Typography */
+
+h1,
+h2,
+h3 {
+  font-family: var(--bb-font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.018em;
+  line-height: 1.1;
+}
+
+h1 {
+  font-weight: 600;
+}
+
+/* Markdown h2s read like figure sections: a hairline rule + breathing room. */
+.markdown > h2 {
+  margin-top: 2.6rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--bb-line);
+  font-size: 1.8rem;
+}
+
+.markdown > h3 {
+  margin-top: 2rem;
+}
+
+article a,
+.markdown a {
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+/* Figure-label utility — small caps, tracked, signal-tinted. The site's voice. */
+.bb-fig-label {
+  font-family: var(--bb-font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bb-signal-text);
+}
+
+/* ============================================================ Navbar */
+
+.navbar {
+  backdrop-filter: saturate(140%) blur(8px);
+  border-bottom: 1px solid var(--bb-line);
+}
+
+.navbar__title {
+  font-family: var(--bb-font-display);
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.navbar__link {
+  font-family: var(--bb-font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.navbar__link--active {
+  color: var(--bb-signal-text);
+}
+
+/* ============================================================ Doc surfaces */
+
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--bb-line) !important;
+}
+
+.menu__link {
+  border-radius: 4px;
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  background: color-mix(in oklab, var(--bb-signal) 14%, transparent);
+}
+
+.markdown table {
+  display: table;
+  width: 100%;
+}
+
+div[class^='codeBlockContainer'] {
+  border: 1px solid var(--bb-line);
+  border-radius: var(--ifm-global-radius);
+  box-shadow: none;
+}
+
+code {
+  font-variant-ligatures: none;
+  border: 1px solid color-mix(in oklab, var(--bb-signal) 22%, transparent);
+}
+
+/* ============================================================ Buttons */
+
+.button {
+  font-family: var(--bb-font-mono);
+  font-weight: 500;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  border-radius: var(--ifm-global-radius);
+}
+
+/* ============================================================ Footer */
+
+.footer__title {
+  font-family: var(--bb-font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.footer__link-item {
+  font-size: 0.95rem;
+}
+
+.footer {
+  background-image: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -6,7 +6,7 @@ const githubRepo = 'https://github.com/Vassar-Cognitive-Science/braitenbot-gui';
 
 const config: Config = {
   title: 'BraitenBot',
-  tagline: 'Visual wiring diagrams for Braitenberg vehicles',
+  tagline: 'Design Braitenberg vehicles. Study how behavior emerges.',
   favicon: 'img/favicon.ico',
 
   future: {
@@ -25,6 +25,21 @@ const config: Config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+    },
+    {
+      tagName: 'link',
+      attributes: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous' },
+    },
+  ],
+
+  stylesheets: [
+    'https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap',
+  ],
 
   presets: [
     [
