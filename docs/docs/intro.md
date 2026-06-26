@@ -14,7 +14,6 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 - **Light seekers** — a robot that steers toward brightness with just two wires
 - **Obstacle avoiders** — threshold-based steering away from walls
-- **Line followers** — digital sensors driving differential steering
 - **Latch circuits** — delay + summation feedback to "remember" events
 - **Subsumption architectures** — layered behaviors with priority arbitration
 - **Custom modules** — compound nodes that encapsulate and reuse sub-circuits

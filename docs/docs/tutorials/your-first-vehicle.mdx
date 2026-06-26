@@ -9,6 +9,8 @@ Imagine a moth drawn to a porch light. It doesn't plan a route or make decisions
 
 In this tutorial, you'll build the simplest version of this: a robot with one light sensor wired to both wheels. Shine a flashlight at it and it drives toward you. Cover the sensor and it stops. No code, no logic, no if-statements — just a direct connection.
 
+This is essentially Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to *build* minds rather than dissect them: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. As you build, hold on to the gap between what the vehicle *is* — a sensor and two wires — and what it *appears to be doing*. That gap is the real subject of this whole series, and it only widens from here. (For the full tour of vehicles, see [Braitenberg Vehicles](../concepts/braitenberg-vehicles).)
+
 **Time:** 5 minutes
 **Prerequisites:** BraitenBot installed and open
 
@@ -24,8 +26,8 @@ import DiagramView from '@site/src/components/DiagramView';
   robot={{ x: 250, y: 200, radius: 80 }}
   nodes={[
     { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 176, y: 30, meta: 'A0' },
-    { id: 'left', type: 'servo-cr', label: 'Left Motor', x: 96, y: 190 },
-    { id: 'right', type: 'servo-cr', label: 'Right Motor', x: 256, y: 190 },
+    { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 190 },
+    { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 190 },
   ]}
   connections={[
     { from: 'sensor', to: 'left', weight: 1.0 },
@@ -36,7 +38,7 @@ import DiagramView from '@site/src/components/DiagramView';
 
 ## Step 1: Observe the default canvas
 
-When you first open BraitenBot, the canvas already has two nodes: **Left Motor** and **Right Motor**, snapped to the robot wheel overlay. These represent the two motors that drive the robot's wheels. Every vehicle starts here.
+When you first open BraitenBot, the canvas already has two nodes: **Left Wheel** and **Right Wheel**, snapped to the robot wheel overlay. These represent the two motors that drive the robot's wheels. Every vehicle starts here.
 
 ## Step 2: Add a sensor
 
@@ -55,9 +57,9 @@ On the physical robot, this sensor is typically a photoresistor — a component 
 ## Step 4: Connect sensor to motors
 
 1. Hover over the sensor's **output handle** (the filled circle at the bottom of the node)
-2. Click and drag down toward the **Left Motor** node
-3. When the Left Motor's input handle glows, release to create the connection
-4. Repeat: drag from the sensor's output to the **Right Motor**
+2. Click and drag down toward the **Left Wheel** node
+3. When the Left Wheel's input handle glows, release to create the connection
+4. Repeat: drag from the sensor's output to the **Right Wheel**
 
 You should now see two curved lines connecting the sensor to both motors. Each connection carries the sensor's signal to a motor — this is the "wire" in Braitenberg's thought experiment.
 
@@ -97,9 +99,22 @@ If you have an Arduino connected:
 
 Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
 
+:::note[Thinking like Braitenberg]
+
+Watch someone meet this robot for the first time. They'll say it "likes" the light, or "is looking for" the flashlight — the language of goals and desires. But you built it, so you know there is no goal anywhere inside it: only a wire that turns brightness into speed.
+
+Braitenberg called this the **law of uphill analysis and downhill invention** — it is far easier to *create* a behavior than to *deduce* the mechanism behind one. An observer reasoning backward from what the robot does would invent something far more elaborate than the truth. We do exactly this every day when we explain other people, and perhaps even ourselves. Sitting with that possibility is the real point of the exercise; the robot is just the excuse.
+:::
+
 ## What you've learned
 
 With just one sensor and two wires, you've created a vehicle that responds to its environment. There's no program logic — the behavior is entirely a product of the physical wiring. This is the core insight of Braitenberg vehicles: complex-looking behavior can emerge from very simple connections.
+
+### Questions to sit with
+
+- If a friend insisted the robot "wants" the light, what is the simplest experiment that would change their mind? Would it change *yours*?
+- The behavior isn't really in the robot or in the room, but in their interaction. Where, exactly, is "moving toward light" located — in the sensor, the wire, the motor, or the flashlight?
+- You wrote no rules, yet the robot reliably does something that looks purposeful. How much of a *living* animal's behavior, do you think, might also run without rules?
 
 But this vehicle has a limitation: it can only drive straight. To make it steer toward a light source, you need two sensors — one on each side — with crossed wiring. That's what we'll build next.
 

@@ -7,6 +7,8 @@ title: "Tutorial: Transfer Curves"
 
 So far, every connection in our diagrams has used a linear weight: multiply the signal by a constant. But real sensors and real motors don't always have a linear relationship to the behavior you want. In this tutorial, you'll learn to use non-linear transfer curves to solve specific physical problems that linear weights can't handle.
 
+So far, a connection has had exactly one personality trait: a single number, the weight. Transfer curves let you give a connection a *shape* — a whole response profile that can ignore small signals, cap large ones, or flip from gentle to decisive at a particular point. As you draw these curves, you're really sketching the vehicle's *temperament*: how eager, how cautious, how sudden it is. A surprising amount of what we'd call character turns out to be the shape of a response curve.
+
 **Time:** 15 minutes
 **Prerequisites:** Completed at least [Obstacle Avoidance](./obstacle-avoidance)
 
@@ -102,9 +104,22 @@ Quick reference for the interactive editor:
 
 The curve editor and the trace simulation use exactly the same interpolation algorithm, so what you see in the simulation is what runs on the hardware.
 
+:::note[The shape of a decision]
+
+A linear weight is pure reflex: the output is always proportional to the input, no matter what. The moment you bend the curve — a dead zone here, a plateau there, a steep step in the middle — you've built something that treats different situations *differently*. Below the dead zone it shrugs; past the step it commits. That's the raw material of a decision: not a deliberation, just a nonlinearity in the right place.
+
+It's worth noticing how little machinery "deciding" actually requires here. No rule weighs the options; the curve simply maps small inputs to "do nothing" and large ones to "act." Much of what looks like judgment in a behaving system may be exactly this — the right nonlinear shape, hardened by experience or evolution into a curve that snaps from hesitation to action.
+:::
+
 ## What you've learned
 
 Transfer curves solve problems that come from the physical reality of sensors and motors: noise floors, nonlinear response curves, speed limits, and mixed behaviors on the same signal path. Each curve shape is a direct answer to a specific hardware problem — they're not abstract signal processing, they're calibration tools that make your robot behave the way you want in the real world.
+
+### Questions to sit with
+
+- A step curve "decides" yes-or-no with no deliberation behind it. Is a decision without a deliberator still a decision? Does the robot care about the difference?
+- Two robots with identical wiring but different curves behave like different *personalities* — one bold, one timid. How much of temperament, in animals or people, might be the shape of response curves rather than anything more mysterious?
+- You tuned these curves to fix "problems." But a curve is also just a bias. When is shaping a response *calibration*, and when is it *prejudice*?
 
 ## What's next
 

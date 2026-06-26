@@ -11,6 +11,8 @@ If you look back at the [obstacle avoidance tutorial](./obstacle-avoidance), you
 
 In this tutorial, we'll make that structure explicit, then extend it to three layers by adding the bump-and-reverse escape behavior from the [latch tutorial](./latches-with-delay). The key principle is simple: **higher-priority behaviors suppress lower-priority ones when they activate.**
 
+This tutorial quietly abandons an assumption you might not know you were making: that somewhere in a behaving robot there is a *decider* — a central place where options are weighed and a choice is issued. There isn't one here. Cruise, avoid, and escape all run at once, blind to each other, and "what the robot does" is simply whatever their signals sum to. As you wire it up, look for the spot where you expect a controller to live — and notice the robot works fine without it.
+
 **Time:** 30 minutes
 **Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and [Latches with Delay](./latches-with-delay)
 
@@ -27,7 +29,7 @@ The cruise layer is the robot's default behavior: drive forward at a constant sp
 1. Add a **Constant** node, value **50**, label "Cruise"
 2. Add two **Summation** nodes: "Left Mix" and "Right Mix"
 3. Wire: Cruise → Left Mix (weight 1.0), Cruise → Right Mix (weight 1.0)
-4. Wire: Left Mix → Left Motor (weight 1.0), Right Mix → Right Motor (weight 1.0)
+4. Wire: Left Mix → Left Wheel (weight 1.0), Right Mix → Right Wheel (weight 1.0)
 
 The summation nodes are where behaviors combine. Right now only cruise feeds into them, so both motors run at 50.
 
@@ -35,7 +37,7 @@ The summation nodes are where behaviors combine. Right now only cruise feeds int
 
 The avoid layer watches for obstacles and steers away. It uses the cross-wired threshold inhibition pattern from the earlier tutorial.
 
-1. Add two **Analog Sensors**: "Left IR" (A0), "Right IR" (A1)
+1. Add two **ToF Distance** sensors: "Left Distance" (XSHUT 7), "Right Distance" (XSHUT 8)
 2. Add two **Threshold** nodes: "Left Detect" (threshold 60), "Right Detect" (threshold 60)
 3. Wire each sensor → its threshold (weight 1.0)
 4. Cross-wire with negative weights: Left Detect → **Right** Mix (weight **-1.0**), Right Detect → **Left** Mix (weight **-1.0**)
@@ -45,15 +47,15 @@ The avoid layer watches for obstacles and steers away. It uses the cross-wired t
   height={340}
   robot={{ x: 275, y: 270, radius: 65 }}
   nodes={[
-    { id: 'left-ir', type: 'sensor-analog', label: 'Left IR', x: 10, y: 10, meta: 'A0' },
-    { id: 'right-ir', type: 'sensor-analog', label: 'Right IR', x: 390, y: 10, meta: 'A1' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT 7' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT 8' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 10, meta: '50' },
     { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 130, y: 200 },
     { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 290, y: 200 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 135, y: 290 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 295, y: 290 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 135, y: 290 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 295, y: 290 },
   ]}
   connections={[
     { from: 'left-ir', to: 'left-detect', weight: 1.0 },
@@ -74,7 +76,7 @@ Walk through the signal values in trace mode:
 
 **No obstacles** — both thresholds output 0. Each Mix node receives only the cruise signal: 50. Both motors at 50. The robot drives straight.
 
-**Obstacle on the left** — Left IR reads 80, Left Detect fires at 100. The -1.0 weight sends -100 to Right Mix. Right Mix computes: 50 (cruise) + (-100) (avoid) = **-50**. The right wheel reverses while the left stays at 50. The robot pivots right, away from the wall.
+**Obstacle on the left** — Left Distance reads 80, Left Detect fires at 100. The -1.0 weight sends -100 to Right Mix. Right Mix computes: 50 (cruise) + (-100) (avoid) = **-50**. The right wheel reverses while the left stays at 50. The robot pivots right, away from the wall.
 
 This *is* suppression: the avoid layer's -100 overwhelms the cruise layer's +50, taking effective control of the right motor. Cruise is still running — it's still contributing +50 — but the avoidance signal is strong enough to override it. The cruise layer is suppressed, not turned off.
 
@@ -84,7 +86,7 @@ This is the essence of subsumption. Each layer runs independently and continuous
 
 ## Part 2: Adding Escape — the third layer
 
-The two-layer system handles most situations, but sometimes the IR sensors miss an obstacle — a thin chair leg, a dark surface the IR doesn't reflect from — and the robot drives right into it. That's where the bumper comes in.
+The two-layer system handles most situations, but sometimes the distance sensors miss an obstacle — a thin chair leg, or a surface angled so the laser beam scatters away instead of bouncing back — and the robot drives right into it. That's where the bumper comes in.
 
 The escape behavior is: **when the bumper is pressed, reverse both motors for 2 seconds, overriding everything else.** This is the highest-priority layer. It must suppress both cruise and avoid.
 
@@ -111,7 +113,8 @@ Connection weights are capped at ±1, so the strongest pull a single connection 
 
 If avoidance is also active during escape, the motor on the obstacle side sees +50 (cruise) + (-100) (avoid) + (-100) (escape) = -150, which clamps to -100. The two inhibitory layers reinforce each other rather than fight — the robot backs away from the wall.
 
-:::note Why not -1.5?
+:::note[Why not -1.5?]
+
 It's tempting to give escape a weight like -1.5 to "overpower" both lower layers at once, but that isn't possible — weights clamp to the range **-1 to +1**. A single connection can scale a 0–100 signal to at most ±100. To suppress a lower layer more aggressively than that, gate it (for example with a Multiply node) or restructure the layering — don't reach for a weight outside ±1.
 :::
 
@@ -124,15 +127,15 @@ It's tempting to give escape a weight like -1.5 to "overpower" both lower layers
     { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 100 },
     { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '2000 ms' },
     { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 310, meta: '> 10' },
-    { id: 'left-ir', type: 'sensor-analog', label: 'Left IR', x: 190, y: 10, meta: 'A0' },
-    { id: 'right-ir', type: 'sensor-analog', label: 'Right IR', x: 400, y: 10, meta: 'A1' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT 7' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT 8' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 190, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 300, y: 190, meta: '50' },
     { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 200, y: 310 },
     { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 370, y: 310 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 205, y: 410 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 375, y: 410 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 205, y: 410 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 375, y: 410 },
   ]}
   connections={[
     { from: 'bumper', to: 'escape-latch', weight: 1.0 },
@@ -170,7 +173,7 @@ Both motors at 50. The robot drives forward.
 
 ### Scenario 2: Wall on the left (avoid suppresses cruise)
 
-Left IR at 80 → Left Detect fires at 100.
+Left Distance at 80 → Left Detect fires at 100.
 
 | Input to Right Mix | Value |
 |---|---|
@@ -194,7 +197,7 @@ Both motors at -50. The robot reverses straight back (both wheels together) for 
 
 ### Scenario 4: Bumper hit *while* avoiding an obstacle
 
-Bumper pressed and Left IR at 80 simultaneously.
+Bumper pressed and Left Distance at 80 simultaneously.
 
 | Input to Right Mix | Value |
 |---|---|
@@ -213,7 +216,7 @@ Right motor at -100, left motor at -50 — both wheels reverse, the right one ha
 
 ### Scenario 5: Escape ends, obstacle still present
 
-After 2 seconds, Escape Active drops to 0. Left IR still reads 80.
+After 2 seconds, Escape Active drops to 0. Left Distance still reads 80.
 
 | Input to Right Mix | Value |
 |---|---|
@@ -236,12 +239,19 @@ An inhibitory -100 connection always overrides the +50 cruise, so any active lay
 
 This is subsumption's central virtue: **behaviors are independent modules that don't know about each other.** The avoid layer doesn't check whether escape is active. Escape doesn't turn off avoidance. They just produce signals, and the math sorts it out. You can add or remove layers without modifying the existing ones.
 
+:::note[Intelligence without a boss]
+
+No part of this robot is "in charge." No layer knows the others exist; none can switch another off by command. Priority isn't a decision anyone makes — it falls out of topology and arithmetic, the way -100 simply outweighs +50 at a summation. The competent-looking whole has no center.
+
+This is the radical idea Rodney Brooks built behavior-based robotics on in the 1980s: **intelligence without representation**. Skip the central model of the world and the planner that reasons over it; layer many simple, tightly-coupled sensor-to-motor behaviors and let conflicts resolve at the wheels, not in a mind. It works unnervingly well — and it raises a question that won't quite go away: if a robot can be this competent with nobody home, how sure are you that *you* have a boss inside, rather than a very good committee?
+:::
+
 ## The physical result
 
 Put the robot in a room with furniture and watch:
 
 1. It drives forward (cruise)
-2. It approaches a table leg — IR sensors detect it and the robot veers away (avoid overrides cruise)
+2. It approaches a table leg — the distance sensors detect it and the robot veers away (avoid overrides cruise)
 3. It clips a corner the sensors missed — bumper clicks — the robot reverses for 2 full seconds (escape overrides everything)
 4. After reversing, it resumes driving forward. If the table leg is still nearby, avoidance kicks in again immediately
 
@@ -253,7 +263,7 @@ Once you have this pattern, adding new behaviors is straightforward:
 
 - **Wander layer** (priority between cruise and avoid): add an Oscillator node with a symmetric dead-zone transfer curve feeding into the Mix nodes with weight ±0.3. The robot will gently weave left and right while cruising, covering more area. Avoidance overrides it because -100 > ±30.
 
-- **Light seek layer** (priority between avoid and escape): add photoresistors with cross-wired connections to the Mix nodes, weight ±0.8. The robot drives toward light when no obstacles are in the way.
+- **Light seek layer** (priority between avoid and escape): add the two light-sensor boards with cross-wired connections to the Mix nodes, weight ±0.8. The robot drives toward light when no obstacles are in the way.
 
 For each new layer, choose a weight magnitude that's stronger than the layers it should suppress and weaker than the layers that should suppress it.
 
@@ -262,9 +272,15 @@ For each new layer, choose a weight magnitude that's stronger than the layers it
 The diagram has grown complex — 13 nodes. You can clean it up by grouping each behavior into a compound:
 
 - **Escape** compound: contains the bumper, latch, delay, and threshold. Exposes one output: the -100 suppression signal sent to both motors.
-- **Avoid** compound: contains the two IR sensors, two thresholds, and the cross-wired connections. Exposes two outputs: left and right inhibition signals.
+- **Avoid** compound: contains the two distance sensors, two thresholds, and the cross-wired connections. Exposes two outputs: left and right inhibition signals.
 
 See [Compound Reuse](./compound-reuse) for how to do this.
+
+### Questions to sit with
+
+- Nothing in this robot chooses between behaviors, yet it reliably does the "right" one. Does arbitration require an arbiter — or just the right place for signals to collide?
+- Each layer is ignorant of the others. Would the robot be *better* with a central controller that knew about all of them, or would you just be adding a single point of failure and calling it a mind?
+- Watching the finished robot dodge, reverse, and resume, you'll instinctively narrate one continuous agent. But it's three deaf modules summing into a wheel. Which is the illusion — the unified agent, or the separateness of the parts?
 
 ## What's next
 

@@ -28,6 +28,11 @@ const config: Config = {
 
   headTags: [
     {
+      // Crisp vector favicon for modern browsers; favicon.ico above is the fallback.
+      tagName: 'link',
+      attributes: { rel: 'icon', type: 'image/svg+xml', href: '/braitenbot-gui/img/favicon.svg' },
+    },
+    {
       tagName: 'link',
       attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     },

@@ -11,12 +11,10 @@ BraitenBot supports the following Arduino boards:
 
 | Board | Core | Processor | USB | Tested |
 |-------|------|-----------|-----|--------|
-| Arduino Uno | `arduino:avr` | ATmega328P | Type-B | Primary |
-| Arduino Nano | `arduino:avr` | ATmega328P | Mini-B | Yes |
-| Arduino Uno R4 Minima | `arduino:renesas_uno` | RA4M1 | Type-C | Yes |
+| Arduino Uno R4 Minima | `arduino:renesas_uno` | RA4M1 | Type-C | Primary |
 | Arduino Uno R4 WiFi | `arduino:renesas_uno` | RA4M1 | Type-C | Yes |
-
-Other AVR-based boards (Mega, Leonardo) may work but are not tested.
+| Arduino Uno | `arduino:avr` | ATmega328P | Type-B | Yes |
+| Arduino Nano | `arduino:avr` | ATmega328P | Mini-B | Yes |
 
 ### Motor safety (Uno R4)
 
@@ -108,7 +106,7 @@ The wheel motors use continuous rotation servos:
 - **Full forward**: 2000 µs (left wheel) / 1000 µs (right wheel, inverted)
 - **Full reverse**: 1000 µs (left wheel) / 2000 µs (right wheel, inverted)
 
-Compatible servos: any continuous rotation servo that responds to standard 1000–2000 µs PWM signals (e.g., FS90R, SpringRC SM-S4303R).
+Compatible servos: any continuous rotation servo that responds to standard 1000–2000 µs PWM signals. The reference build uses the **MG996R** (continuous-rotation variant); smaller options like the FS90R or SpringRC SM-S4303R work too.
 
 ### Positional servos
 
