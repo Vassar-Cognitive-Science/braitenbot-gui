@@ -42,6 +42,17 @@ pub fn run() {
                 .item(&load_item)
                 .build()?;
 
+            let test_sketch_item = MenuItem::with_id(
+                app_handle,
+                "hardware_test",
+                "Upload Test Sketch",
+                true,
+                None::<&str>,
+            )?;
+            let hardware_menu = SubmenuBuilder::new(app_handle, "Hardware")
+                .item(&test_sketch_item)
+                .build()?;
+
             #[cfg(target_os = "macos")]
             let app_menu = SubmenuBuilder::new(app_handle, "BraitenBot GUI")
                 .about(Some(AboutMetadata::default()))
@@ -61,7 +72,7 @@ pub fn run() {
             {
                 builder = builder.item(&app_menu);
             }
-            builder.item(&file_menu).build()
+            builder.item(&file_menu).item(&hardware_menu).build()
         })
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "diagram_new" => {
@@ -73,12 +84,16 @@ pub fn run() {
             "diagram_load" => {
                 let _ = app_handle.emit("menu://load", ());
             }
+            "hardware_test" => {
+                let _ = app_handle.emit("menu://upload-test-sketch", ());
+            }
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             arduino::check_arduino_cli,
             arduino::list_boards,
             arduino::compile_and_upload,
+            arduino::upload_test_sketch,
             arduino::check_avr_core,
             arduino::install_avr_core,
             diagram_io::save_diagram,
