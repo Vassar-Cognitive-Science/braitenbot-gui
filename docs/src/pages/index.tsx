@@ -141,9 +141,9 @@ export default function Home(): React.ReactElement {
             <div className={styles.spec}>
               <dt className={styles.specTerm}>Orderable parts</dt>
               <dd className={styles.specDesc}>
-                An Arduino-compatible board, two gear motors with a driver, and hobby
-                light, distance, and line sensors — stock components from any electronics
-                supplier, not a proprietary kit.
+                An Arduino-compatible board, two continuous-rotation servos for the
+                wheels, and light, distance, and color sensors — stock components from
+                any electronics supplier, not a proprietary kit.
               </dd>
             </div>
             <div className={styles.spec}>
