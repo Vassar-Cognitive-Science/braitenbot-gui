@@ -136,6 +136,39 @@ pub async fn list_boards(app: AppHandle) -> ArduinoResult<Vec<BoardInfo>> {
     Ok(boards)
 }
 
+/// Compiles a sketch directory and, if compilation succeeds, uploads it to the
+/// given port. Shared by `compile_and_upload` (generated diagrams) and
+/// `upload_test_sketch` (the bundled hardware bring-up test).
+async fn build_and_flash(
+    app: &AppHandle,
+    sketch_dir: &str,
+    fqbn: &str,
+    port: &str,
+) -> ArduinoResult<UploadResult> {
+    // Step 1: compile
+    let (compile_stdout, compile_stderr, compile_ok) =
+        run_sidecar(app, &["compile", "--fqbn", fqbn, sketch_dir]).await?;
+    let compile_output = format!("{}{}", compile_stdout, compile_stderr);
+    if !compile_ok {
+        return Ok(UploadResult {
+            success: false,
+            compile_output,
+            upload_output: String::new(),
+        });
+    }
+
+    // Step 2: upload
+    let (upload_stdout, upload_stderr, upload_ok) =
+        run_sidecar(app, &["upload", "-p", port, "--fqbn", fqbn, sketch_dir]).await?;
+    let upload_output = format!("{}{}", upload_stdout, upload_stderr);
+
+    Ok(UploadResult {
+        success: upload_ok,
+        compile_output,
+        upload_output,
+    })
+}
+
 /// Writes the provided sketch source to a temp directory, compiles it, and
 /// uploads it to the given port with the given FQBN (fully qualified board name).
 #[tauri::command]
@@ -156,34 +189,46 @@ pub async fn compile_and_upload(
 
     let sketch_dir_str = sketch_dir
         .to_str()
-        .ok_or_else(|| ArduinoError::Io("Sketch path is not valid UTF-8".into()))?
-        .to_string();
+        .ok_or_else(|| ArduinoError::Io("Sketch path is not valid UTF-8".into()))?;
 
-    // Step 1: compile
-    let (compile_stdout, compile_stderr, compile_ok) =
-        run_sidecar(&app, &["compile", "--fqbn", &fqbn, &sketch_dir_str]).await?;
-    let compile_output = format!("{}{}", compile_stdout, compile_stderr);
-    if !compile_ok {
-        return Ok(UploadResult {
-            success: false,
-            compile_output,
-            upload_output: String::new(),
-        });
-    }
+    build_and_flash(&app, sketch_dir_str, &fqbn, &port).await
+}
 
-    // Step 2: upload
-    let (upload_stdout, upload_stderr, upload_ok) = run_sidecar(
-        &app,
-        &["upload", "-p", &port, "--fqbn", &fqbn, &sketch_dir_str],
-    )
-    .await?;
-    let upload_output = format!("{}{}", upload_stdout, upload_stderr);
+// The standalone hardware bring-up test sketch (see hardware-test/ in the repo),
+// embedded at build time so the in-app copy is always identical to the one a
+// user can open directly in the Arduino IDE.
+const TEST_SKETCH_INO: &str = include_str!("../../hardware-test/hardware-test.ino");
+const TEST_SKETCH_CONFIG: &str = include_str!("../../hardware-test/config.h");
 
-    Ok(UploadResult {
-        success: upload_ok,
-        compile_output,
-        upload_output,
-    })
+/// Writes the bundled hardware bring-up test sketch to a temp directory and
+/// compiles + uploads it to the given board. Exercises every device in the
+/// default BraitenBot build (sensors, display, servos) so a freshly assembled
+/// robot can be checked without designing a diagram first.
+#[tauri::command]
+pub async fn upload_test_sketch(
+    app: AppHandle,
+    fqbn: String,
+    port: String,
+) -> ArduinoResult<UploadResult> {
+    // <tmp>/braitenbot_hardware_test/{braitenbot_hardware_test.ino, config.h}
+    // (arduino-cli requires the .ino basename to match the sketch folder name).
+    let mut sketch_dir = std::env::temp_dir();
+    sketch_dir.push("braitenbot_hardware_test");
+    fs::create_dir_all(&sketch_dir)?;
+
+    let mut ino_file = sketch_dir.clone();
+    ino_file.push("braitenbot_hardware_test.ino");
+    fs::write(&ino_file, TEST_SKETCH_INO)?;
+
+    let mut config_file = sketch_dir.clone();
+    config_file.push("config.h");
+    fs::write(&config_file, TEST_SKETCH_CONFIG)?;
+
+    let sketch_dir_str = sketch_dir
+        .to_str()
+        .ok_or_else(|| ArduinoError::Io("Sketch path is not valid UTF-8".into()))?;
+
+    build_and_flash(&app, sketch_dir_str, &fqbn, &port).await
 }
 
 /// Cores we require to cover the supported boards:

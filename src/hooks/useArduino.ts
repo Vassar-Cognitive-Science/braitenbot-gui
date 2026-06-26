@@ -80,18 +80,16 @@ export function useArduino() {
     }
   }, [tauriAvailable]);
 
-  const compileAndUpload = useCallback(
-    async (sketchSource: string, fqbn: string, port: string): Promise<UploadResult> => {
+  // Shared compile→upload runner: drives uploadStatus/lastResult around any
+  // Rust upload command (generated diagram or the bundled test sketch).
+  const runUpload = useCallback(
+    async (command: string, args: Record<string, unknown>): Promise<UploadResult> => {
       if (!tauriAvailable) {
         throw new Error('Desktop runtime not available — Tauri is required for uploads.');
       }
       setUploadStatus('compiling');
       try {
-        const rustResult = await invoke<RustUploadResult>('compile_and_upload', {
-          sketchSource,
-          fqbn,
-          port,
-        });
+        const rustResult = await invoke<RustUploadResult>(command, args);
         const result: UploadResult = {
           success: rustResult.success,
           compileOutput: rustResult.compile_output,
@@ -115,6 +113,20 @@ export function useArduino() {
       }
     },
     [tauriAvailable],
+  );
+
+  const compileAndUpload = useCallback(
+    (sketchSource: string, fqbn: string, port: string): Promise<UploadResult> =>
+      runUpload('compile_and_upload', { sketchSource, fqbn, port }),
+    [runUpload],
+  );
+
+  // Compiles and uploads the bundled hardware bring-up test sketch (sources
+  // embedded in the Rust backend, identical to hardware-test/ in the repo).
+  const uploadTestSketch = useCallback(
+    (fqbn: string, port: string): Promise<UploadResult> =>
+      runUpload('upload_test_sketch', { fqbn, port }),
+    [runUpload],
   );
 
   const checkCore = useCallback(async () => {
@@ -185,6 +197,7 @@ export function useArduino() {
     uploadStatus,
     lastResult,
     compileAndUpload,
+    uploadTestSketch,
     coreInstalled,
     coreInstallStatus,
     installLog,

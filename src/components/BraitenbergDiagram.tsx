@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, DragEvent, MouseEvent, SetStateAction } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, NodeTypeId, NodeTypeDefinition, OutputPortId, SensorProtocol, TransferPoint } from '../types/diagram';
 import { NODE_TYPES, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
@@ -252,6 +253,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     uploadStatus,
     lastResult,
     compileAndUpload,
+    uploadTestSketch,
   } = arduino;
   // Top-level diagram state lives here; the user-visible `nodes` /
   // `connections` below are a routed view that switches to a compound
@@ -816,6 +818,34 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setGeneratedCode(code);
     await compileAndUpload(code, selectedBoard.fqbn, selectedBoard.port);
   }, [topNodes, topConnections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload]);
+
+  // Hardware ▸ Upload Test Sketch — flash the bundled bring-up test that
+  // exercises every device in the default build. Independent of the diagram.
+  const handleUploadTestSketch = useCallback(async () => {
+    if (!selectedBoard || !selectedBoard.fqbn) {
+      setCodeGenErrors([
+        {
+          severity: 'error',
+          message: 'No board selected. Plug in an Arduino and click Refresh.',
+        },
+      ]);
+      setGeneratedCode(null);
+      setShowCodeDialog(true);
+      return;
+    }
+    await uploadTestSketch(selectedBoard.fqbn, selectedBoard.port);
+  }, [selectedBoard, uploadTestSketch]);
+
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://upload-test-sketch', () => {
+      void handleUploadTestSketch();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable, handleUploadTestSketch]);
 
   useEffect(() => {
     const dialog = codeDialogRef.current;
