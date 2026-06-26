@@ -95,11 +95,6 @@
   --ifm-navbar-link-hover-color: var(--bb-ink);
   --ifm-navbar-shadow: none;
 
-  --ifm-footer-background-color: var(--bb-ink);
-  --ifm-footer-color: color-mix(in oklab, var(--bb-paper) 78%, var(--bb-ink));
-  --ifm-footer-link-color: color-mix(in oklab, var(--bb-paper) 70%, var(--bb-ink));
-  --ifm-footer-title-color: var(--bb-paper);
-
   --ifm-code-font-size: 0.86em;
   --ifm-code-background: color-mix(in oklab, var(--bb-signal) 12%, var(--bb-surface));
   --ifm-code-border-radius: 3px;
@@ -117,11 +112,6 @@
   --ifm-color-primary-light: oklch(79% 0.1 150);
   --ifm-color-primary-lighter: oklch(83% 0.09 150);
   --ifm-color-primary-lightest: oklch(88% 0.07 150);
-
-  --ifm-footer-background-color: oklch(14% 0.011 64);
-  --ifm-footer-color: var(--bb-ink-soft);
-  --ifm-footer-link-color: var(--bb-ink-soft);
-  --ifm-footer-title-color: var(--bb-ink);
 }
 
 /* ====================================================== Graph-paper ground */
@@ -245,22 +235,7 @@ code {
   border-radius: var(--ifm-global-radius);
 }
 
-/* ============================================================ Footer */
-
-.footer__title {
-  font-family: var(--bb-font-mono);
-  font-size: 0.74rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.footer__link-item {
-  font-size: 0.95rem;
-}
-
-.footer {
-  background-image: none;
-}
+/* Footer is a fully swizzled component — see src/theme/Footer. */
 
 @media (prefers-reduced-motion: reduce) {
   *,

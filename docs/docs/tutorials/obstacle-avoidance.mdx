@@ -7,16 +7,18 @@ title: "Tutorial: Obstacle Avoidance"
 
 The light follower is elegant, but it has a problem: it drives straight into things. Put a box between the robot and the light source and the robot plows right into it — it has no concept of "obstacle."
 
-In this tutorial, you'll add obstacle detection using IR proximity sensors and a new building block: the **Threshold** node. The result is a robot that drives forward exploring its environment and turns away when it gets too close to a wall or object — the most common behavior in hobby robotics.
+In this tutorial, you'll add obstacle detection using the robot's two ToF distance sensors and a new building block: the **Threshold** node. The result is a robot that drives forward exploring its environment and turns away when it gets too close to a wall or object — the most common behavior in hobby robotics.
+
+With this vehicle a new ingredient enters: a *negative* connection. Until now every wire urged a wheel to spin faster; here, detecting an obstacle tells a wheel to back off. That small change — a minus sign — is the seed of something that looks a lot like an aversion, a preference, a "don't." Watch how quickly "avoids walls" starts to feel like "doesn't want to crash," when all you've really added is subtraction.
 
 **Time:** 15 minutes
 **Prerequisites:** Completed [Light Follower](./light-follower)
 
 ## The physical setup
 
-Mount two IR proximity sensors on the front of the robot, angled outward at about 30° from center — one pointing front-left, one front-right. These sensors output a higher analog voltage when an object is closer. Wire them to pins A0 and A1.
+Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled outward about 30° from center — one pointing front-left, one front-right. Each one measures the actual distance to whatever is in front of it with a tiny time-of-flight laser and reports it over the shared I2C bus. The **ToF Distance** node scales that reading to 0–100, with a *closer* object reading *higher*, up to a maximum distance you choose.
 
-Unlike the light sensors in the previous tutorial, proximity sensors don't give you useful *proportional* control. The voltage curve of an IR distance sensor is nonlinear and noisy — what matters is whether something is "close enough to worry about," not the exact distance. This is why we need a Threshold node: it converts the messy analog reading into a clean yes/no decision.
+Because both sensors sit on the same I2C bus and ship with the same default address, each needs its own **XSHUT** pin so BraitenBot can wake them one at a time at startup and give each a unique address (see [Supported Hardware](../reference/supported-hardware)). Note that, unlike a raw analog proximity sensor, the ToF reading is clean and genuinely proportional to distance — so why introduce a Threshold at all? Because for *avoidance* you rarely want a proportional response; you want a crisp decision: is something close enough to worry about? The Threshold node turns the continuous distance into exactly that yes/no.
 
 import DiagramView from '@site/src/components/DiagramView';
 
@@ -25,15 +27,15 @@ import DiagramView from '@site/src/components/DiagramView';
   height={400}
   robot={{ x: 300, y: 320, radius: 70 }}
   nodes={[
-    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Obstacle', x: 20, y: 20, meta: 'A0' },
-    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Obstacle', x: 400, y: 20, meta: 'A1' },
+    { id: 'left-sensor', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 7' },
+    { id: 'right-sensor', type: 'sensor-tof', label: 'Right Obstacle', x: 400, y: 20, meta: 'XSHUT 8' },
     { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 120, meta: '> 60' },
     { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 120, meta: '> 60' },
     { id: 'constant', type: 'constant', label: 'Forward (50)', x: 210, y: 80, meta: '50' },
     { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 220 },
     { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 220 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 155, y: 320 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 315, y: 320 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 155, y: 320 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 315, y: 320 },
   ]}
   connections={[
     { from: 'left-sensor', to: 'left-thresh', weight: 1.0 },
@@ -57,6 +59,13 @@ The design combines two ideas from previous tutorials:
 
 The Threshold node is the new piece. It watches its input and outputs either 0 (nothing detected) or 100 (obstacle detected). The negative weight on the cross-wire turns that 100 into -100 at the motor summation, which subtracts from the constant 50 and produces -50 — the motor reverses.
 
+:::note[Where does "wanting to explore" come from?]
+
+Watch this robot for a while and you'll narrate it generously: it *explores* the room, *wary* of walls, *drawn* to open space. But there is no exploration drive anywhere in the circuit — only a constant pushing it forward and a pair of negative wires pushing back when something's close. "Exploration" is simply what forward-plus-avoid *looks like* from the outside.
+
+This is inhibition doing the work that, in our own heads, we file under motives and values. A negative number isn't a fear or a dislike — but wire enough of them together and you get a vehicle whose behavior is most easily *described* in the language of fears and dislikes. Braitenberg's wager is that this isn't a cheat or a coincidence: it's a hint about where our own preferences might bottom out.
+:::
+
 ## Step 1: Set up the baseline drive
 
 1. Drag a **Constant** node onto the canvas, set its value to **50**
@@ -67,8 +76,8 @@ Test in trace mode: both motors should show 50. The robot drives straight forwar
 
 ## Step 2: Add obstacle sensors
 
-1. Drag two **Analog Sensor** nodes onto the canvas
-2. Configure: Left Obstacle on port `A0`, Right Obstacle on port `A1`
+1. Drag two **ToF Distance** nodes onto the canvas, labeled "Left Obstacle" and "Right Obstacle"
+2. Give each its own **XSHUT pin** — for example `7` and `8`. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance.
 
 ## Step 3: Add threshold nodes
 
@@ -76,7 +85,7 @@ Test in trace mode: both motors should show 50. The robot drives straight forwar
 2. Wire each sensor to its threshold (weight 1.0)
 3. Set both thresholds to **60**
 
-The threshold value determines how close an obstacle must be before the robot reacts. On a real robot, you'll need to calibrate this: hold an object at the distance you want the robot to start turning (roughly 15–20 cm for most IR sensors), read the sensor value in trace mode, and set the threshold just below that value.
+The threshold value determines how close an obstacle must be before the robot reacts. Because the ToF reports distance, this is easy to reason about: with the sensor's max distance left at 500 mm, a closer object reads higher, so a threshold of 60 fires at roughly 200 mm (about 20 cm). To calibrate on the real robot, hold an object at the distance you want it to start turning, read the value in trace mode, and set the threshold just below it.
 
 ## Step 4: Cross-wire with negative weights
 
@@ -118,17 +127,19 @@ The weight on the inhibitory connections controls how sharply the robot turns:
 
 Weights are limited to the range -1 to +1, so **-1.0 is the sharpest single-connection inhibition available**. If you need an even harder turn, lower the Cruise constant (so there's less forward drive to overcome) rather than reaching for a weight below -1.
 
-### Using digital proximity sensors
-
-Many hobby robotics kits come with digital IR proximity modules that output HIGH or LOW instead of an analog voltage. If you have these, use **Digital Sensor** nodes instead and skip the Threshold nodes entirely — digital sensors already output 0 or 100, which is exactly what a threshold would produce. Wire them directly into the summation nodes with weight -1.0.
-
 ## What you've learned
 
 This tutorial introduced two important patterns:
 
-- **Threshold nodes** convert continuous sensor readings into binary decisions, which is essential for noisy or nonlinear sensors where proportional control doesn't work well
+- **Threshold nodes** convert a continuous sensor reading into a binary decision — turning a smooth distance measurement into a crisp "too close?" that drives a clean avoidance response
 - **Negative weights** create inhibition — one part of the circuit suppressing another. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
+
+### Questions to sit with
+
+- The robot "explores" with no urge to explore. How many of your own behaviors might be side effects of simpler pushes and pulls, rather than the goals you'd name for them?
+- A positive wire is "approach" and a negative wire is "avoid." Is there anything more to a value than which way it points the motors — or is that genuinely all a value is, at the bottom?
+- The robot never decides to turn; the numbers just sum to a turn. Did *anything* in there make a choice? If not, what would have to change before you'd say it did?
 
 ## What's next
 
-[Line Follower](./line-follower) — another classic robot behavior using digital sensors and same-side wiring, where the robot tracks a dark line on a light surface.
+[Transfer Curves](./transfer-curves) — shape a connection's response with custom curves to filter noise, cap motor speed, and even make binary decisions right on the wire.

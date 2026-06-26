@@ -9,12 +9,14 @@ If you built the subsumption architecture from the previous tutorial, you probab
 
 Compounds solve this. They let you take a cluster of nodes — like the entire escape behavior — and collapse it into a single box with named inputs and outputs. The internal wiring still exists, but it's tucked away behind a clean interface. You can also reuse compounds: build a "noise-filtered sensor" once and stamp out copies for every sensor on the robot.
 
+On the surface this tutorial is about tidiness — collapsing a sprawl of nodes into a clean box. But there's a bigger idea underneath. Once you can package "calibrated sensor" or "escape behavior" as a reusable unit, you stop thinking in wires and start thinking in *concepts*. That move — from raw mechanism to named, reusable parts — is arguably how any complicated mind gets built at all, including the one reading this.
+
 **Time:** 15 minutes
 **Prerequisites:** Completed at least [Obstacle Avoidance](./obstacle-avoidance)
 
 ## Scenario: Multiple sensors need the same calibration
 
-Your robot has four IR proximity sensors — front-left, front-right, rear-left, rear-right — and each one needs the same preprocessing: a dead-zone transfer curve to filter noise below 15, followed by a threshold at 30 for binary obstacle detection. Without compounds, you'd duplicate this three-node circuit (sensor → transfer → threshold) four times. That's 12 nodes and 8 connections for what is conceptually the same operation.
+Suppose your robot has four ToF distance sensors — front-left, front-right, rear-left, rear-right — and each one needs the same preprocessing: a dead-zone transfer curve to ignore faint, distant returns below 15, followed by a threshold at 30 for binary obstacle detection. Without compounds, you'd duplicate this three-node circuit (sensor → transfer → threshold) four times. That's 12 nodes and 8 connections for what is conceptually the same operation.
 
 With compounds, you build the preprocessing once, group it, and drag out four instances.
 
@@ -22,7 +24,7 @@ With compounds, you build the preprocessing once, group it, and drag out four in
 
 Start with a single sensor:
 
-1. Add an **Analog Sensor** (port `A0`, label "Raw Sensor")
+1. Add a **ToF Distance** sensor (XSHUT pin `7`, label "Raw Sensor")
 2. Add a **Threshold** node (threshold 30, label "Detected")
 3. Connect Raw Sensor → Detected (weight 1.0)
 4. On this connection, switch to **Non-linear transfer** and set a dead-zone curve: points at (-100, 0), (15, 0), (100, 100)
@@ -44,7 +46,7 @@ Rename the compound: click it, and in the config panel change the label to **"Ca
 
 **Double-click** the compound instance to enter the body editor. Inside you'll see:
 
-- The original Analog Sensor and Threshold nodes
+- The original ToF Distance sensor and Threshold nodes
 - A **Compound Output** port node, connected to the threshold's output
 - The dead-zone transfer curve is preserved on the internal connection
 
@@ -56,9 +58,10 @@ Click the breadcrumb to return to the main canvas.
 
 In the **Node Palette**, a new **Compounds** section has appeared with your "Calibrated Sensor" type. Drag out three more instances — you now have four identical preprocessed sensors.
 
-To configure each instance for a different pin, double-click each one and change the internal sensor's Arduino Port: A0, A1, A2, A3.
+To configure each instance for a different pin, double-click each one and change the internal sensor's XSHUT pin: 7, 8, 9, 10.
 
-:::note Pin assignments inside compounds
+:::note[Pin assignments inside compounds]
+
 Because changes to the body affect all instances, changing the pin in one instance changes it in all of them. For truly independent pin assignments, use the alternative pattern below.
 :::
 
@@ -118,6 +121,19 @@ Sometimes you need to modify one instance differently from the others — for ex
 
 **Wheel motors stay outside.** The left and right wheel motors are always on the main canvas, attached to the robot overlay. They can't be inside compounds. All your compound outputs eventually wire into the motor summation nodes at the top level.
 
+:::note[Minds are built from reused parts]
+
+A compound is an abstraction: a chunk of circuit you can name, trust, and then stop thinking about. This is the only known way to build anything truly complex — hide the details of a working sub-part behind a clean interface, then use it as a single move in a larger design. Software does it with functions; brains appear to do it with reusable circuit motifs; evolution does it shamelessly, copying a working sub-system and repurposing it rather than inventing from scratch.
+
+Notice that the abstraction is purely *for you*. The generated robot code doesn't know your compounds exist — at upload time they're flattened back into the same flat mesh of nodes and wires the robot actually runs. The hierarchy is a tool for the designer's mind, not the machine's. Which is a clue worth keeping: the modules we "see" in a complex system are often a story we tell to make it thinkable, as much as a fact about how it runs.
+:::
+
 ## What you've learned
 
 Compounds are how you scale from simple Braitenberg vehicles to complex, multi-behavior robots without the diagram becoming unmanageable. They don't change the underlying circuit — they're purely an organizational tool — but they let you think at the right level of abstraction: individual sensor calibration, complete behavior modules, or the overall architecture.
+
+### Questions to sit with
+
+- Your compounds vanish at upload — the robot runs as one flat mesh. If the modular structure isn't in the machine, is it "really there," or only in your understanding of the machine?
+- "Calibrated Sensor" and "Escape Behavior" are concepts you imposed to make the design thinkable. Do the modules we see in a brain, or in a person's character, have any firmer reality than that?
+- Reuse let you build something complex without holding all of it in your head at once. Is that a limitation you worked around, or is *abstraction itself* what makes complex behavior possible in the first place?

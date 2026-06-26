@@ -5,9 +5,13 @@ title: "Tutorial: Latches with Delay"
 
 # Latches with Delay
 
-Put a bumper switch on the front of the obstacle-avoidance robot from the earlier tutorial and you'll discover a problem. The robot detects the wall with its IR sensors and turns away — but sometimes it doesn't turn far enough and clips the corner. The bumper clicks for a fraction of a second, then releases. The robot doesn't react because by the time the next loop iteration runs, the bumper is already open again. The event is gone.
+Put a bumper switch on the front of the obstacle-avoidance robot from the earlier tutorial and you'll discover a problem. The robot detects the wall with its distance sensors and turns away — but sometimes it doesn't turn far enough and clips the corner. The bumper clicks for a fraction of a second, then releases. The robot doesn't react because by the time the next loop iteration runs, the bumper is already open again. The event is gone.
 
 What you need is **memory**: a way for the robot to notice a brief event (the bumper click) and hold onto it for long enough to respond (reverse for two seconds). This tutorial introduces the latch — a feedback loop built from a Summation and a Delay node that captures transient events and sustains them.
+
+There's a deeper puzzle hiding here. Every circuit you've built so far is **purely reactive**: its output depends only on what the sensors read *right now*. A vehicle like that lives in an eternal present — it has no "a moment ago." And its sensors make this worse, not better: they report the present *continuously*, so a 50 ms bump is, on the very next reading, simply gone. Nothing in the circuit ever saw a "then."
+
+So where could a memory possibly live? Not in any single part — none of them store anything. The answer turns out to be **topology**: route a signal back into itself through a delay, and the loop keeps that signal alive after its cause has vanished. Memory becomes a *process* rather than a place — activity sustaining itself. You're about to build "the past" out of components that can only ever sense "now."
 
 **Time:** 20 minutes
 **Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and familiar with [signal flow](../concepts/signal-flow)
@@ -36,7 +40,7 @@ import DiagramView from '@site/src/components/DiagramView';
     { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'pin 2' },
     { id: 'sum', type: 'compute-summation', label: 'Latch', x: 176, y: 30 },
     { id: 'delay', type: 'compute-delay', label: 'Delay', x: 176, y: 170, meta: '20 ms' },
-    { id: 'motor', type: 'servo-cr', label: 'Right Motor', x: 340, y: 30 },
+    { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 340, y: 30 },
   ]}
   connections={[
     { from: 'bumper', to: 'sum', weight: 1.0 },
@@ -56,6 +60,13 @@ Walk through the loop iterations:
 
 The robot's motor stays active even though the bumper was only pressed for a moment. The feedback loop sustains the signal.
 
+:::note[Memory without a memory]
+
+Look closely at what just happened: the latch "remembers" the bump, yet nowhere in the circuit is there a part that *holds* the value 100. The summation only ever adds its inputs in the current instant; the delay only ever echoes what it heard one tick ago. The memory isn't stored anywhere — it lives in the **circulation**, a signal handed from delay to summation and back, around and around.
+
+This is a strange idea, and it isn't just a trick of the editor. Many models of biological short-term memory work the same way: a memory is held not by a dedicated "storage" cell but by a loop of neurons that keep re-exciting each other. Break the loop for a single tick and the memory is gone — instantly and completely, with no trace left behind. A thought, on this view, is something a circuit *does*, not something it *has*.
+:::
+
 ## Step 1: Build the latch
 
 1. Drag a **Summation** node onto the canvas, label it "Latch"
@@ -72,7 +83,7 @@ On the physical robot, wire a pushbutton between pin 2 and ground, and enable IN
 
 ## Step 3: Connect to a motor
 
-Connect Summation → Right Motor (weight 0.5) to see the latch in action.
+Connect Summation → Right Wheel (weight 0.5) to see the latch in action.
 
 ## Step 4: Test with trace mode
 
@@ -113,6 +124,11 @@ Set the delay time to **2000 ms** and use the clamping feedback from above. The 
 
 This is more precise than decay feedback and easier to reason about: delay time = hold time.
 
+:::tip[Two ways to forget]
+
+These two timeouts aren't just implementation details — they're two different theories of forgetting. **Decay** is a *forgetting curve*: the trace fades smoothly, vivid right after the event and gradually slipping away, the way a striking moment dims over seconds. **The delay line** is an *echo*: the event is held perfectly intact for a fixed interval and then drops out all at once, like a tape loop reaching its end. Nervous systems appear to use both — graceful decay for some things, precise timing for others. Which one you reach for depends on whether the robot needs to know *how long ago* something happened or *exactly when* it should stop mattering.
+:::
+
 ## Building the complete bump-and-reverse
 
 Now combine the latch with the obstacle avoidance circuit:
@@ -135,13 +151,20 @@ Sometimes you want to reset a latch manually — for example, a "panic button" t
 
 When Reset fires it contributes 100 × -1.0 = -100, exactly canceling the +100 of clamped feedback. The summation drops to 0, the delay captures 0, and on the next iteration the feedback is 0 — the latch clears immediately, regardless of how much time was left.
 
-:::note Weights are limited to ±1
+:::note[Weights are limited to ±1]
+
 Connection weights are clamped to the range **-1 to +1**. A single connection can therefore scale a 0–100 signal to at most ±100. To "overpower" a signal more strongly than that, use a [non-linear transfer curve](./transfer-curves), a Threshold, or stack multiple connections — not a weight outside ±1.
 :::
 
 ## What you've learned
 
 The latch pattern — summation + delay feedback — converts a transient event into a sustained state, giving the robot a form of short-term memory. This is what separates reactive behaviors (turn away from obstacles) from deliberate behaviors (reverse for two seconds after a bump).
+
+### Questions to sit with
+
+- The vehicle now does something its sensors cannot: it responds to an event that is no longer happening. Is that enough to say it *remembers*? What more, if anything, would you want before using that word?
+- A reactive vehicle is fully explained by its present input. Add a loop and the *same* input can produce different behavior depending on what came before — the vehicle has **state**. Is that the first faint glimmer of an inner life, or just bookkeeping?
+- You built "two seconds ago" out of parts that only know "now." Does that make you more impressed by what a brain full of such loops might do — or less?
 
 ## What's next
 

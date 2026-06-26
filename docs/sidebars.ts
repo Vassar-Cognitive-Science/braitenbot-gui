@@ -31,7 +31,6 @@ const sidebars: SidebarsConfig = {
         'tutorials/your-first-vehicle',
         'tutorials/light-follower',
         'tutorials/obstacle-avoidance',
-        'tutorials/line-follower',
         'tutorials/transfer-curves',
         'tutorials/latches-with-delay',
         'tutorials/subsumption-architecture',

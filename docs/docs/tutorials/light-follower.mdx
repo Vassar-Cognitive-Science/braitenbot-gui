@@ -9,12 +9,14 @@ In the previous tutorial, the robot drove straight toward a light source but cou
 
 The fix is surprisingly simple: add a second sensor and cross the wires. Mount one photoresistor on the left side of the robot and one on the right. Then connect each sensor to the **opposite** motor. When more light hits the left sensor, the right wheel spins faster, and the robot turns left — toward the light. This is Braitenberg's Vehicle 2b, and it's the basis for real-world light-seeking robots used in everything from solar panel alignment to insect behavior research.
 
+This is the moment Braitenberg's vehicles start to feel uncanny. The same two sensors and two motors from the last tutorial, wired one way, produce a creature that *chases* light; wired the other way, one that *flees* it. Nothing about the hardware changes — only which wire crosses to which wheel. As you build, notice how strongly the behavior invites an emotional reading, and how little is actually there to do any feeling.
+
 **Time:** 10 minutes
 **Prerequisites:** Completed [Your First Vehicle](./your-first-vehicle)
 
 ## The physical setup
 
-Mount two photoresistors (or phototransistors) on the front of the robot, angled slightly outward — one pointing left, one pointing right. Wire them to analog pins A0 and A1 through voltage dividers. When a light source is to the left of the robot, the left sensor gets more photons and reads a higher voltage. When it's to the right, the right sensor reads higher.
+Mount the robot's two **light-sensor boards** on the front, angled slightly outward — one pointing left, one pointing right. Wire each board's analog output to pins A0 and A1; the board already carries the photocell and its voltage divider, so there's nothing else to add. When a light source is to the left of the robot, the left board gets more light and reads higher. When it's to the right, the right board reads higher.
 
 import DiagramView from '@site/src/components/DiagramView';
 
@@ -25,8 +27,8 @@ import DiagramView from '@site/src/components/DiagramView';
   nodes={[
     { id: 'left-sensor', type: 'sensor-analog', label: 'Left Light', x: 80, y: 30, meta: 'A0' },
     { id: 'right-sensor', type: 'sensor-analog', label: 'Right Light', x: 280, y: 30, meta: 'A1' },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 96, y: 210 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 256, y: 210 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 210 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 210 },
   ]}
   connections={[
     { from: 'left-sensor', to: 'right-motor', weight: 0.7 },
@@ -53,8 +55,8 @@ This is the same principle that a moth uses. It doesn't "decide" to fly toward a
 
 ## Step 2: Cross-wire the connections
 
-1. Connect **Left Light** → **Right Motor**
-2. Connect **Right Light** → **Left Motor**
+1. Connect **Left Light** → **Right Wheel**
+2. Connect **Right Light** → **Left Wheel**
 
 This is the opposite of what might seem intuitive (you might expect left-to-left), but the cross-wiring is what makes the robot turn *toward* the light rather than away from it.
 
@@ -68,8 +70,8 @@ Click each connection and set the weight to **0.7**. A weight less than 1.0 limi
 2. Drag the **Left Light** slider to 80 and keep the right at 20
 
 The motors should show:
-- Right Motor: **56** (80 × 0.7) — fast
-- Left Motor: **14** (20 × 0.7) — slow
+- Right Wheel: **56** (80 × 0.7) — fast
+- Left Wheel: **14** (20 × 0.7) — slow
 
 The right wheel spins roughly 4× faster than the left, so the robot turns sharply left toward the stronger light. Now try centering both sliders at 50 — both motors show 35 and the robot drives straight.
 
@@ -101,10 +103,23 @@ Swap the cross-wiring for same-side wiring (left sensor → left motor, right se
 
 This is useful for light-avoidance behaviors — for example, a robot that stays in the shadows or hides under furniture when a room light turns on.
 
+:::note[Thinking like Braitenberg]
+
+You now have two vehicles, identical down to the last component, that an observer would describe in opposite emotional terms: one *loves* the light and pursues it, the other *fears* it and flees. Braitenberg's unsettling claim is that the emotion lives entirely in the eye of the observer — the vehicles differ by a single crossed wire, not by a feeling.
+
+He took the moth further than a metaphor. A moth spiraling into a flame isn't suicidal and isn't in love; it is (roughly) a cross-wired vehicle whose ancient navigation trick — hold a fixed angle to a faraway light — collapses when the light is suddenly close. The "tragedy" is ours to narrate. The mechanism is just wiring meeting a world it wasn't built for.
+:::
+
 ## What you've learned
 
 By changing only the wiring pattern — same-side vs. cross-wired — the same hardware produces opposite behaviors: attraction or avoidance. No programming logic changed; the behavior emerges entirely from which wire goes where.
 
+### Questions to sit with
+
+- A single sign flip turns "fear" into "love." If an emotion in a vehicle is that cheap, how confidently should we read emotions into *anything* whose wiring we can't see?
+- The cross-wired robot only "seeks" light because of the world it's in; in a uniformly lit room the behavior vanishes. How much of what looks like a goal is really a property of the environment?
+- Would you be comfortable saying the moth "wants" to reach the flame? If not, where is the line between the moth and the robot — and is there one?
+
 ## What's next
 
-Light sensors give smooth, continuous readings. But many robot sensors are binary — a bumper switch is either pressed or not, an IR proximity sensor either sees an obstacle or doesn't. [Obstacle Avoidance](./obstacle-avoidance) shows how to work with these on/off signals using Threshold nodes.
+Here the robot responds smoothly and proportionally to light. But sometimes you don't want a proportional response — you want a crisp decision: is an obstacle close enough to turn away from? [Obstacle Avoidance](./obstacle-avoidance) introduces the Threshold node, which turns a continuous distance reading into a clean yes/no.

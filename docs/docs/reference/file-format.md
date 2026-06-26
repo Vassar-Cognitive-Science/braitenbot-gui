@@ -7,7 +7,8 @@ title: File Format
 
 BraitenBot diagrams are saved as JSON files. This page documents the file structure for anyone who wants to inspect, generate, or programmatically modify diagram files.
 
-:::caution Alpha format
+:::caution[Alpha format]
+
 BraitenBot is pre-1.0 software. The file format may change between versions without migration support. If a saved diagram fails to load after an update, use **File > New** to reset and re-create the diagram.
 :::
 
