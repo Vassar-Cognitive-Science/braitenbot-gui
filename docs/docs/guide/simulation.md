@@ -1,9 +1,9 @@
 ---
 sidebar_position: 6
-title: Trace Simulation
+title: Simulating & Tracing
 ---
 
-# Trace Simulation
+# Simulating & Tracing
 
 Trace mode lets you simulate your diagram's signal flow without hardware. It's the fastest way to verify that your wiring produces the behavior you expect.
 

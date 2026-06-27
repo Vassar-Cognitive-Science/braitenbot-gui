@@ -9,19 +9,19 @@ const sidebars: SidebarsConfig = {
       items: [
         'getting-started/installation',
         'getting-started/arduino-setup',
-        'getting-started/editor-overview',
+        'getting-started/editor',
       ],
     },
     {
       type: 'category',
-      label: 'Core Concepts',
+      label: 'Designing Vehicles',
       items: [
-        'concepts/braitenberg-vehicles',
-        'concepts/signal-flow',
-        'concepts/transfer-functions',
-        'concepts/compound-nodes',
-        'concepts/code-generation',
-        'concepts/trace-simulation',
+        'guide/braitenberg-vehicles',
+        'guide/nodes',
+        'guide/connections',
+        'guide/transfer-functions',
+        'guide/compound-nodes',
+        'guide/simulation',
       ],
     },
     {
@@ -37,18 +37,7 @@ const sidebars: SidebarsConfig = {
         'tutorials/compound-reuse',
       ],
     },
-    {
-      type: 'category',
-      label: 'Reference',
-      items: [
-        'reference/node-types',
-        'reference/connections',
-        'reference/keyboard-shortcuts',
-        'reference/file-format',
-        'reference/generated-code',
-        'reference/supported-hardware',
-      ],
-    },
+    'under-the-hood',
   ],
 
   hardwareSidebar: [
@@ -57,6 +46,7 @@ const sidebars: SidebarsConfig = {
     'hardware/3d-models',
     'hardware/assembly',
     'hardware/testing',
+    'hardware/supported-hardware',
   ],
 };
 

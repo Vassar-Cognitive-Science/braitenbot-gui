@@ -34,8 +34,19 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 3. **Generate** an Arduino sketch automatically
 4. **Upload** to your robot with one click
 
+## Finding your way around
+
+- **Getting Started** — install the app, set up Arduino, and learn the editor.
+- **Designing Vehicles** — how the building blocks work: nodes, connections,
+  transfer functions, compounds, and the simulator.
+- **Tutorials** — step-by-step builds, from your first vehicle to subsumption.
+- **Under the Hood** — optional: what the generated Arduino sketch looks like and
+  how diagrams are stored.
+
+The separate **Hardware** section covers building the physical robot.
+
 ## Next steps
 
 - [Install BraitenBot](./getting-started/installation)
 - [Build your first vehicle](./tutorials/your-first-vehicle)
-- [Explore the node reference](./reference/node-types)
+- [Explore the building blocks](./guide/nodes)

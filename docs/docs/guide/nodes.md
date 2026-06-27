@@ -1,11 +1,11 @@
 ---
-sidebar_position: 1
-title: Node Types
+sidebar_position: 2
+title: Nodes
 ---
 
-# Node Types Reference
+# Nodes
 
-Every node in BraitenBot belongs to a **kind** (sensor, compute, output, constant, compound, or port) and has a specific **type** that defines its behavior. This page documents all available node types.
+Nodes are the building blocks you drag onto the canvas. Every node belongs to a **kind** (sensor, compute, output, constant, compound, or port) and has a specific **type** that defines its behavior. This page documents all available node types.
 
 ## Sensors
 

@@ -1,9 +1,9 @@
 ---
 sidebar_position: 3
-title: Editor Overview
+title: The Editor
 ---
 
-# Editor Overview
+# The Editor
 
 The BraitenBot editor is a single-screen workspace with four main areas.
 
@@ -114,7 +114,25 @@ Depending on the node type, you'll see:
 
 ## Oscilloscope (bottom, trace mode only)
 
-When signal tracing is active (toggled with **Trace Signal Flow**), a collapsible oscilloscope panel appears at the bottom of the canvas. It plots a rolling 5-second history of signal values at each node over time, so you can see how signals change. Controls include pause/resume and clear history.
+When signal tracing is active (toggled with **Trace Signal Flow**), a collapsible oscilloscope panel appears at the bottom of the canvas. It plots a rolling 5-second history of signal values at each node over time, so you can see how signals change. Controls include pause/resume and clear history. For the full picture of what trace mode does, see [Simulating & Tracing](../guide/simulation).
+
+## Keyboard & mouse
+
+| Input | Action |
+|----------|--------|
+| **Click** node | Select node, open config panel |
+| **Shift+Click** node | Toggle node in multi-selection |
+| **Click** connection | Select connection, open config panel |
+| **Click** empty canvas | Deselect all |
+| **Drag** on empty canvas | Pan the view |
+| **Scroll** / two-finger swipe | Pan the view |
+| **Ctrl/Cmd + Scroll** | Zoom in/out (0.3× to 3×) |
+| **Delete** or **Backspace** | Delete the selected node or connection |
+| **Ctrl/Cmd + Z** | Undo |
+| **Double-click** compound | Enter the compound body editor |
+
+There are no keyboard shortcuts for toolbar actions (Group, Trace, Generate,
+Upload) — those are buttons, described above.
 
 ## Next steps
 

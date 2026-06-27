@@ -18,7 +18,9 @@ BraitenBot supports the following Arduino boards:
 
 ### Motor safety (Uno R4)
 
-The Uno R4 boards include a motor safety feature: while the USB host is actively connected and enumerating the device, wheel motors are held at zero speed and the built-in LED blinks. This prevents the robot from driving off your desk during programming. Disconnect USB to enable the motors.
+On Uno R4 boards, BraitenBot's generated sketch adds a motor-safety guard: while a USB host is actively connected, the `drive()` helper holds the wheels at zero speed and blinks the built-in LED. This prevents the robot from driving off your desk during programming. Disconnect USB to enable the motors.
+
+This is behavior BraitenBot wires into the code, not a feature of the board itself. It's limited to the Uno R4 because it detects the USB connection state through a Renesas-specific register, so it isn't emitted for AVR boards (Uno/Nano).
 
 ## Pin reference
 
@@ -28,7 +30,7 @@ The Uno R4 boards include a motor safety feature: while the USB host is actively
 |-----|----------|-------|
 | 0 | Serial RX | Used by USB communication — **never assign to sensors/outputs** |
 | 1 | Serial TX | Used by USB communication — **never assign to sensors/outputs** |
-| 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used by the motor safety indicator — **never assign to sensors/outputs** |
+| 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used as BraitenBot's motor-safety indicator (Uno R4) — **never assign to sensors/outputs** |
 
 BraitenBot's validation will report an error if you assign pin 0, 1, or 13 to a digital pin field.
 
@@ -60,7 +62,7 @@ Used by: Digital Sensor, Continuous Servo, Positional Servo, Digital Output node
 
 Used by: Color Sensor (TCS34725), ToF Distance (VL53L4CD), TM1637 Display. The I2C bus is shared — multiple I2C devices use the same two pins (SDA/SCL); they are daisy-chained, not given individual ports.
 
-Because the bus is addressed rather than pinned, devices must have distinct I2C addresses. The VL53L4CD ships at the same address (0x29) as every other VL53L4CD **and** as the TCS34725, so BraitenBot reassigns each ToF sensor to a unique address at startup using its XSHUT pin (see [ToF Distance](node-types#tof-distance-vl53l4cd)). Each ToF node therefore needs its own digital XSHUT pin in addition to the shared SDA/SCL lines.
+Because the bus is addressed rather than pinned, devices must have distinct I2C addresses. The VL53L4CD ships at the same address (0x29) as every other VL53L4CD **and** as the TCS34725, so BraitenBot reassigns each ToF sensor to a unique address at startup using its XSHUT pin (see [ToF Distance](../guide/nodes#tof-distance-vl53l4cd)). Each ToF node therefore needs its own digital XSHUT pin in addition to the shared SDA/SCL lines.
 
 ### Servo pins
 

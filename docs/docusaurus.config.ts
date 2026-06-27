@@ -102,7 +102,7 @@ const config: Config = {
           items: [
             { label: 'Getting Started', to: '/docs/getting-started/installation' },
             { label: 'Tutorials', to: '/docs/tutorials/your-first-vehicle' },
-            { label: 'Reference', to: '/docs/reference/node-types' },
+            { label: 'Nodes', to: '/docs/guide/nodes' },
           ],
         },
         {
