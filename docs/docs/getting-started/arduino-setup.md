@@ -45,6 +45,47 @@ The green/gray dot next to the device dropdown shows connection status:
 - **Green** — a board is selected and the port is available
 - **Gray** — no board selected or the port is unavailable
 
+## Test your hardware
+
+Before you wire up a diagram, it's worth checking that every device on the robot
+actually works. BraitenBot includes a **built-in hardware test** — a sketch that
+checks each device in the default build, one at a time: both ToF distance
+sensors, the color sensor, both photocells, all four bump switches, the
+7-segment display, and both wheel servos.
+
+To run it:
+
+1. Plug in your Arduino and select it in the **Device** dropdown (see
+   [Connecting your Arduino](#connecting-your-arduino) above).
+2. Open the **Hardware** menu and choose **Upload Test Sketch**.
+
+BraitenBot compiles the test and flashes it to the selected board. It runs
+independently of your diagram, so it never changes whatever design you have open.
+
+:::note
+
+If no board is selected, BraitenBot shows *"No board selected. Plug in an
+Arduino and click Refresh."* instead of uploading. Select a board first.
+
+:::
+
+### Using the test
+
+The test checks one device at a time, and you pick which one with the front-left
+bump switch:
+
+- **Hold the front-left bump switch** to step through the modes. Each press
+  advances the mode number (`0001`, `0002`, …) and shows it on the display.
+- **Release** to start the mode you landed on.
+- Each mode shows that device's live reading on the 7-segment display. To see
+  readings from every device at once, open the **Serial Monitor at 115200 baud**.
+
+The two ToF distance sensors share one I2C connection, so the test gives each a
+separate address using its XSHUT pin — both XSHUT pins must be wired for this to
+work. A ToF sensor the test can't find shows `----` instead of a distance. The
+test always starts, even if a sensor is missing or a cable is loose, so a bad
+connection won't freeze it.
+
 ## Supported boards
 
 | Board | Core | Notes |
