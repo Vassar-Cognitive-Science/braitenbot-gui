@@ -128,7 +128,7 @@ Multiple ToF sensors are sequenced in `setup()` — every sensor is held in rese
 
 ### Input aggregation
 
-Most consumer nodes (threshold, summation, multiply, servos, outputs, delay) begin by accumulating their weighted inputs into an `input_<label>` variable. Summation-style nodes seed at `0.0` and accumulate with `+=`; multiply seeds at `1.0` and accumulates with `*=`. There is one accumulation line per incoming connection:
+Most nodes that receive signals (threshold, summation, multiply, servos, outputs, delay) begin by accumulating their weighted inputs into an `input_<label>` variable. Summation-style nodes seed at `0.0` and accumulate with `+=`; multiply seeds at `1.0` and accumulates with `*=`. There is one accumulation line per incoming connection:
 
 ```cpp
 float input_Sum = 0.0;

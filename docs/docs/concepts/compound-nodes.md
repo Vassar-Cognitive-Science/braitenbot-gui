@@ -10,7 +10,7 @@ Compound nodes let you encapsulate a sub-circuit into a reusable module. Instead
 ## Creating a compound
 
 1. **Select** two or more nodes on the canvas (Shift+click to multi-select)
-2. Click **Group N** in the toolbar (where N is the number of selected nodes)
+2. Click **Group** in the toolbar
 3. BraitenBot creates a new compound type and replaces the selected nodes with a single compound instance
 
 ### What happens during grouping
@@ -54,7 +54,7 @@ To expand a compound instance back into its constituent nodes:
 1. Select the compound instance
 2. Click **Ungroup** in the toolbar
 
-The body nodes are inlined into the main diagram. Port anchors become summation pass-through nodes, and external edges are rewired to connect directly.
+The body nodes reappear on the main diagram, and their connections — both inside the former compound and to the rest of the diagram — are restored automatically.
 
 ## How compounds work under the hood
 

@@ -27,7 +27,7 @@ Start with a single sensor:
 1. Add a **ToF Distance** sensor (XSHUT pin `7`, label "Raw Sensor")
 2. Add a **Threshold** node (threshold 30, label "Detected")
 3. Connect Raw Sensor → Detected (weight 1.0)
-4. On this connection, switch to **Non-linear transfer** and set a dead-zone curve: points at (-100, 0), (15, 0), (100, 100)
+4. On this connection, set the **Transfer Function** to **Non-linear (curve)** and draw a dead-zone curve: points at (-100, 0), (15, 0), (100, 100)
 
 Test in trace mode: slide the sensor from 0 to 50. The threshold should output 0 for readings below 30, and 100 above — but the dead zone also ensures that noisy low readings (0–15) are zeroed out before they even reach the threshold.
 
@@ -36,7 +36,7 @@ This is the kind of preprocessing you'd want on every sensor. Without it, electr
 ## Step 2: Group into a compound
 
 1. **Shift+click** both the sensor and threshold nodes to select them
-2. Click **Group 2** in the toolbar
+2. Click **Group** in the toolbar
 
 BraitenBot creates a compound type and replaces the two nodes with a single compound instance. The outgoing connection from the threshold becomes an **output port** on the compound.
 
@@ -70,7 +70,7 @@ Because changes to the body affect all instances, changing the pin in one instan
 A cleaner approach keeps the physical sensor outside the compound and groups only the signal processing. Since grouping requires at least two nodes, use a Summation as a pass-through:
 
 1. Build: **Summation** (pass-through, weight 1.0) → **Threshold** (threshold 30, with dead-zone curve on the connection)
-2. Select both nodes and click **Group 2**. The compound now has one **input port** (the summation's input) and one **output port** (the threshold's output).
+2. Select both nodes and click **Group**. The compound now has one **input port** (the summation's input) and one **output port** (the threshold's output).
 3. Drag out four instances.
 4. Wire each external sensor to a different compound instance's input port.
 

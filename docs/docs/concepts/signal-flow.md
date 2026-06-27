@@ -92,6 +92,6 @@ In each loop iteration:
 2. All other nodes compute normally using that value
 3. At the end of the loop, the delay node captures its current input for future use
 
-This two-phase execution ensures stable feedback behavior. The delay time is configurable (1–10,000 ms) and determines how many past iterations of buffered values to keep.
+This two-phase execution ensures stable feedback behavior. The delay time is configurable (1–10,000 ms); BraitenBot converts it to a number of loop iterations (delay time ÷ loop period) and buffers that many past values.
 
 Without a delay node in a cycle, BraitenBot reports a validation error and won't generate code.

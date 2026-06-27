@@ -9,8 +9,6 @@ title: Installation
 
 The app includes everything you need: the visual editor, signal simulation, and built-in Arduino upload.
 
-### Download
-
 The easiest way to get the latest build is the [**Install page**](/install),
 which links directly to the newest downloads for each platform. You can also
 browse every release on the [GitHub releases page](https://github.com/Vassar-Cognitive-Science/braitenbot-gui/releases).
@@ -34,7 +32,7 @@ browse every release on the [GitHub releases page](https://github.com/Vassar-Cog
 
 ### Windows
 
-Run the installer `.exe` and follow the prompts. BraitenBot will be added to your Start menu.
+Run the `-setup.exe` installer and follow the prompts. BraitenBot will be added to your Start menu. (The `.msi` is an alternative for managed/silent installs.)
 
 ### Linux
 

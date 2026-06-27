@@ -25,7 +25,7 @@ Reads an analog pin (0–1023) and scales the value to **0–100**.
 
 **Configuration:**
 - **Arduino Port** — a free-text field for the analog pin label (e.g., `A0`)
-- **Invert signal** — checkbox that outputs `100 − value`, so a brighter (or closer) reading produces a higher signal. Useful when a photoresistor divider reads lower as light increases.
+- **Invert signal** — checkbox that outputs `100 − value`, so a brighter reading produces a higher signal. Useful with a photocell wired as a voltage divider, where the raw reading *drops* as light increases — inverting flips it so brighter means higher.
 
 **Generated code:**
 ```cpp
@@ -57,10 +57,10 @@ Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 **Generated code:**
 ```cpp
 // Without pullup
-float sig_sensor = digitalRead(PIN) == HIGH ? 100.0 : 0.0;
+float sig_sensor = digitalRead(PIN) * 100.0;
 
 // With pullup (inverted)
-float sig_sensor = digitalRead(PIN) == LOW ? 100.0 : 0.0;
+float sig_sensor = (1 - digitalRead(PIN)) * 100.0;
 ```
 
 ---
@@ -108,7 +108,7 @@ Reads a VL53L4CD time-of-flight distance sensor over I2C and outputs a single si
 - **Max Distance (mm)** — the distance that maps to full-scale signal (default: 500). Objects at or beyond this read 0.
 - **Invert (far reads higher)** — checkbox that flips the mapping so a farther object produces a higher signal.
 
-**Multiple sensors and the address trick:** every VL53L4CD powers up at the same default I2C address (0x52 / 7-bit 0x29), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
+**Multiple sensors and the address trick:** every VL53L4CD powers up at the same default I2C address (written `0x52`, or `0x29` in 7-bit notation — the same address, two ways of writing it), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
 
 **Generated code (per loop):**
 ```cpp
@@ -295,7 +295,7 @@ Controls a continuous rotation servo. Maps the input signal (-100 to 100) to a p
 **Configuration:**
 - **Servo Pin** — the digital pin the servo signal wire is connected to
 
-**Wheel motors** (Left Motor, Right Motor) are special instances of this type:
+**Wheels** (Left Wheel, Right Wheel) are special instances of this type:
 - The left wheel maps directly: `1500 + input × 5` µs
 - The right wheel is inverted: `1500 - input × 5` µs (motors face opposite directions)
 

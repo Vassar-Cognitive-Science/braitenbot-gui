@@ -15,7 +15,8 @@ A typical BraitenBot build consists of:
 - An **Arduino-compatible microcontroller** (the brain)
 - Two **continuous-rotation servos**, one per wheel, driven directly from the
   Arduino — no separate motor driver needed
-- A set of **sensors** — light, distance, or line sensors — mounted at the front
+- A set of **sensors** — light, distance, color, and bump sensors — mounted at
+  the front
 - A **chassis** that holds it all together, plus a battery pack
 
 This section will grow into a complete do-it-yourself guide so you can build a

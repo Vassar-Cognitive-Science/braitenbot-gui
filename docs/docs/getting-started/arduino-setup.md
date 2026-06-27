@@ -35,7 +35,7 @@ This is a one-time process. On subsequent launches, setup completes silently.
 1. Plug your Arduino into a USB port
 2. In the toolbar, look for the **Device** section (right side)
 3. The board selector dropdown lists detected Arduinos with their port and name
-4. Select your board — BraitenBot auto-detects the board type
+4. Select your board from the dropdown — BraitenBot auto-detects the board type (Uno, Nano, R4, and so on), so you don't have to choose it manually
 5. If your board doesn't appear, click **Refresh** to re-scan serial ports
 
 ### Status indicator
@@ -123,6 +123,6 @@ Then restart the app.
 
 ### Upload fails
 
-- Check that no other program (Arduino IDE, serial monitor) has the port open
+- Check that no other program (Arduino IDE, a serial monitor) has the port open — two programs can't use the same serial port at once
 - Try clicking **Refresh** and re-selecting the board
 - Check the error output — compilation errors are usually caused by invalid pin assignments in your diagram

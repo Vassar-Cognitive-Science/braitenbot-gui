@@ -72,20 +72,34 @@ Servo control typically uses PWM (pulse-width modulation) pins. On most Arduinos
 
 Any sensor that outputs a 0–5V analog signal can be used with an Analog Sensor node:
 
-- **Photoresistor** (LDR) — light intensity, typically with a voltage divider
-- **IR distance sensor** (Sharp GP2Y0A21) — distance as analog voltage
+- **Photocell / light-sensor board** (LDR) — light intensity. This is the kit's
+  analog sensor; the board includes its own voltage divider.
+
+Other analog sensors the node can read (not part of the kit):
+
 - **Potentiometer** — manual input / calibration
 - **Force sensitive resistor** (FSR) — pressure sensing
 - **Thermistor** — temperature (with voltage divider)
+- **IR distance sensor** (Sharp GP2Y0A21) — distance as analog voltage
+
+:::note
+
+For distance, the kit uses the [ToF Distance](#i2c-sensors) sensor (an I2C
+sensor), not an analog IR sensor.
+
+:::
 
 ### Digital sensors
 
 Any sensor with a HIGH/LOW output works with a Digital Sensor node:
 
-- **IR proximity sensor** (e.g., TCRT5000 module) — obstacle detection
-- **Line following sensor** — black/white line detection
-- **Bumper / limit switch** — mechanical contact (use INPUT_PULLUP)
+- **Bump / lever switch** — mechanical contact (use INPUT_PULLUP). This is the
+  kit's digital sensor.
+
+Other digital sensors the node can read (not part of the kit):
+
 - **PIR motion sensor** — motion detection
+- **IR proximity sensor** (e.g., TCRT5000 module) — obstacle detection
 - **Ultrasonic sensor trigger** — if wired as digital threshold
 
 ### I2C sensors

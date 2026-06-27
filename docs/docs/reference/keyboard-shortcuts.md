@@ -31,7 +31,7 @@ title: Keyboard Shortcuts
 
 All toolbar actions are button-based — there are no keyboard shortcuts for toolbar functions. Key actions:
 
-- **Group N** — combine selected nodes into a compound
+- **Group** — combine selected nodes into a compound
 - **Ungroup** — expand selected compound into body nodes
 - **Trace Signal Flow** — toggle simulation mode
 - **Generate** — validate and generate Arduino code

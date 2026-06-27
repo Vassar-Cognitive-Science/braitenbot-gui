@@ -31,7 +31,7 @@ Connections are the weighted links between nodes. Each connection carries a sign
 The editor prevents invalid connections:
 
 - **No self-loops** — a node can't connect to itself
-- **No duplicates** — only one connection allowed for a given (source node, source port, target node) combination; the target port is not part of the uniqueness check
+- **No duplicates** — only one connection is allowed between the same source node + source port and the same target node. The *target* port isn't part of this check, so you can't draw two connections from one source port into the same target even if they'd land on different input ports
 - **Input limits** — nodes with `maxInputs: 1` (Threshold, Delay, servos, digital output, display) reject a second incoming connection
 - **Type compatibility** — output-only nodes can't be connection sources (they have no output signal)
 
@@ -55,7 +55,7 @@ The **weight** is a value from -1 to +1, set via slider or numeric input in the 
 
 ### Non-linear (custom curve)
 
-A custom curve defined by control points in the range (-100, -100) to (100, 100). The output is interpolated in straight-line segments between consecutive points.
+A custom curve defined by control points spanning −100 to 100 on both the input (x) and output (y) axes. The output is interpolated in straight-line segments between consecutive points.
 
 Control points:
 

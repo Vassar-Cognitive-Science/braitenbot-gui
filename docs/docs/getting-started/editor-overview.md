@@ -77,7 +77,7 @@ The robot appears as a circle in the center of the canvas with two wheels (round
 The toolbar is divided into functional groups:
 
 ### Group
-- **Group N** — select 2+ nodes, then click to combine them into a compound node
+- **Group** — select 2 or more nodes, then click to combine them into a compound node
 - **Ungroup** — select a compound instance to expand it back into its constituent nodes
 
 ### Simulate
@@ -114,7 +114,7 @@ Depending on the node type, you'll see:
 
 ## Oscilloscope (bottom, trace mode only)
 
-When signal tracing is active, a collapsible oscilloscope panel appears at the bottom of the canvas. It plots a rolling 5-second history of signal values at each node over time, so you can see how signals change. Controls include pause/resume and clear history.
+When signal tracing is active (toggled with **Trace Signal Flow**), a collapsible oscilloscope panel appears at the bottom of the canvas. It plots a rolling 5-second history of signal values at each node over time, so you can see how signals change. Controls include pause/resume and clear history.
 
 ## Next steps
 

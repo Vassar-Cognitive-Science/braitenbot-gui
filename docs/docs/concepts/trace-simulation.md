@@ -14,7 +14,7 @@ Click **Trace Signal Flow** in the toolbar. The canvas switches to simulation mo
 - Every node displays its current output value
 - Every connection shows the signal flowing through it (after weight/transfer)
 - Connection lines change color and thickness based on signal magnitude
-- Disconnected nodes (consumers with no inputs) are highlighted
+- Disconnected nodes (motors or compute nodes that expect an input but have none) are highlighted
 - Sensor sliders appear so you can inject test values
 
 Click the button again to exit trace mode.
@@ -60,7 +60,7 @@ The oscilloscope samples at the configured loop period (matching what the hardwa
 
 ## How simulation works
 
-The trace simulation mirrors exactly what the hardware does on each loop iteration:
+On each loop iteration, the trace simulation runs the same four steps the hardware does:
 
 1. **Flatten** compound instances into their body nodes
 2. **Topologically sort** the graph (excluding delay inputs)

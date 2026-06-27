@@ -109,6 +109,8 @@ The remarkable thing about Braitenberg vehicles is that they demonstrate how the
 | Cross-wired | Negative | Approaches gently |
 | Same-side | Negative | Slows near stimulus, orients away |
 
+We walked through the first three above; the fourth — same-side wiring with negative weights — is a good one to reason through yourself, or to try in [trace mode](./trace-simulation).
+
 Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior — and it's the principle that BraitenBot is built around.
 
 ## Beyond Braitenberg
@@ -117,7 +119,7 @@ Braitenberg's original vehicles used only direct sensor-to-motor wiring. Braiten
 
 - **Compute nodes** — threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
 - **Feedback loops** — delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [latch tutorial](../tutorials/latches-with-delay))
-- **Transfer functions** — non-linear curves shape the sensor-to-motor mapping, solving real-world problems like noise filtering and speed limiting
+- **Transfer functions** — curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
 - **Compound nodes** — reusable sub-circuits that keep complex diagrams manageable
 - **Multiple sensor types** — analog, digital, and I2C sensors for interacting with a richer physical world
 

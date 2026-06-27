@@ -101,7 +101,7 @@ You may notice the summation value keeps climbing: 100, 200, 300... Each iterati
 Fix it with a **clamping transfer curve** on the feedback connection:
 
 1. Click the Delay → Summation connection
-2. Switch to Non-linear transfer mode
+2. Set the **Transfer Function** to **Non-linear (curve)**
 3. Set a step curve: points at (-100, 0), (0, 0), (1, 100), (100, 100)
 
 Now the feedback is always exactly 0 or 100 — any positive value clamps to 100, any negative to 0. The summation stabilizes at 100 when latched and 0 when cleared.
