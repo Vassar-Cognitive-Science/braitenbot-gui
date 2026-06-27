@@ -56,6 +56,7 @@ const sidebars: SidebarsConfig = {
     'hardware/bill-of-materials',
     'hardware/3d-models',
     'hardware/assembly',
+    'hardware/testing',
   ],
 };
 
