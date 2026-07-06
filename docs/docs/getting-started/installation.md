@@ -26,9 +26,12 @@ browse every release on the [GitHub releases page](https://github.com/Vassar-Cog
 
 ### macOS
 
-1. Open the `.dmg` file
-2. Drag BraitenBot to your Applications folder
-3. On first launch, right-click the app and select **Open** (macOS Gatekeeper requires this for unsigned apps)
+1. Open the `.dmg` file and drag **BraitenBot GUI** into Applications.
+2. If you see *"BraitenBot GUI is damaged"* or *"cannot be opened"*, open Terminal and run:
+   ```
+   xattr -cr "/Applications/BraitenBot GUI.app"
+   ```
+3. Alternatively, go to **System Settings → Privacy & Security** and click **Open Anyway** after the first launch attempt.
 
 ### Windows
 

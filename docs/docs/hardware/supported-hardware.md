@@ -147,7 +147,7 @@ BraitenBot automatically installs the following libraries during [Arduino setup]
 
 | Library | Version | Used by |
 |---------|---------|---------|
-| Servo | (bundled with core) | All servo and motor nodes |
+| Servo | latest | All servo and motor nodes |
 | TM1637 | latest | TM1637 Display nodes |
 | STM32duino VL53L4CD | latest | ToF Distance nodes |
 | Wire | (bundled with core) | I2C sensors |

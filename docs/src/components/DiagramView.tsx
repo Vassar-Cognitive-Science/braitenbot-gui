@@ -7,6 +7,7 @@ type NodeTypeId =
   | 'sensor-analog'
   | 'sensor-digital'
   | 'sensor-color'
+  | 'sensor-tof'
   | 'compute-threshold'
   | 'compute-delay'
   | 'compute-summation'
@@ -35,6 +36,7 @@ const NODE_TYPE_DEFS: Record<NodeTypeId, NodeTypeDef> = {
   'sensor-analog':     { kind: 'sensor',   displayName: 'Analog Sensor',    metaLabel: 'analog',           canOutput: true,  canInput: false },
   'sensor-digital':    { kind: 'sensor',   displayName: 'Digital Sensor',   metaLabel: 'digital',          canOutput: true,  canInput: false },
   'sensor-color':      { kind: 'sensor',   displayName: 'Color Sensor',     metaLabel: 'TCS34725',         canOutput: true,  canInput: false, outputPorts: ['clear', 'red', 'green', 'blue'] },
+  'sensor-tof':        { kind: 'sensor',   displayName: 'ToF Distance',     metaLabel: 'VL53L4CD',         canOutput: true,  canInput: false },
   'compute-threshold': { kind: 'compute',  displayName: 'Threshold',        metaLabel: 'threshold',        canOutput: true,  canInput: true },
   'compute-delay':     { kind: 'compute',  displayName: 'Delay',            metaLabel: 'delay',            canOutput: true,  canInput: true },
   'compute-summation': { kind: 'compute',  displayName: 'Summation',        metaLabel: 'sum',              canOutput: true,  canInput: true },
@@ -253,8 +255,19 @@ export default function DiagramView({
 
           {/* Nodes */}
           {nodes.map((node) => {
-            const def = NODE_TYPE_DEFS[node.type];
-            if (!def) return null;
+            const def = NODE_TYPE_DEFS[node.type] as NodeTypeDef | undefined;
+            if (!def) {
+              return (
+                <div
+                  key={node.id}
+                  className="dv-node dv-node-unknown"
+                  style={{ left: node.x + offsetX, top: node.y + offsetY }}
+                >
+                  <div className="dv-node-label">{node.label || node.type}</div>
+                  <div className="dv-node-meta">{node.type}</div>
+                </div>
+              );
+            }
             const kindClass = def.kind === 'constant' ? 'dv-node-constant' : `dv-node-${def.kind}`;
             const meta = node.meta ?? def.metaLabel;
             return (

@@ -112,21 +112,46 @@ An indefinite latch isn't useful for bump-and-reverse — you want the robot to 
 
 ### Approach 1: Decay feedback
 
-Change the feedback weight from 1.0 to **0.95**. Each iteration, the feedback is 95% of the previous value:
+Instead of clamping the feedback, make it *lossy*. Set the feedback transfer back to **Linear** and change its weight from 1.0 to **0.98**. (A non-linear clamp curve ignores the weight, so decay needs the plain linear transfer.) Each iteration the feedback is 98% of the previous value, so once the bump ends the sum decays geometrically:
 
-100 → 95 → 90.25 → 85.7 → 81.5 → ... → eventually reaches 0
+100 → 98 → 96 → 94.1 → ... → eventually reaches 0
 
-Add a **Threshold** node (threshold = 10) after the summation to convert the decaying signal into a clean on/off. With a 20ms loop period, the signal drops below 10 after about 45 iterations — roughly 900ms. To hold for longer, use a smaller decay: a weight of 0.97 gives about 1.5 seconds, 0.98 gives about 2.3 seconds. Adjust the weight and threshold to control the duration.
+Add a **Threshold** node (threshold = 10) after the summation to convert the decaying signal into a clean on/off: the latch reads as "on" until the sum slips below 10. With a 20 ms loop period and a 0.98 weight, that takes about 2.3 seconds. The feedback weight is your dial for the hold time — the next section works out exactly how.
 
-### Approach 2: Longer delay
+### Approach 2: Why not just use a longer delay?
 
-Set the delay time to **2000 ms** and use the clamping feedback from above. The delay buffer holds 100 iterations of history (2000ms / 20ms). When the bumper triggers, the latch holds for exactly 2 seconds (the time it takes the initial trigger to propagate through the buffer and disappear), then the feedback goes to zero and the latch releases.
+Decay works, but it's a *fading* memory — strongest right after the bump, then trailing off. If what you want is a crisp "hold for a fixed time, then release," a long delay line looks like the obvious tool. The delay already carries the past intact for a fixed interval; why not just make that interval the hold time?
 
-This is more precise than decay feedback and easier to reason about: delay time = hold time.
+The idea: set the delay to **2000 ms** (100 iterations at a 20 ms loop) and keep the clamping feedback from the runaway fix. Trigger the latch and — the reasoning goes — the pulse rides the buffer for 2 seconds and then falls off the end.
+
+It's worth building, because it fails in an instructive way. Trace it tick by tick:
+
+- **Ticks 0–9** (the ~200 ms bump): the bumper feeds 100 into the summation. The delay is still reading its *zero-filled* buffer from before the bump, so the sum is just 100. Those 100s get written into the buffer.
+- **Ticks 10–99** (the next ~1.8 s): the bump is over, and the delay is *still* reading pre-bump zeros — the 100s we just wrote are 2 seconds from re-emerging. The sum sits at **0**. The latch is silent. There is no hold.
+- **Tick 100**: the first stored 100 finally reaches the delay's output. The sum jumps back to 100 — and the clamped feedback writes that 100 *back into the buffer*.
+- **Ticks 100–109**: a ~200 ms burst, an exact replay of the original bump.
+- **Ticks 110–199**: silence again for ~1.8 s. Then another burst at tick 200, another at 400, 600, …
+
+Instead of a 2-second hold you get a ~200 ms *echo* of the bump every 2 seconds, repeating forever. The feedback turned the delay line into a tape loop that never stops playing. On the robot this would look like a twitch into reverse for a fraction of a second every couple of seconds — nothing like "reverse for 2 seconds and resume."
+
+The lesson is worth holding onto: a delay line is a *transport* delay, not a hold. It doesn't keep a signal present; it moves the signal forward in time, unchanged. To keep something present you need feedback that sustains it *right now* — which is exactly what the decaying loop in Approach 1 does. So the decay latch isn't a poor substitute for a "real" timer; for a self-sustaining hold it *is* the right tool. And it comes with a dial. The sum starts near 100 and decays by a factor of `w` each tick, crossing the threshold `T` after:
+
+**hold ≈ loopPeriod × ln(T / 100) / ln(w)**
+
+At a 20 ms loop and threshold 10, that gives:
+
+| Feedback weight `w` | Approx. hold |
+|---|---|
+| 0.95 | 0.9 s |
+| 0.97 | 1.5 s |
+| 0.98 | 2.3 s |
+| 0.99 | 4.6 s |
+
+For bump-and-reverse we want about 2 seconds, so **w = 0.98**. (A longer or firmer bump charges the sum past 100, which stretches the hold a little; the numbers above assume a brief trigger that tops out near 100.)
 
 :::tip[Two ways to forget]
 
-These two timeouts aren't just implementation details — they're two different theories of forgetting. **Decay** is a *forgetting curve*: the trace fades smoothly, vivid right after the event and gradually slipping away, the way a striking moment dims over seconds. **The delay line** is an *echo*: the event is held perfectly intact for a fixed interval and then drops out all at once, like a tape loop reaching its end. Nervous systems appear to use both — graceful decay for some things, precise timing for others. Which one you reach for depends on whether the robot needs to know *how long ago* something happened or *exactly when* it should stop mattering.
+Decay and delay embody two different theories of forgetting. **Decay** is a *forgetting curve*: the trace fades smoothly, vivid right after the event and gradually slipping away — the mechanism behind the latch you just tuned. **A delay line** is something else: a *reminder*. Left open, with no feedback, it holds an event perfectly intact and replays it once, exactly one delay-time later, then lets it go — like a note-to-self that surfaces at a set moment. Wrap that same delay in a feedback loop, though, and the reminder never stops arriving: it reverberates, as you saw above. Nervous systems seem to use both fading traces and precisely-timed reverberation — but which one you get depends on the topology you wire, not on the delay alone.
 :::
 
 ## Building the complete bump-and-reverse
@@ -134,14 +159,14 @@ These two timeouts aren't just implementation details — they're two different 
 Now combine the latch with the obstacle avoidance circuit:
 
 1. **Cruise circuit**: Constant (50) → Left Summation and Right Summation → Motors (same as obstacle avoidance)
-2. **Latch circuit**: Bumper → Summation → Delay → feedback, with a 2000ms delay and clamping feedback
+2. **Latch circuit**: Bumper → Summation → Delay (20 ms) → feedback (linear, weight **0.98**) — the decay latch from Approach 1, tuned for a ~2.3 s hold
 3. **Inhibition**: Wire the latch's Summation output through a Threshold (threshold = 10) → both motor summations with weight **-1.0**
 
 The physical behavior plays out like this:
 
 - **Normal driving**: The latch is off. The constant drives both motors at 50. The robot cruises forward.
-- **Bump happens**: The bumper clicks for 50ms. The latch captures it and holds for 2 seconds. The threshold fires, sending -100 to both motor summations. Motors get 50 + (-100) = -50 — the robot reverses.
-- **2 seconds later**: The latch times out, the threshold turns off, the inhibition stops. Motors return to 50 and the robot drives forward again.
+- **Bump happens**: The bumper clicks for 50 ms. The latch charges to ~100 and starts decaying by ×0.98 each tick. While the sum stays above the threshold of 10, the threshold fires, sending -100 to both motor summations. Motors get 50 + (-100) = -50 — the robot reverses.
+- **About 2.3 seconds later**: The decaying sum finally slips below 10, the threshold turns off, the inhibition stops. Motors return to 50 and the robot drives forward again.
 
 From the outside, the robot bonks into a wall, backs up for two seconds, and then resumes driving. The brief bumper contact got amplified into a sustained behavioral response — exactly what memory is for.
 

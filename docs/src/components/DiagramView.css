@@ -171,6 +171,17 @@
   letter-spacing: 0.04em;
 }
 
+.dv-node-unknown {
+  border: 1px dashed #c47a50;
+  opacity: 0.75;
+}
+.dv-node-unknown .dv-node-label {
+  color: #c47a50;
+}
+.dv-node-unknown .dv-node-meta {
+  font-style: italic;
+}
+
 /* ── Handles ── */
 
 .dv-handle {

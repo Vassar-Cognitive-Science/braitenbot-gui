@@ -14,6 +14,7 @@ export interface DiagramPersistenceSetters {
   setConnections: (connections: DiagramConnection[]) => void;
   setLoopPeriodMs: (ms: number) => void;
   setCompoundTypes: (compoundTypes: CompoundTypeDefinition[]) => void;
+  setEditingPath: (path: string[]) => void;
 }
 
 export interface DiagramPersistenceOptions {
@@ -28,6 +29,10 @@ function applyFile(file: DiagramState, setters: DiagramPersistenceSetters) {
   setters.setConnections(file.connections);
   setters.setLoopPeriodMs(file.loopPeriodMs);
   setters.setCompoundTypes(file.compoundTypes);
+  // Leave any open compound body — its id may not exist in the loaded file,
+  // which would strand every routed write on a missing compound (a frozen
+  // editor). Loading is a full replacement, so return to the top level.
+  setters.setEditingPath([]);
 }
 
 export function useDiagramPersistence({
@@ -37,15 +42,19 @@ export function useDiagramPersistence({
   resetToDefault,
 }: DiagramPersistenceOptions) {
   const settersRef = useRef(setters);
-  settersRef.current = setters;
+  // eslint-disable-next-line react-hooks/refs
+  settersRef.current = setters;   // intentional render-time ref sync — avoids restarting effects on every prop change
 
   const stateRef = useRef(state);
+  // eslint-disable-next-line react-hooks/refs
   stateRef.current = state;
 
   const isPristineRef = useRef(isPristine);
+  // eslint-disable-next-line react-hooks/refs
   isPristineRef.current = isPristine;
 
   const resetRef = useRef(resetToDefault);
+  // eslint-disable-next-line react-hooks/refs
   resetRef.current = resetToDefault;
 
   useLayoutEffect(() => {
@@ -57,8 +66,7 @@ export function useDiagramPersistence({
     } catch (err) {
       console.warn('[diagram] failed to restore from localStorage:', err);
     }
-    // Intentionally run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally run once on mount — refs are read inside, no reactive deps needed.
   }, []);
 
   useEffect(() => {

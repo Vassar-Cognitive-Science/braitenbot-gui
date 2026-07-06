@@ -27,8 +27,8 @@ import DiagramView from '@site/src/components/DiagramView';
   height={400}
   robot={{ x: 300, y: 320, radius: 70 }}
   nodes={[
-    { id: 'left-sensor', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 7' },
-    { id: 'right-sensor', type: 'sensor-tof', label: 'Right Obstacle', x: 400, y: 20, meta: 'XSHUT 8' },
+    { id: 'left-sensor', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 8' },
+    { id: 'right-sensor', type: 'sensor-tof', label: 'Right Obstacle', x: 400, y: 20, meta: 'XSHUT 12' },
     { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 120, meta: '> 60' },
     { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 120, meta: '> 60' },
     { id: 'constant', type: 'constant', label: 'Forward (50)', x: 210, y: 80, meta: '50' },
@@ -77,7 +77,7 @@ Test in trace mode: both motors should show 50. The robot drives straight forwar
 ## Step 2: Add obstacle sensors
 
 1. Drag two **ToF Distance** nodes onto the canvas, labeled "Left Obstacle" and "Right Obstacle"
-2. Give each its own **XSHUT pin** — for example `7` and `8`. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance.
+2. Give each its own **XSHUT pin** — for example `8` and `12`. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance.
 
 ## Step 3: Add threshold nodes
 

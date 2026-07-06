@@ -37,7 +37,7 @@ The summation nodes are where behaviors combine. Right now only cruise feeds int
 
 The avoid layer watches for obstacles and steers away. It uses the cross-wired threshold inhibition pattern from the earlier tutorial.
 
-1. Add two **ToF Distance** sensors: "Left Distance" (XSHUT 7), "Right Distance" (XSHUT 8)
+1. Add two **ToF Distance** sensors: "Left Distance" (XSHUT 8), "Right Distance" (XSHUT 12)
 2. Add two **Threshold** nodes: "Left Detect" (threshold 60), "Right Detect" (threshold 60)
 3. Wire each sensor → its threshold (weight 1.0)
 4. Cross-wire with negative weights: Left Detect → **Right** Mix (weight **-1.0**), Right Detect → **Left** Mix (weight **-1.0**)
@@ -47,8 +47,8 @@ The avoid layer watches for obstacles and steers away. It uses the cross-wired t
   height={340}
   robot={{ x: 275, y: 270, radius: 65 }}
   nodes={[
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT 7' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT 8' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT 8' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT 12' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 10, meta: '50' },
@@ -88,28 +88,28 @@ This is the essence of subsumption. Each layer runs independently and continuous
 
 The two-layer system handles most situations, but sometimes the distance sensors miss an obstacle — a thin chair leg, or a surface angled so the laser beam scatters away instead of bouncing back — and the robot drives right into it. That's where the bumper comes in.
 
-The escape behavior is: **when the bumper is pressed, reverse both motors for 2 seconds, overriding everything else.** This is the highest-priority layer. It must suppress both cruise and avoid.
+The escape behavior is: **when the bumper is pressed, reverse both motors for about 2 seconds, overriding everything else.** This is the highest-priority layer. It must suppress both cruise and avoid.
 
 ### Building the escape latch
 
-We need the latch circuit from the [latch tutorial](./latches-with-delay): a bumper press is captured and held for 2 seconds.
+We need the decay latch from the [latch tutorial](./latches-with-delay): a bumper press charges a self-sustaining loop that decays over a couple of seconds.
 
 1. Add a **Digital Sensor**: "Bumper" (pin 2, INPUT_PULLUP)
 2. Add a **Summation** node: "Escape Latch"
-3. Add a **Delay** node: set to **2000 ms**
+3. Add a **Delay** node: set to **20 ms** (one loop period)
 4. Wire: Bumper → Escape Latch (weight 1.0)
 5. Wire: Escape Latch → Delay (weight 1.0)
-6. Wire: Delay → Escape Latch (weight 1.0) — on this connection, set a **clamping transfer curve**: points (-100, 0), (0, 0), (1, 100), (100, 100). This keeps the feedback at exactly 0 or 100, preventing runaway.
+6. Wire: Delay → Escape Latch — set the feedback to a **linear transfer with weight 0.98**. Each 20 ms tick the fed-back signal is 98% of the last, so a bump charges the sum to ~100 and it decays away geometrically. (Don't use a clamping curve here — a non-linear transfer ignores the weight, which would turn the loop into an *indefinite* latch that never releases.)
 7. Add a **Threshold** node: "Escape Active" (threshold 10)
 8. Wire: Escape Latch → Escape Active
 
-Now when the bumper is pressed, Escape Active outputs 100 for approximately 2 seconds, then returns to 0.
+When the bumper is pressed, the Escape Latch charges to ~100 and decays by ×0.98 each tick. It stays above the threshold of 10 for about 2.3 seconds — `loopPeriod × ln(10 / 100) / ln(0.98) ≈ 114 ticks × 20 ms` — so Escape Active outputs a clean 100 for ~2.3 s and then snaps back to 0 the moment the decaying sum drops below 10. Want a different hold time? Turn the feedback weight: 0.95 gives ~0.9 s, 0.99 gives ~4.6 s.
 
 ### Wiring escape into the mix
 
 Escape needs to reverse both motors. Wire Escape Active → Left Mix (weight **-1.0**) and Escape Active → Right Mix (weight **-1.0**).
 
-Connection weights are capped at ±1, so the strongest pull a single connection can apply is -100 (a 0–100 signal times weight -1.0). When escape fires with no obstacle present, each Mix computes 50 (cruise) + (-100) (escape) = **-50** — both motors reverse together. Escape doesn't need a larger weight to take priority. Unlike avoidance, which inhibits only the *opposite* motor (producing a turn), escape inhibits *both* motors symmetrically (producing a straight reverse), and the latch holds it for a full 2 seconds. Escape's priority comes from its topology and timing, not from an out-of-range weight.
+Connection weights are capped at ±1, so the strongest pull a single connection can apply is -100 (a 0–100 signal times weight -1.0). When escape fires with no obstacle present, each Mix computes 50 (cruise) + (-100) (escape) = **-50** — both motors reverse together. Escape doesn't need a larger weight to take priority. Unlike avoidance, which inhibits only the *opposite* motor (producing a turn), escape inhibits *both* motors symmetrically (producing a straight reverse), and the latch holds it for about 2 seconds. Escape's priority comes from its topology and timing, not from an out-of-range weight.
 
 If avoidance is also active during escape, the motor on the obstacle side sees +50 (cruise) + (-100) (avoid) + (-100) (escape) = -150, which clamps to -100. The two inhibitory layers reinforce each other rather than fight — the robot backs away from the wall.
 
@@ -125,10 +125,10 @@ It's tempting to give escape a weight like -1.5 to "overpower" both lower layers
   nodes={[
     { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, meta: 'pin 2' },
     { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 100 },
-    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '2000 ms' },
+    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '20 ms' },
     { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 310, meta: '> 10' },
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT 7' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT 8' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT 8' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT 12' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 190, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 300, y: 190, meta: '50' },
@@ -140,7 +140,7 @@ It's tempting to give escape a weight like -1.5 to "overpower" both lower layers
   connections={[
     { from: 'bumper', to: 'escape-latch', weight: 1.0 },
     { from: 'escape-latch', to: 'delay', weight: 1.0 },
-    { from: 'delay', to: 'escape-latch', weight: 1.0, label: 'feedback' },
+    { from: 'delay', to: 'escape-latch', weight: 0.98, label: 'feedback ×0.98' },
     { from: 'escape-latch', to: 'escape-active', weight: 1.0 },
     { from: 'left-ir', to: 'left-detect', weight: 1.0 },
     { from: 'right-ir', to: 'right-detect', weight: 1.0 },
@@ -153,7 +153,7 @@ It's tempting to give escape a weight like -1.5 to "overpower" both lower layers
     { from: 'left-mix', to: 'left-motor', weight: 1.0 },
     { from: 'right-mix', to: 'right-motor', weight: 1.0 },
   ]}
-  caption="Three-layer subsumption: cruise + avoid + escape. Escape inhibits both motors (weight -1.0) to reverse the robot; the latch holds it for 2 seconds."
+  caption="Three-layer subsumption: cruise + avoid + escape. Escape inhibits both motors (weight -1.0) to reverse the robot; the decay latch (feedback ×0.98) holds it for ~2.3 seconds."
 />
 
 ## Testing the complete system
@@ -185,7 +185,7 @@ Left motor stays at 50, right motor at -50. The robot pivots right. Avoidance ha
 
 ### Scenario 3: Bumper hit (escape suppresses everything)
 
-Pulse the bumper. Escape Active fires at 100 for 2 seconds. No obstacles present.
+Pulse the bumper. Escape Active fires at 100 while the latch decays — about 2.3 seconds. No obstacles present.
 
 | Input to Left Mix | Value |
 |---|---|
@@ -193,7 +193,7 @@ Pulse the bumper. Escape Active fires at 100 for 2 seconds. No obstacles present
 | Escape Active | -100 |
 | **Total** | **-50** |
 
-Both motors at -50. The robot reverses straight back (both wheels together) for 2 seconds, then Escape Active turns off and motors return to 50.
+Both motors at -50. The robot reverses straight back (both wheels together). The Escape Latch's sum decays by ×0.98 each tick; once it slips below the threshold of 10 — about 2.3 seconds after the bump — Escape Active snaps to 0 and the motors return to 50. (A longer or firmer press charges the latch higher, so it holds a little longer.)
 
 ### Scenario 4: Bumper hit *while* avoiding an obstacle
 
@@ -216,7 +216,7 @@ Right motor at -100, left motor at -50 — both wheels reverse, the right one ha
 
 ### Scenario 5: Escape ends, obstacle still present
 
-After 2 seconds, Escape Active drops to 0. Left Distance still reads 80.
+Once the Escape Latch decays below the threshold — about 2.3 seconds after the bump — Escape Active drops to 0. Left Distance still reads 80.
 
 | Input to Right Mix | Value |
 |---|---|
@@ -233,7 +233,7 @@ The key insight is that suppression doesn't require any explicit "if-then" logic
 
 - Cruise contributes +50 (moderate forward)
 - Avoid contributes -100 to one motor — strong enough to override cruise and pivot the robot
-- Escape contributes -100 to *both* motors — reversing the robot — and the latch holds it for 2 seconds
+- Escape contributes -100 to *both* motors — reversing the robot — and the decay latch holds it for about 2 seconds (set by the feedback weight)
 
 An inhibitory -100 connection always overrides the +50 cruise, so any active layer takes effective control. Escape sits at the top not because of a bigger weight (weights cap at ±1) but because it inhibits both wheels at once and sustains itself through the latch. The summation acts as the arbitration mechanism: whichever layers are active sum together, and when the strong inhibitory signals disappear, cruise is automatically revealed.
 
@@ -252,7 +252,7 @@ Put the robot in a room with furniture and watch:
 
 1. It drives forward (cruise)
 2. It approaches a table leg — the distance sensors detect it and the robot veers away (avoid overrides cruise)
-3. It clips a corner the sensors missed — bumper clicks — the robot reverses for 2 full seconds (escape overrides everything)
+3. It clips a corner the sensors missed — bumper clicks — the robot reverses for about 2 seconds (escape overrides everything)
 4. After reversing, it resumes driving forward. If the table leg is still nearby, avoidance kicks in again immediately
 
 The robot navigates surprisingly well for something with no planning, no map, and no centralized control. Each behavior is a simple sensor-to-motor circuit. The competence comes from the layering.

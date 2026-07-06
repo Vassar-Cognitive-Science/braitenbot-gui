@@ -130,7 +130,7 @@ Each loop:
 2. Every other node computes normally using that value.
 3. At the end of the loop, the delay node captures its current input for later.
 
-The delay time is configurable (1–10,000 ms); BraitenBot converts it to a number
+The delay time is configurable (0–10,000 ms); BraitenBot converts it to a number
 of loop iterations (delay time ÷ loop period) and buffers that many past values.
 A cycle **without** a delay node is a validation error, and BraitenBot won't
 generate code for it. To build something that uses this on purpose, see the
