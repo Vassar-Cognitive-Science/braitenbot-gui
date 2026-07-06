@@ -37,7 +37,7 @@ The summation nodes are where behaviors combine. Right now only cruise feeds int
 
 The avoid layer watches for obstacles and steers away. It uses the cross-wired threshold inhibition pattern from the earlier tutorial.
 
-1. Add two **ToF Distance** sensors: "Left Distance" (XSHUT 8), "Right Distance" (XSHUT 12)
+1. From the palette's **Basic** tab, drag **Left ToF Distance** (XSHUT D8) and **Right ToF Distance** (XSHUT D12) — they arrive on their correct XSHUT pins. Rename them "Left Distance" and "Right Distance" if you like.
 2. Add two **Threshold** nodes: "Left Detect" (threshold 60), "Right Detect" (threshold 60)
 3. Wire each sensor → its threshold (weight 1.0)
 4. Cross-wire with negative weights: Left Detect → **Right** Mix (weight **-1.0**), Right Detect → **Left** Mix (weight **-1.0**)
@@ -47,8 +47,8 @@ The avoid layer watches for obstacles and steers away. It uses the cross-wired t
   height={340}
   robot={{ x: 275, y: 270, radius: 65 }}
   nodes={[
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT 8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT 12' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT D8' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT D12' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 10, meta: '50' },
@@ -94,7 +94,7 @@ The escape behavior is: **when the bumper is pressed, reverse both motors for ab
 
 We need the decay latch from the [latch tutorial](./latches-with-delay): a bumper press charges a self-sustaining loop that decays over a couple of seconds.
 
-1. Add a **Digital Sensor**: "Bumper" (pin 2, INPUT_PULLUP)
+1. From the **Basic** tab, drag **Bump Front-Left** (D2) — it arrives on pin 2 with its pull-up already on. Rename it "Bumper."
 2. Add a **Summation** node: "Escape Latch"
 3. Add a **Delay** node: set to **20 ms** (one loop period)
 4. Wire: Bumper → Escape Latch (weight 1.0)
@@ -123,12 +123,12 @@ It's tempting to give escape a weight like -1.5 to "overpower" both lower layers
   height={480}
   robot={{ x: 310, y: 400, radius: 65 }}
   nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, meta: 'pin 2' },
+    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, meta: 'D2' },
     { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 100 },
     { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '20 ms' },
     { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 310, meta: '> 10' },
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT 8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT 12' },
+    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT D8' },
+    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT D12' },
     { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 190, y: 100, meta: '> 60' },
     { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 100, meta: '> 60' },
     { id: 'cruise', type: 'constant', label: 'Cruise', x: 300, y: 190, meta: '50' },

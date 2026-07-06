@@ -25,7 +25,7 @@ import DiagramView from '@site/src/components/DiagramView';
   height={280}
   robot={{ x: 250, y: 200, radius: 80 }}
   nodes={[
-    { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 176, y: 30, meta: 'A0' },
+    { id: 'sensor', type: 'sensor-analog', label: 'Left Photocell', x: 176, y: 30, meta: 'A0' },
     { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 190 },
     { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 190 },
   ]}
@@ -42,17 +42,20 @@ When you first open BraitenBot, the canvas already has two nodes: **Left Wheel**
 
 ## Step 2: Add a sensor
 
-1. In the **Node Palette** on the left, find the **Sensors** section
-2. Drag **Analog Sensor** onto the canvas, dropping it above the robot
-3. The sensor appears as an orange-bordered node labeled "Analog Sensor 1"
+1. The **Node Palette** on the left opens on its **Basic** tab, which lists the kit's hardware by name
+2. In the **Kit sensors** group, drag **Left Photocell** onto the canvas, dropping it above the robot
+3. It appears as an orange-bordered node labeled "Left Photocell"
 
-On the physical robot, this sensor is typically a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
+We're only using one sensor here, so either photocell would do — rename it "Light Sensor" if you like; the label is yours.
 
-## Step 3: Configure the sensor pin
+On the physical robot, this sensor is a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
+
+## Step 3: Look at the sensor's configuration
 
 1. Click the sensor node to select it — the config panel opens on the right
-2. In the **Arduino Port** field, type `A0` — this must match the analog pin your sensor is physically wired to on the Arduino
-3. Rename the label to "Light Sensor"
+2. Notice the **Arduino Port** is already set to **A0**. The preset filled it in to match the kit's wiring, so you never have to type a pin number for standard kit hardware.
+
+This is where you *would* point the sensor at a different pin — if you wired your own photoresistor to, say, A2, you'd change the port here. For the kit build, the preset already has it right.
 
 ## Step 4: Connect sensor to motors
 
@@ -92,9 +95,10 @@ Since both motors always get the same value, the robot drives in a straight line
 If you have an Arduino connected:
 
 1. Set the **Loop** period to `20` ms in the toolbar (this means the robot reads its sensor and updates its motors 50 times per second)
-2. Select each wheel motor (**Left Wheel** / **Right Wheel**) and set its **Servo Pin** — for example, `9` for the left wheel and `10` for the right (otherwise uploading fails with a "has no pin configured" validation error)
-3. Select your board in the **Device** dropdown
-4. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board
+2. Select your board in the **Device** dropdown
+3. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board
+
+The two wheel nodes already have their servo pins set (D5 and D6, matching the kit wiring), so there's nothing to configure there before uploading.
 
 If you don't have a board connected yet, you can still click the **▾** chevron next to the button, choose **Generate code only**, and then click the button to see the generated sketch.
 

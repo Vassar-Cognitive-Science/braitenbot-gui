@@ -16,7 +16,7 @@ On the surface this tutorial is about tidiness — collapsing a sprawl of nodes 
 
 ## Scenario: different sensors, same calibration
 
-The robot has four inputs it steers by: two **ToF distance sensors** on the front (XSHUT pins `8` and `12`) for obstacles, and two **photocells** (`A0` and `A1`) for light. Four sensors — but only two *kinds* of sensor.
+The robot has four inputs it steers by: two **ToF distance sensors** on the front (**Left ToF Distance** and **Right ToF Distance**, on XSHUT pins `8` and `12`) for obstacles, and two **photocells** (**Left Photocell** and **Right Photocell**, on `A0` and `A1`) for light. Every one of them is a Basic-tab preset that drops onto the canvas already wired to its pin. Four sensors — but only two *kinds* of sensor.
 
 Despite being different hardware, all four want the same preprocessing before their signal is trustworthy: a dead-zone transfer curve to throw away faint, jittery low readings below 15, followed by a threshold at 30 that turns the cleaned-up signal into a crisp "detected / not detected." Without compounds you'd wire that two-step circuit four separate times — and if you later decided the dead zone should be 20 instead of 15, you'd have to find and fix it in four places and hope you didn't miss one.
 
@@ -28,8 +28,8 @@ import DiagramView from '@site/src/components/DiagramView';
   width={640}
   height={330}
   nodes={[
-    { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 8' },
-    { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 180, y: 20, meta: 'XSHUT 12' },
+    { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT D8' },
+    { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 180, y: 20, meta: 'XSHUT D12' },
     { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 340, y: 20, meta: 'A0' },
     { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 500, y: 20, meta: 'A1' },
     { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 170, meta: 'Calibrated Sensor' },
@@ -49,6 +49,8 @@ import DiagramView from '@site/src/components/DiagramView';
 With compounds, you build the preprocessing once, group it, and drag out four instances — one for each physical sensor.
 
 ## Step 1: Build the calibration circuit
+
+So far every sensor has arrived pre-wired from the Basic tab — you dragged a preset and its pin was already filled in, so you never configured anything by hand. Building a compound is where that changes: here you set a threshold and draw a transfer curve yourself, shaping how a signal behaves rather than just accepting a pre-wired node. It's a small step up in authorship, and the compound is the natural place to take it.
 
 Because the compound should work for *any* sensor type, we keep the physical sensor **outside** the compound and put only the signal processing inside. Grouping needs at least two nodes, so we use a Summation as a simple pass-through gateway for the incoming signal:
 
@@ -87,7 +89,7 @@ Click the breadcrumb to return to the main canvas.
 
 In the **Node Palette**, a new **Compounds** section has appeared with your "Calibrated Sensor" type. Drag out three more instances — you now have four identical calibrators.
 
-Notice what you *don't* have to configure: there's no pin to set on a Calibrated Sensor, because the pins live on the external sensor nodes, not inside the compound. That's exactly why keeping the sensor outside was the right call.
+Notice what you *don't* have to configure: there's no pin to set on a Calibrated Sensor, because the pins live on the external sensor nodes — the Basic-tab presets like **Left ToF Distance** and **Left Photocell**, each of which arrived already wired to its pin. The only thing you configure by hand lives *inside* the compound: the calibration itself. That split is exactly why keeping the sensor outside was the right call.
 
 :::note[Why the sensor stays outside]
 

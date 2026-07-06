@@ -37,7 +37,7 @@ import DiagramView from '@site/src/components/DiagramView';
   width={500}
   height={300}
   nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'pin 2' },
+    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'D2' },
     { id: 'sum', type: 'compute-summation', label: 'Latch', x: 176, y: 30 },
     { id: 'delay', type: 'compute-delay', label: 'Delay', x: 176, y: 170, meta: '20 ms' },
     { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 340, y: 30 },
@@ -76,10 +76,10 @@ This is a strange idea, and it isn't just a trick of the editor. Many models of 
 
 ## Step 2: Add the bumper trigger
 
-1. Drag a **Digital Sensor**, set port to `2`, label "Bumper"
+1. Drag **Bump Front-Left** (D2) from the palette's **Basic** tab — it arrives labeled and wired to pin 2 with its pull-up already on. Rename it "Bumper" if you like; that front bumper switch is exactly the momentary contact this lesson is about.
 2. Connect Bumper → Summation (weight 1.0)
 
-On the physical robot, wire a pushbutton between pin 2 and ground, and enable INPUT_PULLUP on the sensor node. The button reads as 100 in BraitenBot when pressed (pullup mode inverts the signal so that pressing the button produces a HIGH reading).
+On the physical robot, the front-left bump switch is already wired between pin 2 and ground, and the **Bump Front-Left** preset comes with INPUT_PULLUP enabled — so pressing the switch reads as 100 in BraitenBot (pullup mode inverts the signal, so pressing the button produces a HIGH reading).
 
 ## Step 3: Connect to a motor
 
@@ -172,7 +172,7 @@ From the outside, the robot bonks into a wall, backs up for two seconds, and the
 
 ## Resettable latch
 
-Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second Digital Sensor ("Reset", port `3`) and connect it to the latch summation with weight **-1.0**:
+Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second bump switch — drag **Bump Front-Right** (D3) from the Basic tab and rename it "Reset" — then connect it to the latch summation with weight **-1.0**:
 
 When Reset fires it contributes 100 × -1.0 = -100, exactly canceling the +100 of clamped feedback. The summation drops to 0, the delay captures 0, and on the next iteration the feedback is 0 — the latch clears immediately, regardless of how much time was left.
 

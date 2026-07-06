@@ -27,8 +27,8 @@ import DiagramView from '@site/src/components/DiagramView';
   height={400}
   robot={{ x: 300, y: 320, radius: 70 }}
   nodes={[
-    { id: 'left-sensor', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 8' },
-    { id: 'right-sensor', type: 'sensor-tof', label: 'Right Obstacle', x: 400, y: 20, meta: 'XSHUT 12' },
+    { id: 'left-sensor', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, meta: 'XSHUT D8' },
+    { id: 'right-sensor', type: 'sensor-tof', label: 'Right ToF Distance', x: 400, y: 20, meta: 'XSHUT D12' },
     { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 120, meta: '> 60' },
     { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 120, meta: '> 60' },
     { id: 'constant', type: 'constant', label: 'Forward (50)', x: 210, y: 80, meta: '50' },
@@ -68,16 +68,16 @@ This is inhibition doing the work that, in our own heads, we file under motives 
 
 ## Step 1: Set up the baseline drive
 
-1. Drag a **Constant** node onto the canvas, set its value to **50**
-2. Add two **Summation** nodes — one for each motor
+1. Drag a **Constant** node onto the canvas (it lives on the palette's **Advanced** tab), set its value to **50**
+2. Add two **Summation** nodes — one for each motor (in the **Basic** tab's Compute group)
 3. Wire Constant → both Summations (weight 1.0), then each Summation → its Motor (weight 1.0)
 
 Test in trace mode: both motors should show 50. The robot drives straight forward.
 
 ## Step 2: Add obstacle sensors
 
-1. Drag two **ToF Distance** nodes onto the canvas, labeled "Left Obstacle" and "Right Obstacle"
-2. Give each its own **XSHUT pin** — for example `8` and `12`. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance.
+1. From the **Kit sensors** group, drag **Left ToF Distance** and **Right ToF Distance** onto the canvas
+2. Their **XSHUT pins** are already set — Left ToF Distance on D8, Right ToF Distance on D12. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance. (Rename them "Left Obstacle" and "Right Obstacle" if that reads better to you.)
 
 ## Step 3: Add threshold nodes
 

@@ -111,7 +111,7 @@ We build the comparison with a **Summation** node — the same node from obstacl
 
 ## Step 1: Build the two opponent signals
 
-1. Drag a **Color Sensor** onto the canvas, label it "Floor Color." (No pin to set — it's on the I2C bus.)
+1. Drag a **Color Sensor** from the palette's **Basic** tab onto the canvas, and label it "Floor Color." (No pin to set — it's on the shared I2C bus.)
 2. Add a **Summation** node labeled "Redness."
 3. Draw a connection from the sensor's **red** port to Redness, weight **+1.0**. Then draw a second connection from the **blue** port to Redness, weight **−1.0**. To grab a specific port, start the drag from that colored handle on the sensor's bottom edge.
 4. Add a second **Summation** labeled "Blueness," and wire it as the mirror image: **blue** port at **+1.0**, **red** port at **−1.0**.

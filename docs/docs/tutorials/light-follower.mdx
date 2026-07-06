@@ -25,8 +25,8 @@ import DiagramView from '@site/src/components/DiagramView';
   height={310}
   robot={{ x: 250, y: 220, radius: 80 }}
   nodes={[
-    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Light', x: 80, y: 30, meta: 'A0' },
-    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Light', x: 280, y: 30, meta: 'A1' },
+    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Photocell', x: 80, y: 30, meta: 'A0' },
+    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Photocell', x: 280, y: 30, meta: 'A1' },
     { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 210 },
     { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 210 },
   ]}
@@ -45,18 +45,17 @@ Cross-wiring exploits this: when the light is to the left, the left sensor reads
 
 This is the same principle that a moth uses. It doesn't "decide" to fly toward a flame — when more light hits one side, the corresponding wing beats harder, curving its flight path toward the source.
 
-## Step 1: Add two analog sensors
+## Step 1: Add two photocells
 
-1. Drag two **Analog Sensor** nodes from the palette onto the canvas
-2. Position one above the left side of the robot and one above the right
-3. Configure each:
-   - Left sensor: port `A0`, label "Left Light"
-   - Right sensor: port `A1`, label "Right Light"
+1. From the **Basic** tab's **Kit sensors** group, drag **Left Photocell** and **Right Photocell** onto the canvas
+2. Position the left one above the left side of the robot and the right one above the right
+
+Both come pre-wired — Left Photocell to A0, Right Photocell to A1 — so there are no ports to set. (Rename them "Left Eye" and "Right Eye" if that reads better to you; the labels are yours.)
 
 ## Step 2: Cross-wire the connections
 
-1. Connect **Left Light** → **Right Wheel**
-2. Connect **Right Light** → **Left Wheel**
+1. Connect **Left Photocell** → **Right Wheel**
+2. Connect **Right Photocell** → **Left Wheel**
 
 This is the opposite of what might seem intuitive (you might expect left-to-left), but the cross-wiring is what makes the robot turn *toward* the light rather than away from it.
 
@@ -67,7 +66,7 @@ Click each connection and set the weight to **0.7**. A weight less than 1.0 limi
 ## Step 4: Test in trace mode
 
 1. Activate **Trace Signal Flow**
-2. Drag the **Left Light** slider to 80 and keep the right at 20
+2. Drag the **Left Photocell** slider to 80 and keep the right at 20
 
 The motors should show:
 - Right Wheel: **56** (80 × 0.7) — fast
@@ -90,8 +89,8 @@ On a real robot, the two photoresistors won't be perfectly matched — one might
 
 The basic Vehicle 2b stops when there's no light. On a real robot, you might want it to wander forward until it finds a light source. Add a Constant node to provide baseline drive:
 
-1. Drag a **Constant** node onto the canvas, set its value to **30**
-2. Add two **Summation** nodes — one for each motor
+1. Drag a **Constant** node onto the canvas (it lives on the palette's **Advanced** tab), set its value to **30**
+2. Add two **Summation** nodes — one for each motor (in the **Basic** tab's Compute group)
 3. Wire the constant into both summations (weight 1.0), and the cross-wired sensors into the appropriate summation (weight 0.7)
 4. Wire each summation to its motor
 
