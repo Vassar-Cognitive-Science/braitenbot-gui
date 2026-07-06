@@ -1,0 +1,182 @@
+---
+sidebar_position: 4
+title: "Tutorial: Color Discrimination"
+---
+
+# Color Discrimination
+
+Every vehicle so far has done one thing to one kind of stimulus: chase light, or flee obstacles. Attraction and avoidance are the whole repertoire. But animals do something richer — they tell stimuli *apart* and respond to each differently. A bee flies to yellow flowers and past the green leaves; a robot could love the red tiles and fear the blue ones. That capacity — **discrimination**, responding differently to different stimuli rather than more-or-less to a single one — is the next rung up. It's the territory of Braitenberg's later vehicles, where thresholds and comparisons let a machine develop something an observer is tempted to call *taste*.
+
+In this tutorial you'll give the robot a single downward-facing color sensor and teach it to behave differently over differently colored patches of floor: it speeds up excitedly over red, and recoils from blue, while ignoring plain floor and even bright white paper. The new hardware skill is drawing connections from the color sensor's **four output ports** — because the deep trick here is realizing those four "colors" are really just four light sensors that happen to share one eye.
+
+**Time:** 20 minutes
+**Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance)
+
+## The physical setup
+
+Mount the **TCS34725 color sensor** on the underside of the robot, facing straight down at the floor, about a centimeter above the surface. The module has a bright white LED that floods the patch directly beneath it, so the reading depends mostly on what color is under the sensor rather than on room lighting. Like the ToF sensors, it lives on the shared I2C bus — there's no pin to assign, since its address (`0x29`) is fixed in hardware.
+
+Lay out some colored paper patches on the floor: a red one, a blue one, and (to keep us honest later) a plain white one. The robot will cruise forward and react as it rolls over each.
+
+import DiagramView from '@site/src/components/DiagramView';
+
+<DiagramView
+  width={660}
+  height={480}
+  robot={{ x: 300, y: 430, radius: 62 }}
+  nodes={[
+    { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10, meta: 'TCS34725' },
+    { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 120, meta: 'red − blue' },
+    { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 120, meta: 'blue − red' },
+    { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 225, meta: '> 15' },
+    { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 225, meta: '> 15' },
+    { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 240, meta: '40' },
+    { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 330 },
+    { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 330 },
+    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 195, y: 430 },
+    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 325, y: 430 },
+  ]}
+  connections={[
+    { from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, label: '+1.0' },
+    { from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, label: '−1.0' },
+    { from: 'color', fromPort: 'blue', to: 'blueness', weight: 1.0, label: '+1.0' },
+    { from: 'color', fromPort: 'red', to: 'blueness', weight: -1.0, label: '−1.0' },
+    { from: 'redness', to: 'see-red', weight: 1.0 },
+    { from: 'blueness', to: 'see-blue', weight: 1.0 },
+    { from: 'forward', to: 'left-sum', weight: 1.0 },
+    { from: 'forward', to: 'right-sum', weight: 1.0 },
+    { from: 'see-red', to: 'left-sum', weight: 0.4, label: '+0.4' },
+    { from: 'see-red', to: 'right-sum', weight: 0.4, label: '+0.4' },
+    { from: 'see-blue', to: 'left-sum', weight: -1.0, label: '−1.0' },
+    { from: 'left-sum', to: 'left-motor', weight: 1.0 },
+    { from: 'right-sum', to: 'right-motor', weight: 1.0 },
+  ]}
+  caption="Likes red, fears blue: the two colored ports are compared, thresholded, and wired to different wheel behaviors"
+/>
+
+## Four sensors sharing one eye
+
+Drop a **Color Sensor** node on the canvas and you'll notice something no other node has: **four output ports** along its bottom edge, tinted grey, red, green, and blue. These are the sensor's four channels:
+
+- **Red**, **Green**, **Blue** — how much light in each band bounces back from the surface below
+- **Clear** — overall brightness, all wavelengths together
+
+Each channel reports a number from **0 to 100**, where 100 means that channel is saturated with light. Under the hood the TCS34725 counts photons for about 100 ms per reading and BraitenBot scales the raw count onto the 0–100 range you're used to. The crucial thing is that *nothing about the color sensor is special* — a channel is just a light sensor with a colored filter in front of it. You already know how to wire a light sensor. You now have four of them, aimed at the same spot.
+
+## The naive approach, and why it fails
+
+The obvious idea: to detect red, threshold the **red** channel. Wire `red` → Threshold, fire when it's high. Let's see what real readings look like in trace mode as the robot passes over different patches:
+
+| Surface | red | green | blue | clear |
+|---------|-----|-------|------|-------|
+| Plain grey floor | 12 | 12 | 11 | 12 |
+| Red patch | 45 | 15 | 12 | 25 |
+| Blue patch | 10 | 18 | 40 | 24 |
+| **White paper** | **70** | 72 | 68 | 70 |
+
+Look at the last row. **White paper reads a red channel of 70 — higher than the red patch's 45.** A robot that just thresholds the red channel would decide that a sheet of white printer paper is the reddest thing in the room. That's not a bug; it's the honest truth about the sensor. The red channel measures *red light reflected*, and white surfaces reflect a lot of everything, red included. Brightness and hue are tangled together in every single channel.
+
+Discrimination requires untangling them. And the trick is beautifully simple: don't ask "how much red?" — ask "**more red than blue, or more blue than red?**"
+
+## Opponent coding: comparing channels
+
+Look down the table again, but subtract blue from red each time:
+
+| Surface | red − blue |
+|---------|-----------|
+| Plain grey floor | +1 |
+| Red patch | **+33** |
+| Blue patch | **−30** |
+| White paper | +2 |
+
+Now the patches separate cleanly. Red gives a big positive number, blue a big negative one, and the two "colorless" surfaces — grey floor and white paper — both land near zero, *regardless of how bright they are*. Subtracting one channel from another cancels out the shared brightness and leaves only the hue difference behind.
+
+This is exactly what your own retina does. It doesn't ship the brain a raw brightness for red; it ships **red-minus-green** and **blue-minus-yellow** — "color-opponent" signals. Evolution discovered the same subtraction we just did, for the same reason: a comparison between two sensors is far more robust than either sensor alone.
+
+We build the comparison with a **Summation** node — the same node from obstacle avoidance, but now we exploit its ability to add *negatively-weighted* inputs. Wire the red channel in at weight +1.0 and the blue channel in at weight −1.0, and the summation outputs `red − blue`. This is the moment you draw two connections *from the same sensor*, each leaving a different colored port:
+
+<DiagramView
+  width={420}
+  height={260}
+  nodes={[
+    { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 135, y: 10, meta: 'TCS34725' },
+    { id: 'redness', type: 'compute-summation', label: 'Redness', x: 135, y: 150, meta: 'red − blue' },
+  ]}
+  connections={[
+    { from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, label: '+1.0' },
+    { from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, label: '−1.0' },
+  ]}
+  caption="Two wires from one eye: red at +1.0 and blue at −1.0 make an opponent 'redness' signal"
+/>
+
+## Step 1: Build the two opponent signals
+
+1. Drag a **Color Sensor** onto the canvas, label it "Floor Color." (No pin to set — it's on the I2C bus.)
+2. Add a **Summation** node labeled "Redness."
+3. Draw a connection from the sensor's **red** port to Redness, weight **+1.0**. Then draw a second connection from the **blue** port to Redness, weight **−1.0**. To grab a specific port, start the drag from that colored handle on the sensor's bottom edge.
+4. Add a second **Summation** labeled "Blueness," and wire it as the mirror image: **blue** port at **+1.0**, **red** port at **−1.0**.
+
+You now have two signals: Redness is strongly positive over red and negative over blue; Blueness is the reverse.
+
+## Step 2: Turn each comparison into a decision
+
+1. Add a **Threshold** node labeled "See Red," set its threshold to **15**, and wire Redness → See Red (weight 1.0).
+2. Add a **Threshold** labeled "See Blue," threshold **15**, wired from Blueness (weight 1.0).
+
+A threshold of 15 sits comfortably above the ±1–2 that grey floor and white paper produce, but well below the ±30 of a real colored patch — so these fire only on genuine color, never on brightness alone. Each threshold outputs a clean 0 or 100: "I'm over that color" / "I'm not."
+
+## Step 3: Give each color a different behavior
+
+Here's where discrimination becomes visible. The two colors drive the wheels in **different wiring patterns** — this is what makes them feel like different reactions rather than the same reaction turned up or down.
+
+1. Add a **Constant** node set to **40**, and two **Summation** nodes ("Left Sum," "Right Sum"). Wire the constant into both (weight 1.0), and each summation to its wheel. This is the familiar forward cruise.
+2. **Likes red — accelerate:** wire **See Red** into *both* summations at weight **+0.4**. When it fires (100), each wheel gets 40 + 40 = 80. The robot surges straight ahead, excited, over the red patch.
+3. **Fears blue — recoil:** wire **See Blue** into the **Left Sum** only, at weight **−1.0**. When it fires, the left wheel gets 40 − 100 = −60 while the right stays at 40. The robot pivots hard and peels away from the blue.
+
+Same sensor, same eye — but red makes it lunge forward and blue makes it spin off. Two stimuli, two behaviors.
+
+## Step 4: Test in trace mode
+
+Activate **Trace Signal Flow** and set the four channels by hand to match the table above:
+
+**Grey floor** (red 12, blue 11) — Redness +1, Blueness −1. Neither threshold fires. Both wheels 40. The robot cruises.
+
+**Red patch** (red 45, blue 12) — Redness +33, See Red fires. Both wheels jump to 80. The robot accelerates forward.
+
+**Blue patch** (red 10, blue 40) — Blueness +30, See Blue fires. Left wheel −60, right wheel 40. The robot pivots away.
+
+**White paper** (red 70, blue 68) — Redness +2, Blueness +2. *Neither* threshold fires, even though every raw channel is pegged near 70. Both wheels 40; the robot cruises straight over it, completely indifferent. This is the payoff: the naive red-channel robot would have gone wild here, and yours doesn't even notice.
+
+:::note[Thinking like Braitenberg]
+
+Watch this vehicle and you'll say it *likes* red and *dislikes* blue — that it has preferences, even a rudimentary aesthetic sense. Braitenberg leaned all the way into this: in his later vehicles, thresholds and comparisons produce machines whose behavior an observer can only describe with words like *taste*, *judgment*, and *value*.
+
+But notice where the "taste" actually lives. It isn't in any channel — a channel is a dumb photon-counter. It appears the instant we *compare* two of them and *threshold* the difference. Preference, here, is not a thing the robot has; it's a shape in the wiring: a subtraction and a cut-off. That should be at least a little unsettling, because your own "I like this, I don't like that" is also, somewhere down at the bottom, sensors being compared and differences crossing thresholds. Discrimination is the first place a vehicle stops merely reacting to the world and starts, however faintly, having opinions about it.
+
+:::
+
+## Calibrating for real color
+
+The numbers in this tutorial are illustrative — your surfaces, lighting, and mounting height will shift them. A few things to get right on real hardware:
+
+- **Sensor height.** The white LED's usefulness depends on being close to the surface. Too high and it reads a dim blur averaged with room light; too low and it can scrape the floor. Aim for roughly a centimeter, and keep it consistent.
+- **Gain.** The color node has a **gain** setting (1×, 4×, 16×, or 60×; default 16×). If every channel reads near 0 on your patches, raise the gain to amplify dim reflections. If white paper pins channels at a flat 100 — saturated, so red and blue can't be told apart — lower the gain until they come off the ceiling. You need headroom on *both* channels for the subtraction to mean anything.
+- **Reaction time.** The sensor produces a fresh reading about ten times a second. A fast robot can shoot clean across a small patch between readings, so keep the cruise speed modest or make the patches generous.
+- **Ambient light.** The onboard LED dominates at close range, but a beam of direct sunlight or a colored desk lamp can still bias the channels. If the robot behaves differently at different times of day, that's your culprit — shade the sensor or recalibrate the thresholds for the room it runs in.
+
+## What you've learned
+
+- The color sensor is **four light sensors sharing one eye** — you wire its channels exactly like any other source, using its four colored output ports.
+- Raw channels **confound hue with brightness**, which is why a bright white surface can out-red a red one. Any single channel, thresholded on its own, will fool you.
+- **Comparing channels** (opponent coding — one channel minus another) cancels brightness and isolates hue, the same trick your retina uses. It's built from a Summation with one positive and one negative input.
+- **Discrimination** — routing different stimuli to different behaviors — is a genuine step beyond attraction and avoidance, and it's where a vehicle first starts to look like it has preferences.
+
+### Questions to sit with
+
+- The robot's "preference" for red turned out to be a subtraction and a threshold. When you notice yourself *liking* something, how sure are you that it's anything more than that, viewed from the inside?
+- Nothing in the circuit represents "red" as such — only "more red than blue." Do *you* ever perceive a color absolutely, or always as a comparison against its surroundings?
+- White paper reflects more red light than the red patch does, yet the robot ignores it and we'd say it's "right" to. What is the color of a thing, if not the light it sends you — and why do we trust the comparison over the raw signal?
+
+## What's next
+
+The opponent circuit fires a flat 0 or 100 at a hard cutoff. But you might want a color reaction that *fades in* smoothly as a patch fills the sensor's view, or a dead zone that ignores marginal readings. [Transfer Curves](./transfer-curves) let you shape a connection's response by hand — filtering noise, capping speed, and sculpting exactly how a signal turns into an action.

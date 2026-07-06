@@ -15,8 +15,10 @@
 //   - delay nodes: the C code uses a multi-tick ring buffer; the trace
 //     simulator passes the input through (it has no time dimension). A
 //     dedicated test below documents this.
-//   - i2c sensors: the C code emits a `0.0 // TODO` stub; the trace
-//     returns whatever the user dialed in. Skipped here.
+//   - i2c ToF sensors: not modeled as a driven input here (fixed at 0).
+//   - i2c color sensor: fully modeled — each channel (clear/red/green/blue)
+//     is an independent per-port input keyed `${id}:${channel}`, matching the
+//     emitter's sig_<id>_<port> variables. Edges select a channel via fromPort.
 
 import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../graph';
@@ -36,6 +38,25 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
+/** Round half away from zero, matching C's lround. */
+function lround(v: number): number {
+  return Math.sign(v) * Math.round(Math.abs(v));
+}
+
+/**
+ * Value an edge draws from its source, honoring fromPort for multi-output
+ * sources (the color sensor). Mirrors emitter.ts srcVarName: a matching
+ * fromPort reads sig_<id>_<port>; otherwise the node's single value, whose
+ * stored form is the first declared port.
+ */
+function srcVal(vals: Record<string, number>, edge: { from: string; fromPort?: string }): number {
+  if (edge.fromPort) {
+    const key = `${edge.from}:${edge.fromPort}`;
+    if (key in vals) return vals[key];
+  }
+  return vals[edge.from] ?? 0;
+}
+
 function applyEdgeTerm(
   edge: { weight: number; transferMode: string; transferPoints: TransferPoint[] },
   src: number,
@@ -49,12 +70,10 @@ function applyEdgeTerm(
 }
 
 function interpolate(input: number, points: TransferPoint[]): number {
-  // Mirrors the piecewise-linear interpolation that the emitted C
-  // transfer function performs between its declared knots. Inputs outside
-  // [pts[0].x, pts[N-1].x] are flatlined to the nearest endpoint — this
-  // matches the trace simulator. (The emitted C's branch structure will
-  // linearly extrapolate outside the declared domain, which is a known
-  // divergence not covered by this parity harness.)
+  // Mirrors the piecewise-linear interpolation performed by the emitted C
+  // transfer function. Inputs outside [pts[0].x, pts[N-1].x] clamp to the
+  // nearest endpoint y — matching both the trace simulator and the emitted
+  // C's endpoint guard conditions.
   const sorted = [...points].sort((a, b) => a.x - b.x);
   if (input <= sorted[0].x) return sorted[0].y;
   if (input >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
@@ -73,7 +92,7 @@ function aggregateSum(graph: WiringGraph, nodeId: string, vals: Record<string, n
   let acc = 0;
   for (const edge of graph.edges) {
     if (edge.to !== nodeId) continue;
-    acc += applyEdgeTerm(edge, vals[edge.from] ?? 0);
+    acc += applyEdgeTerm(edge, srcVal(vals, edge));
   }
   return acc;
 }
@@ -85,7 +104,7 @@ function aggregateProduct(graph: WiringGraph, nodeId: string, vals: Record<strin
   if (incoming.length === 0) return 0;
   let acc = 1;
   for (const edge of incoming) {
-    acc *= applyEdgeTerm(edge, vals[edge.from] ?? 0);
+    acc *= applyEdgeTerm(edge, srcVal(vals, edge));
   }
   return acc;
 }
@@ -110,7 +129,15 @@ function simulateEmittedC(
       //   analog: analogRead * (100.0 / 1023.0)  →  caller supplies value in [0, 100]
       //   digital: digitalRead * 100.0           →  caller supplies 0 or 100
       //   i2c color: channel * (100.0 / 65535.0) →  caller supplies value in [0, 100]
-      if (node.protocol === 'i2c') {
+      if (node.typeId === 'sensor-color') {
+        // Mirrors emitter.ts (sensor-color loop): four channel variables
+        // sig_<id>_<clear|red|green|blue>. Downstream edges pick a channel
+        // via fromPort; the bare node value is the first (clear) channel.
+        for (const ch of ['clear', 'red', 'green', 'blue']) {
+          vals[`${nodeId}:${ch}`] = sensorValues[`${nodeId}:${ch}`] ?? 0;
+        }
+        vals[nodeId] = vals[`${nodeId}:clear`];
+      } else if (node.protocol === 'i2c') {
         vals[nodeId] = 0;
       } else {
         vals[nodeId] = sensorValues[nodeId] ?? 50;
@@ -144,14 +171,20 @@ function simulateEmittedC(
     }
 
     if (node.kind === 'output') {
-      // Wheel motors aggregate inputs into a sum and pass them to the emitted
-      // drive() helper, which clamps to [-100, 100] before writing
-      // microseconds. Servos aggregate into a sum then map to angle via
-      // constrain((input+100)*0.9, 0, 180). In both cases the effective
-      // signal at the node is clamp(sum, -100, 100) — that is what the trace
-      // simulator stores, so that is what we compare here.
       const sum = aggregateSum(graph, nodeId, vals);
-      vals[nodeId] = clamp(sum, -100, 100);
+      if (node.typeId === 'display-tm1637') {
+        // emitter.ts (display-tm1637 loop): constrain((int)lround(input),
+        // -999, 9999). A 4-digit signed integer, not a ±100 signal.
+        vals[nodeId] = clamp(lround(sum), -999, 9999);
+      } else {
+        // Wheel motors aggregate inputs into a sum and pass them to the emitted
+        // drive() helper, which clamps to [-100, 100] before writing
+        // microseconds. Servos aggregate into a sum then map to angle via
+        // constrain((input+100)*0.9, 0, 180). In both cases the effective
+        // signal at the node is clamp(sum, -100, 100) — that is what the trace
+        // simulator stores, so that is what we compare here.
+        vals[nodeId] = clamp(sum, -100, 100);
+      }
       continue;
     }
   }
@@ -487,6 +520,103 @@ describe('node parity (trace vs emitted C)', () => {
     });
   });
 
+  describe('color sensor per-channel routing (fromPort)', () => {
+    // The TCS34725 exposes four channels. Each downstream edge selects one
+    // via fromPort, and the emitter reads a distinct sig_<id>_<channel>
+    // variable per channel. This asserts the trace simulator routes each
+    // channel independently — not the same slider value on all four.
+    function colorSensor(id: string): DiagramNode {
+      return { id, type: 'sensor-color', label: id, x: 0, y: 0 };
+    }
+    function sum(id: string): DiagramNode {
+      return { id, type: 'compute-summation', label: id, x: 0, y: 0 };
+    }
+
+    it('routes each channel to its own consumer', () => {
+      const nodes = [
+        colorSensor('c1'),
+        sum('sumR'),
+        sum('sumG'),
+        sum('sumB'),
+        sum('sumClear'), // portless edge → first-port (clear) default
+      ];
+      const connections = [
+        makeConn({ id: 'e1', from: 'c1', to: 'sumR', fromPort: 'red' }),
+        makeConn({ id: 'e2', from: 'c1', to: 'sumG', fromPort: 'green' }),
+        makeConn({ id: 'e3', from: 'c1', to: 'sumB', fromPort: 'blue' }),
+        makeConn({ id: 'e4', from: 'c1', to: 'sumClear' }),
+      ];
+      const sensorValues = {
+        'c1:clear': 50,
+        'c1:red': 80,
+        'c1:green': 20,
+        'c1:blue': 40,
+      };
+      expectParity(nodes, connections, sensorValues, [
+        'sumR',
+        'sumG',
+        'sumB',
+        'sumClear',
+      ]);
+
+      // Spot-check the actual routed values, not just trace/C agreement.
+      const trace = simulateGraph(nodes, connections, sensorValues);
+      expect(trace.nodeValues.sumR).toBeCloseTo(80, 9);
+      expect(trace.nodeValues.sumG).toBeCloseTo(20, 9);
+      expect(trace.nodeValues.sumB).toBeCloseTo(40, 9);
+      expect(trace.nodeValues.sumClear).toBeCloseTo(50, 9);
+    });
+
+    it('weights and combines two channels into one node', () => {
+      const nodes = [colorSensor('c1'), sum('mix')];
+      const connections = [
+        makeConn({ id: 'e1', from: 'c1', to: 'mix', fromPort: 'red', weight: 0.5 }),
+        makeConn({ id: 'e2', from: 'c1', to: 'mix', fromPort: 'blue', weight: -0.25 }),
+      ];
+      const sensorValues = { 'c1:red': 80, 'c1:blue': 40, 'c1:clear': 0, 'c1:green': 0 };
+      // 0.5*80 + (-0.25)*40 = 40 - 10 = 30.
+      expectParity(nodes, connections, sensorValues, ['mix']);
+      const trace = simulateGraph(nodes, connections, sensorValues);
+      expect(trace.nodeValues.mix).toBeCloseTo(30, 9);
+    });
+  });
+
+  describe('7-segment display (tm1637) clamp', () => {
+    // The display shows a signed 4-digit integer: constrain(lround(input),
+    // -999, 9999). Unlike motors/servos it is NOT a ±100 signal.
+    function display(id: string): DiagramNode {
+      return { id, type: 'display-tm1637', label: id, x: 0, y: 0, clkPin: '2', gpioPin: '3' };
+    }
+    function constant(id: string, v: number): DiagramNode {
+      return { id, type: 'constant', label: id, x: 0, y: 0, constantValue: v };
+    }
+
+    const cases = [
+      { v: 0, label: 'zero' },
+      { v: 1500, label: 'mid-range (well past ±100)' },
+      { v: 9999, label: 'upper bound' },
+      { v: 15000, label: 'above bound clamps to 9999' },
+      { v: -999, label: 'lower bound' },
+      { v: -5000, label: 'below bound clamps to -999' },
+    ];
+    for (const { v, label } of cases) {
+      it(`agrees at ${label} (${v})`, () => {
+        const nodes = [constant('k', v), display('disp')];
+        const connections = [makeConn({ id: 'c1', from: 'k', to: 'disp' })];
+        expectParity(nodes, connections, {}, ['disp']);
+      });
+    }
+
+    it('rounds a fractional sum half away from zero', () => {
+      // 5 * 0.5 = 2.5 → lround → 3 on both sides.
+      const nodes = [constant('k', 5), display('disp')];
+      const connections = [makeConn({ id: 'c1', from: 'k', to: 'disp', weight: 0.5 })];
+      expectParity(nodes, connections, {}, ['disp']);
+      const trace = simulateGraph(nodes, connections, {});
+      expect(trace.nodeValues.disp).toBe(3);
+    });
+  });
+
   describe('nonlinear transfer function', () => {
     it('agrees through a piecewise-linear edge transfer', () => {
       const nodes = [sensor('s1'), leftMotor()];
@@ -508,6 +638,35 @@ describe('node parity (trace vs emitted C)', () => {
       for (const v of [-100, -50, 0, 25, 50, 100]) {
         expectParity(nodes, connections, { s1: v }, ['motor-L']);
       }
+    });
+
+    it('agrees when inputs are outside the transfer curve domain (clamp semantics)', () => {
+      // Curve covers [-50, 50] with a non-trivial midpoint. Inputs at ±80 lie
+      // outside the domain. Both the trace simulator and the emitted C clamp to
+      // the nearest endpoint y value — this test verifies the two sides agree.
+      const nodes = [sensor('s1'), leftMotor()];
+      const connections = [
+        makeConn({
+          id: 'c1',
+          from: 's1',
+          to: 'motor-L',
+          weight: 1,
+          transferMode: 'nonlinear',
+          transferPoints: [
+            { x: -50, y: -80 },
+            { x: 0, y: 20 },
+            { x: 50, y: 80 },
+          ],
+        }),
+      ];
+      // Within domain — verify interior interpolation still matches.
+      for (const v of [-50, -25, 0, 25, 50]) {
+        expectParity(nodes, connections, { s1: v }, ['motor-L']);
+      }
+      // Below domain: should clamp to y at x=-50, i.e. -80, then motor clamps to -80.
+      expectParity(nodes, connections, { s1: -80 }, ['motor-L']);
+      // Above domain: should clamp to y at x=50, i.e. 80.
+      expectParity(nodes, connections, { s1: 80 }, ['motor-L']);
     });
   });
 

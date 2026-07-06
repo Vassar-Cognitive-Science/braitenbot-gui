@@ -12,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(arduino::ArduinoState::default())
         .menu(|app_handle| {
             let new_item = MenuItem::with_id(
                 app_handle,
@@ -94,6 +95,9 @@ pub fn run() {
             arduino::list_boards,
             arduino::compile_and_upload,
             arduino::upload_test_sketch,
+            arduino::cancel_upload,
+            arduino::start_serial_monitor,
+            arduino::stop_serial_monitor,
             arduino::check_avr_core,
             arduino::install_avr_core,
             diagram_io::save_diagram,

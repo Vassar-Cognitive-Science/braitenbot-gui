@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, TransferPoint } from '../types/diagram';
-import { TYPE_BY_ID } from '../types/diagram';
+import { TYPE_BY_ID, getOutputPorts } from '../types/diagram';
 import { flattenCompounds } from '../codegen/flatten';
 import { toposort } from '../codegen/toposort';
 
@@ -32,13 +32,21 @@ export interface SimulationState {
  * Build an initial SimulationState for the given diagram. Each delay node
  * gets a zero-filled ring buffer sized from its `delayMs` and the loop
  * period, matching the codegen.
+ *
+ * The graph is flattened first so that delay nodes living inside compound
+ * bodies (whose flattened ids are instance-prefixed, e.g. `inst-1/d1`) get
+ * ring buffers too — otherwise `simulateGraph` would look up a missing
+ * buffer and report a constant 0 for them, unlike the hardware.
  */
 export function createSimulationState(
   nodes: DiagramNode[],
   loopPeriodMs: number,
+  connections: DiagramConnection[] = [],
+  compoundTypes: CompoundTypeDefinition[] = [],
 ): SimulationState {
+  const flat = flattenCompounds(nodes, connections, compoundTypes);
   const delays = new Map<string, { values: number[]; idx: number }>();
-  for (const node of nodes) {
+  for (const node of flat.nodes) {
     if (node.type === 'compute-delay') {
       const delayMs = node.delayMs ?? 100;
       const size = Math.max(1, Math.round(delayMs / Math.max(1, loopPeriodMs)));
@@ -96,6 +104,20 @@ export function simulateGraph(
   const edgeSignals: Record<string, number> = {};
   const disconnected = new Set<string>();
 
+  // Resolve the value an edge draws from its source. Multi-output sources
+  // (the color sensor's r/g/b/c channels) publish per-port values keyed
+  // `${id}:${port}`; an edge with a matching fromPort reads that channel.
+  // Edges without a fromPort (or with a stale one) fall back to the node's
+  // single value — which mirrors the emitter's srcPortSuffix, whose default
+  // is the first declared port (the value we store at nodeValues[id]).
+  const readSource = (edge: DiagramConnection): number => {
+    if (edge.fromPort) {
+      const key = `${edge.from}:${edge.fromPort}`;
+      if (key in nodeValues) return nodeValues[key];
+    }
+    return nodeValues[edge.from] ?? 0;
+  };
+
   // Phase clock for oscillator/noise — use simulation time when running
   // tick-stepped, otherwise wall clock so the static trace still animates
   // between unrelated re-renders.
@@ -107,6 +129,20 @@ export function simulateGraph(
     const typeDef = TYPE_BY_ID[node.type];
 
     if (typeDef.kind === 'sensor') {
+      if (node.type === 'sensor-color') {
+        // The color sensor exposes four channels; the emitter reads each as
+        // its own sig_<id>_<port> variable. Mirror that with per-port values
+        // keyed `${id}:${port}` fed from per-channel sliders. The bare
+        // nodeValues[id] holds the first port (clear) so the scope row and
+        // node output display show a real channel, and portless edges match
+        // the emitter's first-port default.
+        const ports = getOutputPorts('sensor-color')!;
+        for (const ch of ports) {
+          nodeValues[`${nodeId}:${ch}`] = sensorValues[`${nodeId}:${ch}`] ?? 0;
+        }
+        nodeValues[nodeId] = nodeValues[`${nodeId}:${ports[0]}`];
+        continue;
+      }
       if (node.type === 'sensor-digital') {
         // digitalRead in codegen yields 0 or 100 (HIGH/LOW * 100). Mirror
         // that here so the trace and scope show a square wave, not a ramp.
@@ -167,7 +203,7 @@ export function simulateGraph(
 
     const inputs: number[] = [];
     for (const edge of incomingEdges) {
-      const raw = nodeValues[edge.from] ?? 0;
+      const raw = readSource(edge);
       const signal = applyTransfer(raw, edge);
       edgeSignals[edge.id] = signal;
       inputs.push(signal);
@@ -178,6 +214,10 @@ export function simulateGraph(
     if (node.type === 'digital-out') {
       const thresh = node.threshold ?? 50;
       nodeValues[nodeId] = sum > thresh ? 100 : 0;
+    } else if (node.type === 'display-tm1637') {
+      // Emitter: constrain((int)lround(input), -999, 9999). The display shows
+      // a 4-digit signed integer, not a ±100 signal — clamp to its range.
+      nodeValues[nodeId] = clamp(lround(sum), -999, 9999);
     } else if (typeDef.kind === 'output') {
       nodeValues[nodeId] = clamp(sum, -100, 100);
     } else if (typeDef.mode === 'threshold') {
@@ -199,8 +239,7 @@ export function simulateGraph(
   // nodes, both of which were skipped above.
   for (const edge of connections) {
     if (!(edge.id in edgeSignals)) {
-      const raw = nodeValues[edge.from] ?? 0;
-      edgeSignals[edge.id] = applyTransfer(raw, edge);
+      edgeSignals[edge.id] = applyTransfer(readSource(edge), edge);
     }
   }
 
@@ -215,8 +254,7 @@ export function simulateGraph(
       let sum = 0;
       for (const edge of connections) {
         if (edge.to !== node.id) continue;
-        const raw = nodeValues[edge.from] ?? 0;
-        sum += applyTransfer(raw, edge);
+        sum += applyTransfer(readSource(edge), edge);
       }
       buf.values[buf.idx] = sum;
       buf.idx = (buf.idx + 1) % buf.values.length;
@@ -263,6 +301,11 @@ function interpolateTransfer(input: number, points: TransferPoint[]): number {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+/** Round half away from zero, matching C's lround (JS Math.round is half-up). */
+function lround(v: number): number {
+  return Math.sign(v) * Math.round(Math.abs(v));
 }
 
 /** Format a trace value smartly — fewer decimals for clean values. */

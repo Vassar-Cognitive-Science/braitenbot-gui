@@ -14,31 +14,59 @@ On the surface this tutorial is about tidiness — collapsing a sprawl of nodes 
 **Time:** 15 minutes
 **Prerequisites:** Completed at least [Obstacle Avoidance](./obstacle-avoidance)
 
-## Scenario: Multiple sensors need the same calibration
+## Scenario: different sensors, same calibration
 
-Suppose your robot has four ToF distance sensors — front-left, front-right, rear-left, rear-right — and each one needs the same preprocessing: a dead-zone transfer curve to ignore faint, distant returns below 15, followed by a threshold at 30 for binary obstacle detection. Without compounds, you'd duplicate this three-node circuit (sensor → transfer → threshold) four times. That's 12 nodes and 8 connections for what is conceptually the same operation.
+The robot has four inputs it steers by: two **ToF distance sensors** on the front (XSHUT pins `8` and `12`) for obstacles, and two **photocells** (`A0` and `A1`) for light. Four sensors — but only two *kinds* of sensor.
 
-With compounds, you build the preprocessing once, group it, and drag out four instances.
+Despite being different hardware, all four want the same preprocessing before their signal is trustworthy: a dead-zone transfer curve to throw away faint, jittery low readings below 15, followed by a threshold at 30 that turns the cleaned-up signal into a crisp "detected / not detected." Without compounds you'd wire that two-step circuit four separate times — and if you later decided the dead zone should be 20 instead of 15, you'd have to find and fix it in four places and hope you didn't miss one.
 
-## Step 1: Build the preprocessing circuit
+The insight that makes this powerful: **the calibration doesn't care what kind of sensor feeds it.** Every source in BraitenBot — ToF, photocell, color channel — emits the same 0–100 signal. So a single "calibrated sensor" compound can sit downstream of *any* of them. Build it once; reuse it across the whole robot, regardless of the hardware upstream.
 
-Start with a single sensor:
+import DiagramView from '@site/src/components/DiagramView';
 
-1. Add a **ToF Distance** sensor (XSHUT pin `7`, label "Raw Sensor")
+<DiagramView
+  width={640}
+  height={330}
+  nodes={[
+    { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT 8' },
+    { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 180, y: 20, meta: 'XSHUT 12' },
+    { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 340, y: 20, meta: 'A0' },
+    { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 500, y: 20, meta: 'A1' },
+    { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 170, meta: 'Calibrated Sensor' },
+    { id: 'cal-2', type: 'compound', label: 'Calibrated', x: 180, y: 170, meta: 'Calibrated Sensor' },
+    { id: 'cal-3', type: 'compound', label: 'Calibrated', x: 340, y: 170, meta: 'Calibrated Sensor' },
+    { id: 'cal-4', type: 'compound', label: 'Calibrated', x: 500, y: 170, meta: 'Calibrated Sensor' },
+  ]}
+  connections={[
+    { from: 'tof-l', to: 'cal-1', weight: 1.0 },
+    { from: 'tof-r', to: 'cal-2', weight: 1.0 },
+    { from: 'photo-l', to: 'cal-3', weight: 1.0 },
+    { from: 'photo-r', to: 'cal-4', weight: 1.0 },
+  ]}
+  caption="One 'Calibrated Sensor' compound, four instances — reused across two different sensor types"
+/>
+
+With compounds, you build the preprocessing once, group it, and drag out four instances — one for each physical sensor.
+
+## Step 1: Build the calibration circuit
+
+Because the compound should work for *any* sensor type, we keep the physical sensor **outside** the compound and put only the signal processing inside. Grouping needs at least two nodes, so we use a Summation as a simple pass-through gateway for the incoming signal:
+
+1. Add a **Summation** node (label "In", weight 1.0 — it just passes its input through)
 2. Add a **Threshold** node (threshold 30, label "Detected")
-3. Connect Raw Sensor → Detected (weight 1.0)
+3. Connect In → Detected (weight 1.0)
 4. On this connection, set the **Transfer Function** to **Non-linear (curve)** and draw a dead-zone curve: points at (-100, 0), (15, 0), (100, 100)
 
-Test in trace mode: slide the sensor from 0 to 50. The threshold should output 0 for readings below 30, and 100 above — but the dead zone also ensures that noisy low readings (0–15) are zeroed out before they even reach the threshold.
+Test in trace mode: slide the input from 0 to 50. The threshold outputs 0 for readings below 30 and 100 above — and the dead zone also ensures that noisy low readings (0–15) are zeroed out before they even reach the threshold.
 
-This is the kind of preprocessing you'd want on every sensor. Without it, electrical noise at sensor readings of 5–15 can cause spurious threshold triggers, making the robot twitch randomly.
+This is the kind of preprocessing you'd want on every sensor. Without it, electrical noise at low sensor readings (5–15) can cause spurious threshold triggers, making the robot twitch randomly.
 
 ## Step 2: Group into a compound
 
-1. **Shift+click** both the sensor and threshold nodes to select them
+1. **Shift+click** both the Summation and Threshold nodes to select them
 2. Click **Group** in the toolbar
 
-BraitenBot creates a compound type and replaces the two nodes with a single compound instance. The outgoing connection from the threshold becomes an **output port** on the compound.
+BraitenBot creates a compound type and replaces the two nodes with a single compound instance. Because the Summation's input came from outside the selection, it becomes an **input port** on the compound; because the Threshold's output went outside, it becomes an **output port**.
 
 Rename the compound: click it, and in the config panel change the label to **"Calibrated Sensor."**
 
@@ -46,7 +74,8 @@ Rename the compound: click it, and in the config panel change the label to **"Ca
 
 **Double-click** the compound instance to enter the body editor. Inside you'll see:
 
-- The original ToF Distance sensor and Threshold nodes
+- A **Compound Input** port node, feeding the Summation
+- The original Summation and Threshold nodes
 - A **Compound Output** port node, connected to the threshold's output
 - The dead-zone transfer curve is preserved on the internal connection
 
@@ -56,36 +85,35 @@ Click the breadcrumb to return to the main canvas.
 
 ## Step 4: Stamp out more instances
 
-In the **Node Palette**, a new **Compounds** section has appeared with your "Calibrated Sensor" type. Drag out three more instances — you now have four identical preprocessed sensors.
+In the **Node Palette**, a new **Compounds** section has appeared with your "Calibrated Sensor" type. Drag out three more instances — you now have four identical calibrators.
 
-To configure each instance for a different pin, double-click each one and change the internal sensor's XSHUT pin: 7, 8, 9, 10.
+Notice what you *don't* have to configure: there's no pin to set on a Calibrated Sensor, because the pins live on the external sensor nodes, not inside the compound. That's exactly why keeping the sensor outside was the right call.
 
-:::note[Pin assignments inside compounds]
+:::note[Why the sensor stays outside]
 
-Because changes to the body affect all instances, changing the pin in one instance changes it in all of them. For truly independent pin assignments, use the alternative pattern below.
+It's tempting to drop the ToF sensor *inside* the compound so "Calibrated Sensor" is a complete, self-contained unit. Don't. Every instance of a compound shares one body, so all four would share a single XSHUT pin — and worse, they'd all have to be ToF sensors, making the compound useless for the photocells. Keeping the sensor outside is what lets the *same* calibration serve four sensors across two different hardware types.
+
 :::
 
-### Better pattern: sensor outside, processing inside
+## Step 5: Wire each sensor into its own instance
 
-A cleaner approach keeps the physical sensor outside the compound and groups only the signal processing. Since grouping requires at least two nodes, use a Summation as a pass-through:
+Connect each physical sensor's output to a different compound instance's input port:
 
-1. Build: **Summation** (pass-through, weight 1.0) → **Threshold** (threshold 30, with dead-zone curve on the connection)
-2. Select both nodes and click **Group**. The compound now has one **input port** (the summation's input) and one **output port** (the threshold's output).
-3. Drag out four instances.
-4. Wire each external sensor to a different compound instance's input port.
+- Left Obstacle (ToF, XSHUT 8) → Calibrated Sensor #1
+- Right Obstacle (ToF, XSHUT 12) → Calibrated Sensor #2
+- Left Light (photocell, A0) → Calibrated Sensor #3
+- Right Light (photocell, A1) → Calibrated Sensor #4
 
-Now each compound instance receives from a different physical sensor, but they all apply the same internal calibration. Change the threshold in one compound body and all four sensors update — exactly the kind of consistency you want when calibrating a robot.
+All four now apply identical internal calibration to whatever their sensor sends. Change the threshold in one compound body and all four update at once — exactly the consistency you want when tuning a robot. Two of the instances are cleaning up laser-distance data and two are cleaning up photocell data, but the compound neither knows nor cares. That indifference is the whole point of an abstraction.
 
-## Step 5: Wire compound outputs to the diagram
+## Step 6: Wire compound outputs into behavior
 
-Wire each compound's output to the appropriate summation or motor node in your main diagram, just like any other connection:
+The cleaned-up detections wire into your main diagram like any other connection. You can even drive two different behaviors from the four instances:
 
-- Front-Left Calibrated Sensor → Right Motor summation (weight -1.0, cross-wired avoidance)
-- Front-Right Calibrated Sensor → Left Motor summation (weight -1.0)
-- Rear-Left → steering logic for backing up
-- Rear-Right → same
+- **Avoidance** — Left Obstacle's calibrated output → **Right** Motor summation (weight -1.0), Right Obstacle's → **Left** Motor summation (weight -1.0). Cross-wired inhibition, exactly as in [Obstacle Avoidance](./obstacle-avoidance).
+- **Light-seeking** — Left Light's calibrated output → **Right** Motor summation (weight +0.7), Right Light's → **Left** Motor summation (weight +0.7). Cross-wired excitation, as in [Light Follower](./light-follower).
 
-The main canvas shows four clean boxes and their connections to the motors, instead of 12+ nodes of duplicated preprocessing.
+The main canvas shows four clean boxes feeding the motor summations, instead of a dozen nodes of duplicated preprocessing — and the same calibrator does double duty across two behaviors built from two sensor types.
 
 ## Packaging behavior layers as compounds
 
@@ -111,7 +139,7 @@ Name the port nodes descriptively — "Left Proximity" rather than "Compound Inp
 
 ## Ungrouping
 
-Sometimes you need to modify one instance differently from the others — for example, the rear sensors need a different threshold than the front sensors. Select the compound instance, click **Ungroup**, and the body nodes are inlined back into the main diagram. The compound type still exists for other instances; ungrouping only affects the one you selected.
+Sometimes you need to modify one instance differently from the others — for example, the photocell instances need a lower threshold than the ToF instances, because light readings and distance readings occupy different parts of the 0–100 range. Select the compound instance, click **Ungroup**, and the body nodes are inlined back into the main diagram. The compound type still exists for other instances; ungrouping only affects the one you selected.
 
 ## Design tips
 
@@ -126,14 +154,15 @@ Sometimes you need to modify one instance differently from the others — for ex
 A compound is an abstraction: a chunk of circuit you can name, trust, and then stop thinking about. This is the only known way to build anything truly complex — hide the details of a working sub-part behind a clean interface, then use it as a single move in a larger design. Software does it with functions; brains appear to do it with reusable circuit motifs; evolution does it shamelessly, copying a working sub-system and repurposing it rather than inventing from scratch.
 
 Notice that the abstraction is purely *for you*. The generated robot code doesn't know your compounds exist — at upload time they're flattened back into the same flat mesh of nodes and wires the robot actually runs. The hierarchy is a tool for the designer's mind, not the machine's. Which is a clue worth keeping: the modules we "see" in a complex system are often a story we tell to make it thinkable, as much as a fact about how it runs.
+
 :::
 
 ## What you've learned
 
-Compounds are how you scale from simple Braitenberg vehicles to complex, multi-behavior robots without the diagram becoming unmanageable. They don't change the underlying circuit — they're purely an organizational tool — but they let you think at the right level of abstraction: individual sensor calibration, complete behavior modules, or the overall architecture.
+Compounds are how you scale from simple Braitenberg vehicles to complex, multi-behavior robots without the diagram becoming unmanageable. They don't change the underlying circuit — they're purely an organizational tool — but they let you think at the right level of abstraction: individual sensor calibration, complete behavior modules, or the overall architecture. And because a well-drawn compound depends only on the *signal* it receives, not the hardware behind it, one definition can serve every sensor on the robot at once.
 
 ### Questions to sit with
 
 - Your compounds vanish at upload — the robot runs as one flat mesh. If the modular structure isn't in the machine, is it "really there," or only in your understanding of the machine?
-- "Calibrated Sensor" and "Escape Behavior" are concepts you imposed to make the design thinkable. Do the modules we see in a brain, or in a person's character, have any firmer reality than that?
+- One "Calibrated Sensor" served a laser rangefinder and a photocell without distinguishing them. When you reuse a concept across very different situations, are you seeing a real shared structure, or just declining to look closer?
 - Reuse let you build something complex without holding all of it in your head at once. Is that a limitation you worked around, or is *abstraction itself* what makes complex behavior possible in the first place?

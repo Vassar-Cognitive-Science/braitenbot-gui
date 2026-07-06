@@ -1,13 +1,43 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tauri::{AppHandle, Emitter};
-use tauri_plugin_shell::process::CommandEvent;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
 /// Event name used to stream arduino-cli install progress to the frontend.
 const INSTALL_LOG_EVENT: &str = "arduino-install-log";
 
-#[derive(Debug, thiserror::Error, Serialize)]
+/// Event name used to signal the compile→upload phase transition. Payload is
+/// the phase string (currently only `"uploading"`).
+const UPLOAD_PHASE_EVENT: &str = "arduino-upload-phase";
+
+/// Event name used to stream a line of serial-monitor output to the frontend.
+/// Payload is the raw text chunk (typically one line).
+const SERIAL_MONITOR_LINE_EVENT: &str = "serial-monitor-line";
+
+/// Event name emitted when the serial-monitor child exits (board unplugged,
+/// killed for an upload, or arduino-cli quit) so the UI can show disconnection.
+const SERIAL_MONITOR_CLOSED_EVENT: &str = "serial-monitor-closed";
+
+/// Managed state shared across arduino-cli commands.
+///
+/// - `upload_child` holds the currently running compile/upload child so
+///   `cancel_upload` can kill a wedged flow.
+/// - `installing` is a re-entrancy guard so `install_avr_core` cannot run
+///   twice concurrently.
+/// - `monitor_child` holds the running `arduino-cli monitor` child so
+///   `stop_serial_monitor` (and the port-conflict pause before an upload) can
+///   release the serial port.
+#[derive(Default)]
+pub struct ArduinoState {
+    pub upload_child: Mutex<Option<CommandChild>>,
+    pub installing: AtomicBool,
+    pub monitor_child: Mutex<Option<CommandChild>>,
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ArduinoError {
     #[error("arduino-cli sidecar is missing. Run `npm run fetch:arduino-cli` and rebuild.")]
     SidecarMissing,
@@ -17,6 +47,12 @@ pub enum ArduinoError {
     Io(String),
     #[error("Failed to parse arduino-cli output: {0}")]
     Parse(String),
+}
+
+impl serde::Serialize for ArduinoError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
 }
 
 impl From<std::io::Error> for ArduinoError {
@@ -61,6 +97,69 @@ async fn run_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<(String, S
         String::from_utf8_lossy(&output.stderr).to_string(),
         output.status.success(),
     ))
+}
+
+/// Like `run_sidecar`, but spawns the process and stores its kill handle in
+/// `ArduinoState::upload_child` so `cancel_upload` can terminate a wedged run.
+/// Accumulates stdout/stderr and returns (stdout, stderr, success). A channel
+/// that closes without a `Terminated` event (e.g. the child was killed) is
+/// reported as `success = false`.
+async fn run_sidecar_cancellable(
+    app: &AppHandle,
+    state: &ArduinoState,
+    args: &[&str],
+) -> ArduinoResult<(String, String, bool)> {
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("arduino-cli")
+        .map_err(|_| ArduinoError::SidecarMissing)?
+        .args(args)
+        .spawn()
+        .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
+
+    // Store the kill handle so cancel_upload can reach it. Scoped so the guard
+    // is never held across an await point.
+    {
+        let mut guard = state.upload_child.lock().unwrap();
+        *guard = Some(child);
+    }
+
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    let mut success = false;
+    let mut terminated = false;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(line) => {
+                stdout.push_str(&String::from_utf8_lossy(&line));
+            }
+            CommandEvent::Stderr(line) => {
+                stderr.push_str(&String::from_utf8_lossy(&line));
+            }
+            CommandEvent::Error(err) => {
+                let _ = state.upload_child.lock().unwrap().take();
+                return Err(ArduinoError::CliFailed(err));
+            }
+            CommandEvent::Terminated(payload) => {
+                success = payload.code == Some(0);
+                terminated = true;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    // Clear the stored handle whether the run finished or was cancelled. If the
+    // handle was already taken (by cancel_upload) this is a no-op.
+    let _ = state.upload_child.lock().unwrap().take();
+
+    if !terminated {
+        // Channel closed without a Terminated event — treat as a failed run.
+        return Ok((stdout, stderr, false));
+    }
+
+    Ok((stdout, stderr, success))
 }
 
 /// Quick health check: returns the arduino-cli version string.
@@ -141,13 +240,14 @@ pub async fn list_boards(app: AppHandle) -> ArduinoResult<Vec<BoardInfo>> {
 /// `upload_test_sketch` (the bundled hardware bring-up test).
 async fn build_and_flash(
     app: &AppHandle,
+    state: &ArduinoState,
     sketch_dir: &str,
     fqbn: &str,
     port: &str,
 ) -> ArduinoResult<UploadResult> {
     // Step 1: compile
     let (compile_stdout, compile_stderr, compile_ok) =
-        run_sidecar(app, &["compile", "--fqbn", fqbn, sketch_dir]).await?;
+        run_sidecar_cancellable(app, state, &["compile", "--fqbn", fqbn, sketch_dir]).await?;
     let compile_output = format!("{}{}", compile_stdout, compile_stderr);
     if !compile_ok {
         return Ok(UploadResult {
@@ -157,9 +257,14 @@ async fn build_and_flash(
         });
     }
 
+    // Signal the frontend that we've moved from compile → upload so the UI can
+    // show accurate phase feedback (upload can take minutes on UNO R4).
+    let _ = app.emit(UPLOAD_PHASE_EVENT, "uploading");
+
     // Step 2: upload
     let (upload_stdout, upload_stderr, upload_ok) =
-        run_sidecar(app, &["upload", "-p", port, "--fqbn", fqbn, sketch_dir]).await?;
+        run_sidecar_cancellable(app, state, &["upload", "-p", port, "--fqbn", fqbn, sketch_dir])
+            .await?;
     let upload_output = format!("{}{}", upload_stdout, upload_stderr);
 
     Ok(UploadResult {
@@ -174,6 +279,7 @@ async fn build_and_flash(
 #[tauri::command]
 pub async fn compile_and_upload(
     app: AppHandle,
+    state: State<'_, ArduinoState>,
     sketch_source: String,
     fqbn: String,
     port: String,
@@ -191,7 +297,7 @@ pub async fn compile_and_upload(
         .to_str()
         .ok_or_else(|| ArduinoError::Io("Sketch path is not valid UTF-8".into()))?;
 
-    build_and_flash(&app, sketch_dir_str, &fqbn, &port).await
+    build_and_flash(&app, state.inner(), sketch_dir_str, &fqbn, &port).await
 }
 
 // The standalone hardware bring-up test sketch (see hardware-test/ in the repo),
@@ -207,6 +313,7 @@ const TEST_SKETCH_CONFIG: &str = include_str!("../../hardware-test/config.h");
 #[tauri::command]
 pub async fn upload_test_sketch(
     app: AppHandle,
+    state: State<'_, ArduinoState>,
     fqbn: String,
     port: String,
 ) -> ArduinoResult<UploadResult> {
@@ -228,7 +335,100 @@ pub async fn upload_test_sketch(
         .to_str()
         .ok_or_else(|| ArduinoError::Io("Sketch path is not valid UTF-8".into()))?;
 
-    build_and_flash(&app, sketch_dir_str, &fqbn, &port).await
+    build_and_flash(&app, state.inner(), sketch_dir_str, &fqbn, &port).await
+}
+
+/// Cancels an in-flight compile/upload by killing the arduino-cli child, if any
+/// is running. A no-op when nothing is in progress.
+#[tauri::command]
+pub fn cancel_upload(state: State<'_, ArduinoState>) -> ArduinoResult<()> {
+    let child = state.upload_child.lock().unwrap().take();
+    if let Some(child) = child {
+        child
+            .kill()
+            .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Kills the running serial-monitor child, if any, and clears its slot.
+/// Shared by `stop_serial_monitor` and the restart path in
+/// `start_serial_monitor`. A no-op when no monitor is running.
+fn kill_monitor_child(state: &ArduinoState) -> ArduinoResult<()> {
+    let child = state.monitor_child.lock().unwrap().take();
+    if let Some(child) = child {
+        child
+            .kill()
+            .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
+    }
+    Ok(())
+}
+
+/// Opens `arduino-cli monitor` on the given port at 115200 baud (the rate every
+/// generated sketch and the hardware-test sketch use) and streams each output
+/// line to the frontend as `serial-monitor-line` events. Returns as soon as the
+/// monitor is spawned; the stream is pumped by a background task. When the child
+/// exits — unplugged, killed for an upload, or arduino-cli quitting — a
+/// `serial-monitor-closed` event is emitted so the UI can reflect the drop.
+///
+/// If a monitor is already running it is stopped first, so only one child ever
+/// holds the port. Only one monitor process runs at a time.
+#[tauri::command]
+pub async fn start_serial_monitor(
+    app: AppHandle,
+    state: State<'_, ArduinoState>,
+    port: String,
+) -> ArduinoResult<()> {
+    // Release any monitor already holding the port before opening a new one.
+    kill_monitor_child(state.inner())?;
+
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("arduino-cli")
+        .map_err(|_| ArduinoError::SidecarMissing)?
+        .args([
+            "monitor",
+            "-p",
+            &port,
+            "--config",
+            "baudrate=115200",
+            "--quiet",
+        ])
+        .spawn()
+        .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
+
+    // Store the kill handle so stop_serial_monitor (or an upload) can reach it.
+    {
+        let mut guard = state.monitor_child.lock().unwrap();
+        *guard = Some(child);
+    }
+
+    // Pump the stream in the background so this command can return immediately
+    // while the monitor keeps running across the app's lifetime.
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
+                    let text = String::from_utf8_lossy(&line).to_string();
+                    let _ = app_handle.emit(SERIAL_MONITOR_LINE_EVENT, text);
+                }
+                CommandEvent::Terminated(_) | CommandEvent::Error(_) => break,
+                _ => {}
+            }
+        }
+        let _ = app_handle.emit(SERIAL_MONITOR_CLOSED_EVENT, ());
+    });
+
+    Ok(())
+}
+
+/// Stops the running serial monitor, releasing the port. A no-op when no
+/// monitor is running. The background stream task emits `serial-monitor-closed`
+/// once the child exits.
+#[tauri::command]
+pub fn stop_serial_monitor(state: State<'_, ArduinoState>) -> ArduinoResult<()> {
+    kill_monitor_child(state.inner())
 }
 
 /// Cores we require to cover the supported boards:
@@ -326,6 +526,7 @@ async fn stream_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<()> {
         .spawn()
         .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
 
+    let mut terminated_ok = false;
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {
@@ -342,10 +543,18 @@ async fn stream_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<()> {
                         payload.code
                     )));
                 }
+                terminated_ok = true;
                 break;
             }
             _ => {}
         }
+    }
+    // A channel that closes without a clean Terminated event means the process
+    // died silently — do not report that as success.
+    if !terminated_ok {
+        return Err(ArduinoError::CliFailed(
+            "arduino-cli exited unexpectedly before completing.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -354,33 +563,46 @@ async fn stream_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<()> {
 /// Streams progress back to the frontend via `arduino-install-log` events.
 /// Blocks until installation completes or fails.
 #[tauri::command]
-pub async fn install_avr_core(app: AppHandle) -> ArduinoResult<()> {
+pub async fn install_avr_core(app: AppHandle, state: State<'_, ArduinoState>) -> ArduinoResult<()> {
+    // Re-entrancy guard: refuse to start a second install while one is running.
+    if state.installing.swap(true, Ordering::SeqCst) {
+        return Err(ArduinoError::CliFailed(
+            "An install is already in progress.".to_string(),
+        ));
+    }
+    let result = install_avr_core_inner(&app).await;
+    state.installing.store(false, Ordering::SeqCst);
+    result
+}
+
+/// The actual install work, wrapped by `install_avr_core`'s re-entrancy guard.
+async fn install_avr_core_inner(app: &AppHandle) -> ArduinoResult<()> {
     let _ = app.emit(
         INSTALL_LOG_EVENT,
         "→ Updating package index...\n".to_string(),
     );
-    stream_sidecar(&app, &["core", "update-index"]).await?;
+    stream_sidecar(app, &["core", "update-index"]).await?;
 
     for core in REQUIRED_CORES {
         let _ = app.emit(
             INSTALL_LOG_EVENT,
             format!("\n→ Installing {} core (this may take a few minutes)...\n", core),
         );
-        stream_sidecar(&app, &["core", "install", core]).await?;
+        stream_sidecar(app, &["core", "install", core]).await?;
     }
 
     let _ = app.emit(
         INSTALL_LOG_EVENT,
         "\n→ Updating library index...\n".to_string(),
     );
-    stream_sidecar(&app, &["lib", "update-index"]).await?;
+    stream_sidecar(app, &["lib", "update-index"]).await?;
 
     for lib in REQUIRED_LIBS {
         let _ = app.emit(
             INSTALL_LOG_EVENT,
             format!("\n→ Installing {} library...\n", lib),
         );
-        stream_sidecar(&app, &["lib", "install", lib]).await?;
+        stream_sidecar(app, &["lib", "install", lib]).await?;
     }
 
     let _ = app.emit(

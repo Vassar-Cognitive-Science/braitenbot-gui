@@ -49,8 +49,28 @@ body {
   gap: 1rem;
   padding: 1rem;
 }
- 
- 
+
+/* Prevent accidental text selection during click/drag interactions. */
+.app {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable selection where it is genuinely useful: form fields and
+   copyable output blocks (generated code, install log, error messages). */
+input,
+textarea,
+select,
+.code-preview,
+.setup-log,
+.setup-error,
+.serial-error-msg,
+.serial-monitor-output {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+
 .diagram-layout {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
@@ -110,6 +130,44 @@ body {
   background: var(--muted);
 }
 
+.palette-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.palette-tab {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.palette-tab:hover:not(.active) {
+  color: var(--text);
+}
+
+.palette-tab:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.palette-tab.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 .palette-group {
   display: flex;
   flex-direction: column;
@@ -124,6 +182,9 @@ body {
 
 .palette-category {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -220,16 +281,7 @@ body {
   color: var(--muted);
   text-transform: capitalize;
 }
- 
-.palette-reset {
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text);
-  border-radius: 3px;
-  cursor: pointer;
-}
- 
+
 .diagram-canvas {
   position: relative;
   overflow: hidden;
@@ -693,9 +745,14 @@ body {
   font-size: var(--text-xs);
   padding: 0.2rem 0.35rem;
   border-radius: 2px;
-  cursor: pointer;
+  cursor: grab;
   font-variant-numeric: tabular-nums;
   pointer-events: auto;
+  touch-action: none;
+}
+
+.connection-config-trigger.dragging {
+  cursor: grabbing;
 }
 
 .connection-config-trigger.selected {
@@ -708,6 +765,10 @@ body {
   top: 0.75rem;
   right: 0.75rem;
   width: 230px;
+  /* top + bottom inset of 0.75rem each keeps the panel clear of the canvas
+     edges; scroll internally when it would otherwise overflow a short window. */
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
   z-index: 4;
   border: 1px solid var(--line);
   border-radius: 3px;
@@ -844,12 +905,6 @@ body {
   font-size: 9px;
 }
 
-.transfer-identity {
-  stroke: #3a3b32;
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-}
-
 .transfer-path {
   stroke: var(--accent);
   stroke-width: 2;
@@ -875,47 +930,7 @@ body {
   text-align: center;
 }
 
-.palette-setting {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-
-.palette-setting input {
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: #14150f;
-  padding: 0.42rem 0.48rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text);
-}
-
-.palette-generate {
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--accent);
-  background: rgba(121, 197, 143, 0.12);
-  color: var(--accent);
-  border-radius: 3px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.palette-generate:hover {
-  background: rgba(121, 197, 143, 0.22);
-}
-
 /* Serial connection controls */
-.serial-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--line);
-}
 
 .serial-status {
   display: flex;
@@ -935,65 +950,6 @@ body {
 .serial-status-dot[data-status="connecting"] { background: #f0a500; }
 .serial-status-dot[data-status="connected"] { background: #4ecca3; }
 .serial-status-dot[data-status="error"] { background: #e94560; }
-
-.serial-status-label {
-  color: var(--muted);
-}
-
-.palette-serial-connect {
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--accent);
-  background: rgba(121, 197, 143, 0.08);
-  color: var(--accent);
-  border-radius: 3px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.palette-serial-connect:hover {
-  background: rgba(121, 197, 143, 0.18);
-}
-
-.palette-serial-connect:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.palette-upload {
-  padding: 0.55rem 0.65rem;
-  border: 1px solid #4ecca3;
-  background: rgba(78, 204, 163, 0.12);
-  color: #4ecca3;
-  border-radius: 3px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.palette-upload:hover {
-  background: rgba(78, 204, 163, 0.25);
-}
-
-.palette-upload:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.palette-serial-disconnect {
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--muted);
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: var(--text-xs);
-}
-
-.palette-serial-disconnect:hover {
-  border-color: #e94560;
-  color: #e94560;
-}
 
 .serial-error-msg {
   font-size: var(--text-xs);
@@ -1126,17 +1082,6 @@ body {
   font-weight: 600;
 }
 
-
-/* Connect inherits secondary, uses accent color */
-.toolbar-connect {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* Disconnect hover → danger */
-.toolbar-disconnect:hover {
-  color: #e94560;
-}
 
 
 .toolbar-serial {
@@ -1303,6 +1248,22 @@ body {
   background: var(--line);
 }
 
+.code-dialog-debug-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.code-dialog-debug-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .code-error-hint {
   margin: 0;
   color: var(--muted);
@@ -1311,27 +1272,6 @@ body {
 }
 
 /* Trace mode */
-
-.palette-trace {
-  padding: 0.55rem 0.65rem;
-  border: 1px solid #8a9bb0;
-  background: rgba(138, 155, 176, 0.08);
-  color: #8a9bb0;
-  border-radius: 3px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: var(--text-sm);
-}
-
-.palette-trace:hover {
-  background: rgba(138, 155, 176, 0.16);
-}
-
-.palette-trace.active {
-  background: rgba(210, 180, 120, 0.12);
-  border-color: #c4a862;
-  color: #d4bc78;
-}
 
 /* Canvas indicator when trace mode is on */
 .diagram-canvas.trace-active {
@@ -1439,6 +1379,19 @@ body {
 /* Expanded node height for sensor/constant slider */
 .diagram-node.trace-expanded {
   height: 86px;
+}
+
+/* Color sensor exposes four per-channel sliders — needs extra room. */
+.diagram-node.trace-color-expanded {
+  height: auto;
+  min-height: 86px;
+  padding-bottom: 6px;
+}
+
+.trace-color-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* Disconnected nodes in trace mode */
@@ -1876,4 +1829,97 @@ body {
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+
+/* Serial monitor — slide-up panel over the canvas ------------------------- */
+
+/* Monitor toggle button active state (mirrors .toolbar-trace.active). */
+.toolbar-monitor.active {
+  background: rgba(106, 171, 122, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.serial-monitor {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40vh;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 9998;
+  animation: serial-monitor-in 0.18s ease-out;
+}
+
+@keyframes serial-monitor-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.serial-monitor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.serial-monitor-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.serial-monitor-port {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.serial-monitor-state {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.serial-monitor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.serial-monitor-output {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  background: #14150f;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.serial-monitor-output.is-disconnected {
+  color: var(--muted);
+}
+
+.serial-monitor-line {
+  white-space: pre-wrap;
+}
+
+.serial-monitor-empty {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
 }

@@ -39,7 +39,7 @@ export interface UseScopeSimulationOptions {
 
 export interface UseScopeSimulationResult {
   /** Latest TraceResult, suitable for driving the diagram's trace overlay. */
-  current: TraceResult;
+  traceResult: TraceResult;
   /** Mutable buffer map keyed by node id — read directly from rAF. */
   buffersRef: React.MutableRefObject<Map<string, ScopeRow>>;
   /** Current simulation time in ms — read directly from rAF. */
@@ -90,16 +90,25 @@ export function useScopeSimulation(
   const connectionsRef = useRef(connections);
   const sensorValuesRef = useRef(sensorValues);
   const compoundTypesRef = useRef(compoundTypes);
-  nodesRef.current = nodes;
+  // eslint-disable-next-line react-hooks/refs
+  nodesRef.current = nodes;         // intentional render-time ref sync — avoids restarting tick loop on prop changes
+  // eslint-disable-next-line react-hooks/refs
   connectionsRef.current = connections;
+  // eslint-disable-next-line react-hooks/refs
   sensorValuesRef.current = sensorValues;
+  // eslint-disable-next-line react-hooks/refs
   compoundTypesRef.current = compoundTypes;
 
   const [current, setCurrent] = useState<TraceResult>(EMPTY);
   const [paused, setPaused] = useState(false);
 
   const initSim = useCallback(() => {
-    stateRef.current = createSimulationState(nodesRef.current, loopPeriodMs);
+    stateRef.current = createSimulationState(
+      nodesRef.current,
+      loopPeriodMs,
+      connectionsRef.current,
+      compoundTypesRef.current,
+    );
     timeRef.current = 0;
     buffersRef.current = new Map();
     pulsesRef.current = new Map();
@@ -126,7 +135,8 @@ export function useScopeSimulation(
       stateRef.current = null;
       return;
     }
-    initSim();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    initSim(); // resets sim state (including setCurrent) on enable/structure change — intentional
   }, [enabled, structureKey, loopPeriodMs, initSim]);
 
   useEffect(() => {
@@ -189,7 +199,7 @@ export function useScopeSimulation(
   }, [enabled, paused, loopPeriodMs, windowMs]);
 
   return {
-    current: enabled ? current : EMPTY,
+    traceResult: enabled ? current : EMPTY,
     buffersRef,
     timeRef,
     running: enabled && !paused,

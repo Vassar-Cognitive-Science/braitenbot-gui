@@ -3,7 +3,11 @@ import {
   createSimulationState,
   simulateGraph,
 } from '../useTraceSimulation';
-import type { DiagramNode, DiagramConnection } from '../../types/diagram';
+import type {
+  CompoundTypeDefinition,
+  DiagramNode,
+  DiagramConnection,
+} from '../../types/diagram';
 
 function lin(c: Partial<DiagramConnection> & { id: string; from: string; to: string }): DiagramConnection {
   return {
@@ -56,6 +60,66 @@ describe('simulateGraph tick-stepped mode', () => {
     // Tick 6: delay reads buf[2]=50.
     r = simulateGraph(nodes, connections, { s1: 0 }, state);
     expect(r.nodeValues.d1).toBeCloseTo(50, 9);
+  });
+
+  it('delay inside a compound body transports values (flattened id)', () => {
+    // Regression: createSimulationState iterated the unflattened top-level
+    // nodes, so a delay living inside a compound body never got a ring
+    // buffer — the sim reported a constant 0 for it while the hardware
+    // transported the signal. It must now allocate a buffer for the
+    // flattened, instance-prefixed id `inst-1/d1`.
+    const delayBox: CompoundTypeDefinition = {
+      id: 'delayBox',
+      displayName: 'Delay Box',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input', label: 'in', x: 0, y: 0 },
+          { id: 'd1', type: 'compute-delay', label: 'd', x: 0, y: 0, delayMs: 60 },
+          { id: 'out', type: 'compound-output', label: 'out', x: 0, y: 0 },
+        ],
+        connections: [
+          lin({ id: 'b1', from: 'in', to: 'd1' }),
+          lin({ id: 'b2', from: 'd1', to: 'out' }),
+        ],
+      },
+    };
+    const sensor: DiagramNode = {
+      id: 's1', type: 'sensor-analog', label: 's', x: 0, y: 0, arduinoPort: 'A0',
+    };
+    const inst: DiagramNode = {
+      id: 'inst-1', type: 'compound', label: 'box', x: 0, y: 0, compoundTypeId: 'delayBox',
+    };
+    const motor: DiagramNode = {
+      id: 'motor-left', type: 'servo-cr', label: 'L', x: 0, y: 0, servoPin: '9',
+    };
+    const nodes = [sensor, inst, motor];
+    const connections = [
+      lin({ id: 'c1', from: 's1', to: 'inst-1', toPort: 'in' }),
+      lin({ id: 'c2', from: 'inst-1', to: 'motor-left', fromPort: 'out' }),
+    ];
+    const compoundTypes = [delayBox];
+
+    // 60ms delay at 20ms loop = 3 ticks of history, keyed by the flattened id.
+    const state = createSimulationState(nodes, 20, connections, compoundTypes);
+    expect(state.delays.has('inst-1/d1')).toBe(true);
+
+    const step = (s1: number) =>
+      simulateGraph(nodes, connections, { s1 }, state, compoundTypes);
+
+    // Fill the buffer: reads 0 while capturing 70, 30, 50.
+    expect(step(70).nodeValues['inst-1/d1']).toBe(0);
+    expect(step(30).nodeValues['inst-1/d1']).toBe(0);
+    expect(step(50).nodeValues['inst-1/d1']).toBe(0);
+
+    // Buffer wraps; the captured values now emerge in order and propagate
+    // through the compound output to the motor.
+    let r = step(0);
+    expect(r.nodeValues['inst-1/d1']).toBeCloseTo(70, 9);
+    expect(r.nodeValues['motor-left']).toBeCloseTo(70, 9);
+    r = step(0);
+    expect(r.nodeValues['inst-1/d1']).toBeCloseTo(30, 9);
+    r = step(0);
+    expect(r.nodeValues['inst-1/d1']).toBeCloseTo(50, 9);
   });
 
   it('oscillator phase advances with state.t', () => {
