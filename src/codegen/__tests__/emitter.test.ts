@@ -88,6 +88,27 @@ describe('generateSketch', () => {
     expect(code).toContain('100.0 - (analogRead(SENSOR_Sensor_1) * (100.0 / 1023.0))');
   });
 
+  it('emits kit default pin declarations (5/6) for wheel nodes', () => {
+    // makeWheelNodes in BraitenbergDiagram.tsx sets servoPin '5' (left) and '6'
+    // (right) as the kit's reference wiring. This test locks in that codegen
+    // emits the matching pin constants so the sketch attaches servos to the
+    // correct pins.  If makeWheelNodes ever loses these defaults the sketch
+    // would still compile (pin constants would be absent and the emitter
+    // silently skips empty pins) but the servos would not be attached to
+    // anything, breaking the robot.
+    const nodes: DiagramNode[] = [
+      makeMotor({ servoPin: '5' }),
+      makeRightMotor({ servoPin: '6' }),
+    ];
+    const code = generateSketch(buildGraph(nodes, []));
+
+    expect(code).toContain('const int SERVO_Left_Wheel_PIN = 5;');
+    expect(code).toContain('const int SERVO_Right_Wheel_PIN = 6;');
+    // Attach calls use the constants, so they resolve at compile time.
+    expect(code).toContain('servo_Left_Wheel.attach(SERVO_Left_Wheel_PIN)');
+    expect(code).toContain('servo_Right_Wheel.attach(SERVO_Right_Wheel_PIN)');
+  });
+
   it('inverts the right servo inside the drive() helper', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
     const connections: DiagramConnection[] = [
