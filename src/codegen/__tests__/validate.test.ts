@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { DiagramNode, DiagramConnection } from '../../types/diagram';
+import type {
+  CompoundTypeDefinition,
+  DiagramNode,
+  DiagramConnection,
+} from '../../types/diagram';
 import { validateGraph } from '../validate';
+import { buildGraph } from '../graph';
+import { generateSketch } from '../emitter';
 
 function makeSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
   return {
@@ -302,6 +308,224 @@ describe('validateGraph', () => {
     expect(
       errors.filter((e) => e.severity === 'error' && e.message.includes('Duplicate')),
     ).toHaveLength(2);
+  });
+
+  // --- Dangling edges (C6) ---------------------------------------------------
+
+  it('reports a connection that references a deleted/unknown node', () => {
+    const nodes = [makeSensor(), makeMotor()];
+    const connections = [
+      makeConnection(),
+      makeConnection({ id: 'dangling', from: 'ghost-node', to: 'motor-left' }),
+    ];
+    const errors = validateGraph(nodes, connections);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes('deleted or unknown node'),
+      ),
+    ).toBe(true);
+  });
+
+  it('does not throw from codegen when an edge has an unknown endpoint', () => {
+    const nodes = [makeSensor(), makeMotor()];
+    const connections = [
+      makeConnection(),
+      makeConnection({ id: 'dangling-from', from: 'ghost', to: 'motor-left' }),
+      makeConnection({ id: 'dangling-to', from: 'sensor-1', to: 'phantom' }),
+    ];
+    expect(() => generateSketch(buildGraph(nodes, connections))).not.toThrow();
+  });
+
+  // --- Duplicate pins (C8) ---------------------------------------------------
+
+  it('flags two nodes claiming the same digital pin', () => {
+    const nodes = [
+      makeSensor(),
+      makeMotor({ id: 'motor-left', label: 'Left Wheel', servoPin: '9' }),
+      makeMotor({ id: 'motor-right', label: 'Right Wheel', servoPin: '9' }),
+    ];
+    const connections = [
+      makeConnection({ id: 'c1', to: 'motor-left' }),
+      makeConnection({ id: 'c2', to: 'motor-right' }),
+    ];
+    const errors = validateGraph(nodes, connections);
+    const conflict = errors.find(
+      (e) => e.severity === 'error' && e.message.includes('Pin conflict') && e.message.includes('pin 9'),
+    );
+    expect(conflict).toBeDefined();
+    expect(conflict!.message).toContain('Left Wheel');
+    expect(conflict!.message).toContain('Right Wheel');
+  });
+
+  it('flags a pin shared across different field types (servo vs display CLK)', () => {
+    const display: DiagramNode = {
+      id: 'disp-1', type: 'display-tm1637', label: 'Display',
+      x: 0, y: 0, clkPin: '9', gpioPin: '7',
+    };
+    const nodes = [makeSensor(), makeMotor({ servoPin: '9' }), display];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes('Pin conflict') &&
+          e.message.includes('Left Wheel') && e.message.includes('Display'),
+      ),
+    ).toBe(true);
+  });
+
+  it('does not flag an analog pin against the same-numbered digital pin', () => {
+    // Analog sensor on A0 (i.e. "0" on an analog field) and a servo on digital 0.
+    const nodes = [
+      makeSensor({ arduinoPort: '0' }),
+      makeMotor({ servoPin: '0' }),
+    ];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(errors.some((e) => e.message.includes('Pin conflict'))).toBe(false);
+  });
+
+  it('flags a display whose CLK and DIO pins are the same', () => {
+    const display: DiagramNode = {
+      id: 'disp-1', type: 'display-tm1637', label: 'Display',
+      x: 0, y: 0, clkPin: '5', gpioPin: '5',
+    };
+    const nodes = [makeSensor(), makeMotor(), display];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes('Display') &&
+          e.message.includes('CLK pin') && e.message.includes('GPIO pin'),
+      ),
+    ).toBe(true);
+  });
+
+  // --- Compound-body per-node checks (C9) ------------------------------------
+
+  it('catches a missing pin inside a compound body', () => {
+    const amp: CompoundTypeDefinition = {
+      id: 'amp',
+      displayName: 'Amp',
+      body: {
+        nodes: [
+          // Inner analog sensor with no arduinoPort configured.
+          { id: 'inner', type: 'sensor-analog', label: 'Inner', x: 0, y: 0 },
+          { id: 'out', type: 'compound-output', label: 'out', x: 0, y: 0 },
+        ],
+        connections: [
+          makeConnection({ id: 'b1', from: 'inner', to: 'out' }),
+        ],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      { id: 'inst-1', type: 'compound', compoundTypeId: 'amp', label: 'Amp', x: 0, y: 0 },
+      makeMotor(),
+    ];
+    const connections = [
+      makeConnection({ id: 'e1', from: 'inst-1', to: 'motor-left', fromPort: 'out' }),
+    ];
+    const errors = validateGraph(nodes, connections, [amp]);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes('no Arduino port') &&
+          e.message.includes('Amp ▸ Inner'),
+      ),
+    ).toBe(true);
+  });
+
+  it('catches a reserved (LED) pin inside a compound body', () => {
+    const amp: CompoundTypeDefinition = {
+      id: 'amp',
+      displayName: 'Amp',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input', label: 'in', x: 0, y: 0 },
+          // Inner servo wired to pin 13 (built-in LED).
+          { id: 'buzzer', type: 'servo-cr', label: 'Buzzer', x: 0, y: 0, servoPin: '13' },
+        ],
+        connections: [
+          makeConnection({ id: 'b1', from: 'in', to: 'buzzer' }),
+        ],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      { id: 'inst-1', type: 'compound', compoundTypeId: 'amp', label: 'Amp', x: 0, y: 0 },
+    ];
+    const connections = [
+      makeConnection({ id: 'e1', from: 'sensor-1', to: 'inst-1', toPort: 'in' }),
+    ];
+    const errors = validateGraph(nodes, connections, [amp]);
+    expect(
+      errors.some(
+        (e) => e.severity === 'error' && e.message.includes('built-in LED') &&
+          e.message.includes('Amp ▸ Buzzer'),
+      ),
+    ).toBe(true);
+  });
+
+  // --- Structural checks on the flattened graph (C10) ------------------------
+
+  it('does not falsely report "no source" / "unreachable" for a compound-provided source', () => {
+    // A compound whose body is an oscillator feeding an output port is a
+    // legitimate source, even though the top level has no sensor.
+    const oscSrc: CompoundTypeDefinition = {
+      id: 'osc-src',
+      displayName: 'Oscillator Source',
+      body: {
+        nodes: [
+          { id: 'osc', type: 'compute-oscillator', label: 'Osc', x: 0, y: 0, frequencyHz: 1, amplitude: 100 },
+          { id: 'out', type: 'compound-output', label: 'out', x: 0, y: 0 },
+        ],
+        connections: [
+          makeConnection({ id: 'b1', from: 'osc', to: 'out' }),
+        ],
+      },
+    };
+    const nodes: DiagramNode[] = [
+      { id: 'inst-1', type: 'compound', compoundTypeId: 'osc-src', label: 'Clock', x: 0, y: 0 },
+      makeMotor(),
+    ];
+    const connections = [
+      makeConnection({ id: 'e1', from: 'inst-1', to: 'motor-left', fromPort: 'out' }),
+    ];
+    const errors = validateGraph(nodes, connections, [oscSrc]);
+    expect(errors.some((e) => e.message.includes('no source nodes'))).toBe(false);
+    expect(errors.some((e) => e.message.includes('not connected to any sensor'))).toBe(false);
+    expect(errors.filter((e) => e.severity === 'error')).toHaveLength(0);
+  });
+
+  it('does not falsely report a cycle broken by a delay inside a compound body', () => {
+    // A delay inside the compound breaks the feedback loop; on the unflattened
+    // graph the compound instance looks like a plain cycle participant.
+    const del: CompoundTypeDefinition = {
+      id: 'del',
+      displayName: 'Delay',
+      body: {
+        nodes: [
+          { id: 'in', type: 'compound-input', label: 'in', x: 0, y: 0 },
+          { id: 'd', type: 'compute-delay', label: 'D', x: 0, y: 0, delayMs: 100 },
+          { id: 'out', type: 'compound-output', label: 'out', x: 0, y: 0 },
+        ],
+        connections: [
+          makeConnection({ id: 'b1', from: 'in', to: 'd' }),
+          makeConnection({ id: 'b2', from: 'd', to: 'out' }),
+        ],
+      },
+    };
+    const sum: DiagramNode = { id: 'sum-1', type: 'compute-summation', label: 'Sum', x: 0, y: 0 };
+    const nodes: DiagramNode[] = [
+      makeSensor(),
+      sum,
+      { id: 'inst-1', type: 'compound', compoundTypeId: 'del', label: 'Feedback', x: 0, y: 0 },
+      makeMotor(),
+    ];
+    const connections = [
+      makeConnection({ id: 'e1', from: 'sensor-1', to: 'sum-1' }),
+      makeConnection({ id: 'e2', from: 'sum-1', to: 'motor-left' }),
+      makeConnection({ id: 'e3', from: 'sum-1', to: 'inst-1', toPort: 'in' }),
+      makeConnection({ id: 'e4', from: 'inst-1', to: 'sum-1', fromPort: 'out' }),
+    ];
+    const errors = validateGraph(nodes, connections, [del]);
+    expect(errors.some((e) => e.message.includes('Cycle detected'))).toBe(false);
+    expect(errors.filter((e) => e.severity === 'error')).toHaveLength(0);
   });
 
   it('reports orphan compute node as warning', () => {

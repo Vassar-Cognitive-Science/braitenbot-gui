@@ -25,7 +25,13 @@ export function toposort(
   }
 
   for (const edge of edges) {
-    adjacency.get(edge.from)!.push(edge.to);
+    // Defensively skip edges whose endpoints aren't in the node set. A stale
+    // imported diagram can reference deleted node ids; without this guard the
+    // `adjacency.get(edge.from)!` deref would throw a raw TypeError and crash
+    // codegen. Such edges are surfaced separately as validation errors.
+    const fromAdj = adjacency.get(edge.from);
+    if (!fromAdj || !inDegree.has(edge.to)) continue;
+    fromAdj.push(edge.to);
     inDegree.set(edge.to, (inDegree.get(edge.to) ?? 0) + 1);
   }
 

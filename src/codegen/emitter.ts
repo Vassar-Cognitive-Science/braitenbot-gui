@@ -27,23 +27,51 @@ function sanitizeId(id: string): string {
 
 /**
  * Build a mapping from node id → human-readable C identifier based on labels.
- * Duplicate labels get a numeric suffix (_2, _3, …).
+ * Duplicate labels get a numeric suffix (_1, _2, …). Suffixing tracks the set
+ * of names already handed out and bumps the numeric suffix until it finds a
+ * free one, so a generated `foo_2` can never collide with a literal label
+ * "foo_2" — which would otherwise emit two identical C identifiers and fail to
+ * compile.
  */
 function buildLabelMap(graph: WiringGraph): Map<string, string> {
   const map = new Map<string, string>();
-  const counts = new Map<string, number>();
+  const used = new Set<string>();
+  const baseCounts = new Map<string, number>();
   for (const node of graph.nodes) {
     const base = sanitizeId(node.label || node.id);
-    const prev = counts.get(base) ?? 0;
-    counts.set(base, prev + 1);
-    map.set(node.id, prev === 0 ? base : `${base}_${prev + 1}`);
+    baseCounts.set(base, (baseCounts.get(base) ?? 0) + 1);
   }
-  // Go back and suffix the first occurrence if there were duplicates
+  const nextSuffix = new Map<string, number>();
+  const claim = (candidate: string): string => {
+    let name = candidate;
+    let i = 2;
+    while (used.has(name)) {
+      name = `${candidate}_${i}`;
+      i++;
+    }
+    used.add(name);
+    return name;
+  };
   for (const node of graph.nodes) {
     const base = sanitizeId(node.label || node.id);
-    if ((counts.get(base) ?? 0) > 1 && map.get(node.id) === base) {
-      map.set(node.id, `${base}_1`);
+    let name: string;
+    if ((baseCounts.get(base) ?? 0) <= 1) {
+      // Sole use of this label — keep the bare name unless a suffixed name
+      // from a duplicate group already claimed it.
+      name = claim(base);
+    } else {
+      // Duplicate label — always suffix, skipping any name already taken.
+      let i = nextSuffix.get(base) ?? 1;
+      let candidate = `${base}_${i}`;
+      while (used.has(candidate)) {
+        i++;
+        candidate = `${base}_${i}`;
+      }
+      nextSuffix.set(base, i + 1);
+      used.add(candidate);
+      name = candidate;
     }
+    map.set(node.id, name);
   }
   return map;
 }
@@ -101,25 +129,43 @@ function nodeById(graph: WiringGraph, id: string): GraphNode | undefined {
 /**
  * Emit a piecewise-linear lookup function for a non-linear edge.
  * Input and output: -100 to 100.
+ *
+ * Endpoint clamp guards are emitted first so that every x outside the
+ * declared knot domain saturates to the nearest endpoint y — matching the
+ * JS simulation's clamp semantics (useTraceSimulation.ts, interpolateTransfer)
+ * and ensuring there is no code path in the C function that falls off the end
+ * without an explicit return.
  */
 function emitTransferFunction(edge: GraphEdge, idx: number): string {
   const fname = `transfer_${readableId(edge.from)}_${readableId(edge.to)}_${idx}`;
   const pts = [...edge.transferPoints].sort((a, b) => a.x - b.x);
   const lines: string[] = [];
   lines.push(`float ${fname}(float x) {`);
+  if (pts.length <= 1) {
+    lines.push(`  return ${pts[0]?.y.toFixed(4) ?? '0.0000'};`);
+    lines.push('}');
+    return lines.join('\n');
+  }
+  // Endpoint clamps — saturate inputs outside [first.x, last.x] to the
+  // nearest endpoint y. This matches the trace simulator and guarantees
+  // every code path returns (no undefined-return UB from falling off the end).
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  lines.push(`  if (x <= ${first.x.toFixed(4)}) return ${first.y.toFixed(4)};`);
+  lines.push(`  if (x >= ${last.x.toFixed(4)}) return ${last.y.toFixed(4)};`);
+  // Interior piecewise-linear segments. All but the final segment test their
+  // upper boundary with an if guard; the final segment is a bare return
+  // (x < last.x is already guaranteed by the clamp guard above).
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
     const p1 = pts[i + 1];
     const slope = (p1.y - p0.y) / (p1.x - p0.x || 1);
-    const cond = i === 0
-      ? `if (x <= ${p1.x.toFixed(4)})`
-      : i === pts.length - 2
-        ? `else`
-        : `else if (x <= ${p1.x.toFixed(4)})`;
-    lines.push(`  ${cond} return ${p0.y.toFixed(4)} + ${slope.toFixed(8)} * (x - ${p0.x.toFixed(4)});`);
-  }
-  if (pts.length <= 1) {
-    lines.push(`  return ${pts[0]?.y.toFixed(4) ?? '0.0'};`);
+    const isLast = i === pts.length - 2;
+    if (isLast) {
+      lines.push(`  return ${p0.y.toFixed(4)} + ${slope.toFixed(8)} * (x - ${p0.x.toFixed(4)});`);
+    } else {
+      lines.push(`  if (x <= ${p1.x.toFixed(4)}) return ${p0.y.toFixed(4)} + ${slope.toFixed(8)} * (x - ${p0.x.toFixed(4)});`);
+    }
   }
   lines.push('}');
   return lines.join('\n');
@@ -633,7 +679,63 @@ function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
   ].join('\n');
 }
 
-export function generateSketch(graph: WiringGraph): string {
+export interface GenerateSketchOptions {
+  /** When true, emit a throttled Serial.print block at the end of loop()
+   *  (before timing padding) that prints every sig_ variable at ~250 ms
+   *  intervals.  Default: false. */
+  serialDebug?: boolean;
+}
+
+/**
+ * Collect the names of all `sig_…` variables that will be alive at the
+ * bottom of loop() — one entry per single-output node and one per port for
+ * multi-output nodes (sensor-color).  Ordering follows executionOrder so
+ * the printed line is deterministic.
+ */
+function collectSignalVars(graph: WiringGraph): string[] {
+  const SIG_TYPES = new Set<NodeTypeId>([
+    'sensor-analog', 'sensor-digital', 'sensor-tof', 'sensor-color',
+    'constant',
+    'compute-threshold', 'compute-summation', 'compute-multiply', 'compute-delay',
+    'compute-oscillator', 'compute-noise',
+  ]);
+  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
+  const vars: string[] = [];
+  for (const nodeId of graph.executionOrder) {
+    const node = nodeMap.get(nodeId);
+    if (!node || !SIG_TYPES.has(node.typeId)) continue;
+    const ports = getOutputPorts(node.typeId);
+    if (ports) {
+      for (const port of ports as string[]) {
+        vars.push(`sig_${readableId(node)}_${port}`);
+      }
+    } else {
+      vars.push(varName(node));
+    }
+  }
+  return vars;
+}
+
+/** Emit the serial-debug throttle block.  Inserts before loop-timing padding. */
+function emitSerialDebugBlock(sigVars: string[], indent: string): string {
+  const lines: string[] = [
+    `${indent}// Serial debug: print signal values every 250 ms (does not affect timing)`,
+    `${indent}static unsigned long _dbg_last = 0;`,
+    `${indent}if (millis() - _dbg_last >= 250UL) {`,
+    `${indent}  _dbg_last = millis();`,
+  ];
+  for (let i = 0; i < sigVars.length; i++) {
+    const v = sigVars[i];
+    const label = v.replace(/^sig_/, '');
+    const prefix = i === 0 ? `"${label}="` : `" ${label}="`;
+    lines.push(`${indent}  Serial.print(${prefix}); Serial.print(${v});`);
+  }
+  lines.push(`${indent}  Serial.println();`);
+  lines.push(`${indent}}`);
+  return lines.join('\n');
+}
+
+export function generateSketch(graph: WiringGraph, options: GenerateSketchOptions = {}): string {
   setLabelMap(buildLabelMap(graph));
   const sections: string[] = [];
   const ctx: EmitCtx = { graph, indent: '  ', loopPeriodMs: graph.loopPeriodMs };
@@ -732,6 +834,14 @@ export function generateSketch(graph: WiringGraph): string {
   if (hasDrive) {
     loopLines.push('');
     loopLines.push(`  drive(${inputVar(leftWheel!)}, ${inputVar(rightWheel!)});`);
+  }
+
+  if (options.serialDebug) {
+    const sigVars = collectSignalVars(graph);
+    if (sigVars.length > 0) {
+      loopLines.push('');
+      loopLines.push(emitSerialDebugBlock(sigVars, '  '));
+    }
   }
 
   loopLines.push('');

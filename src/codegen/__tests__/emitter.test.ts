@@ -651,6 +651,78 @@ describe('generateSketch', () => {
     expect(code).not.toContain('compound');
   });
 
+  it('does not emit Serial.print of signals by default', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+
+    // Default call (no options) must not print any signal values.
+    const code = generateSketch(graph);
+    expect(code).not.toContain('Serial.print(sig_');
+    expect(code).not.toContain('_dbg_last');
+
+    // Explicit opt-out is also clean.
+    const codeOff = generateSketch(graph, { serialDebug: false });
+    expect(codeOff).not.toContain('Serial.print(sig_');
+    expect(codeOff).not.toContain('_dbg_last');
+  });
+
+  it('serialDebug: true emits throttled debug prints with signal names', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor(), makeRightMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-1', to: 'motor-right', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph, { serialDebug: true });
+
+    // Throttle guard must be present (250 ms).
+    expect(code).toContain('250UL');
+    expect(code).toContain('_dbg_last');
+
+    // Signal name present (sig_ prefix stripped) with its variable.
+    expect(code).toContain('"Sensor_1="');
+    expect(code).toContain('Serial.print(sig_Sensor_1)');
+
+    // Terminated with println.
+    expect(code).toContain('Serial.println()');
+
+    // Debug block appears after drive() and before the timing padding.
+    const drivePos = code.indexOf('drive(input_Left_Wheel');
+    const debugPos = code.indexOf('_dbg_last');
+    const timingPos = code.indexOf('unsigned long _elapsed');
+    expect(drivePos).toBeGreaterThan(-1);
+    expect(debugPos).toBeGreaterThan(drivePos);
+    expect(timingPos).toBeGreaterThan(debugPos);
+  });
+
+  it('emits distinct identifiers when a suffixed label collides with a literal one', () => {
+    // Labels "foo", "foo", "foo_2": naive dedup turns the second "foo" into
+    // "foo_2", colliding with the literal "foo_2" and producing duplicate C
+    // identifiers that fail to compile.
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 's1', label: 'foo', arduinoPort: 'A0' }),
+      makeSensor({ id: 's2', label: 'foo', arduinoPort: 'A1' }),
+      makeSensor({ id: 's3', label: 'foo_2', arduinoPort: 'A2' }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 's1', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c2', from: 's2', to: 'motor-left', weight: 1 }),
+      conn({ id: 'c3', from: 's3', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Every emitted `float sig_...` declaration must be unique.
+    const decls = [...code.matchAll(/float (sig_\w+)\s*=/g)].map((m) => m[1]);
+    const fooDecls = decls.filter((d) => d.startsWith('sig_foo'));
+    expect(fooDecls).toHaveLength(3);
+    expect(new Set(fooDecls).size).toBe(3);
+  });
+
   it('generates non-linear transfer function', () => {
     const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
     const connections: DiagramConnection[] = [
@@ -675,5 +747,68 @@ describe('generateSketch', () => {
     expect(code).toContain('transfer_Sensor_1_Left_Wheel_0');
     // No * 1023.0 scaling — output is already in -100 to 100 signal domain
     expect(code).not.toContain('* 1023.0');
+  });
+
+  it('emits endpoint clamp guards for a 2-point transfer curve', () => {
+    // The UI default is a 2-point curve [(-100,-100),(100,100)]. Before the fix,
+    // only one if-branch was emitted so any x > 100 fell off the function with
+    // no return — C++ UB that produced garbage motor values. Verify the fix:
+    // two clamp guards appear first, then a bare return for the single interior
+    // segment, so every code path has an explicit return.
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({
+        id: 'c1',
+        from: 'sensor-1',
+        to: 'motor-left',
+        weight: 1,
+        transferMode: 'nonlinear',
+        transferPoints: [
+          { x: -100, y: -100 },
+          { x: 100, y: 100 },
+        ],
+      }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Low-end clamp: x at or below the first knot returns the first y exactly.
+    expect(code).toContain('if (x <= -100.0000) return -100.0000;');
+    // High-end clamp: x at or above the last knot returns the last y exactly.
+    expect(code).toContain('if (x >= 100.0000) return 100.0000;');
+    // Interior: the single piecewise segment is a bare return — no if condition —
+    // so there is no code path that exits the function without a return value.
+    expect(code).toContain('  return -100.0000 + 1.00000000 * (x - -100.0000);');
+    // No old-style `else return` that would leave the high-x path uncovered.
+    expect(code).not.toContain('else return');
+  });
+
+  it('emits endpoint clamp guards for a 3-point (nonlinear) transfer curve', () => {
+    // A nonlinear curve with three knots: verify that clamps still appear at
+    // both ends and that interior segments use the correct if / bare-return
+    // structure without linear extrapolation beyond the domain.
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({
+        id: 'c1',
+        from: 'sensor-1',
+        to: 'motor-left',
+        weight: 1,
+        transferMode: 'nonlinear',
+        transferPoints: [
+          { x: -100, y: -100 },
+          { x: 0, y: 50 },
+          { x: 100, y: 100 },
+        ],
+      }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Clamps at both endpoints.
+    expect(code).toContain('if (x <= -100.0000) return -100.0000;');
+    expect(code).toContain('if (x >= 100.0000) return 100.0000;');
+    // First interior segment: guarded by its upper boundary knot (x=0).
+    expect(code).toContain('if (x <= 0.0000) return -100.0000 + 1.50000000 * (x - -100.0000);');
+    // Last interior segment: bare return (no if condition needed).
+    expect(code).toContain('  return 50.0000 + 0.50000000 * (x - 0.0000);');
   });
 });

@@ -119,14 +119,21 @@ export function buildGraph(
     };
   });
 
-  const graphEdges: GraphEdge[] = connections.map((conn) => ({
-    from: conn.from,
-    fromPort: conn.fromPort,
-    to: conn.to,
-    weight: conn.weight,
-    transferMode: conn.transferMode,
-    transferPoints: conn.transferPoints,
-  }));
+  // Defensively drop edges whose endpoints don't resolve to a node. Validation
+  // surfaces dangling connections as errors, but codegen may be invoked without
+  // a prior validation pass (or on a stale imported diagram), so we filter here
+  // too rather than let the emitter/toposort choke on unknown ids.
+  const nodeIdSet = new Set(graphNodes.map((n) => n.id));
+  const graphEdges: GraphEdge[] = connections
+    .filter((conn) => nodeIdSet.has(conn.from) && nodeIdSet.has(conn.to))
+    .map((conn) => ({
+      from: conn.from,
+      fromPort: conn.fromPort,
+      to: conn.to,
+      weight: conn.weight,
+      transferMode: conn.transferMode,
+      transferPoints: conn.transferPoints,
+    }));
 
   // Cycle-breaking nodes (currently just delay) read a value from a previous
   // loop iteration, so edges into them don't impose an ordering dependency.
