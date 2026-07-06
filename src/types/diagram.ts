@@ -114,6 +114,11 @@ export interface DiagramConnection {
   weight: number;
   transferMode: TransferMode;
   transferPoints: TransferPoint[];
+  /** Position of the weight badge along this connection's curve, as a bézier
+   *  parameter in [0, 1]. When unset, the badge sits at an auto-staggered
+   *  default (0.5 for a lone edge; spread apart for parallel edges between the
+   *  same node pair). Set by dragging the badge along its curve. */
+  labelT?: number;
 }
 
 /**
