@@ -959,6 +959,33 @@ select,
   cursor: grabbing;
 }
 
+.transfer-point.selected {
+  fill: var(--accent);
+  stroke: #d4bc78;
+  stroke-width: 2.5;
+}
+
+.transfer-coord-editor {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.transfer-coord-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.transfer-coord-field input[type='number'] {
+  width: 4.5rem;
+}
+
 .transfer-curve-hint {
   font-size: var(--text-xs);
   color: var(--muted);
