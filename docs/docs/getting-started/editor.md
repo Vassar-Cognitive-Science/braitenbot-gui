@@ -38,6 +38,8 @@ Each section is color-coded to match the node kind:
 
 **To add a node:** drag it from the palette and drop it onto the canvas.
 
+The palette is resizable: drag the handle on its right edge to make it wider or narrower. Double-clicking the handle resets it to the default width.
+
 ## Diagram canvas (center)
 
 The canvas is where you build your circuit. It shows:
@@ -85,12 +87,11 @@ The toolbar is divided into functional groups:
 
 ### Sketch
 - **Loop period** — set the Arduino main loop timing (1–1000 ms)
-- **Generate** — validate the diagram and generate Arduino code
+- **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
 
 ### Device
 - **Board selector** — dropdown showing detected Arduino boards
 - **Refresh** — re-scan serial ports
-- **Upload to Arduino** — compile and upload the generated sketch
 
 ## Config panel (right sidebar)
 
@@ -131,8 +132,7 @@ When signal tracing is active (toggled with **Trace Signal Flow**), a collapsibl
 | **Ctrl/Cmd + Z** | Undo |
 | **Double-click** compound | Enter the compound body editor |
 
-There are no keyboard shortcuts for toolbar actions (Group, Trace, Generate,
-Upload) — those are buttons, described above.
+There are no keyboard shortcuts for toolbar actions (Group, Trace, Upload to robot / Generate) — those are buttons, described above.
 
 ## Next steps
 

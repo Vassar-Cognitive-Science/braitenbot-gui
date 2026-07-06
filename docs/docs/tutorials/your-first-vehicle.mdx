@@ -87,15 +87,16 @@ Before uploading to hardware, you can simulate the signal flow right in the app:
 
 Since both motors always get the same value, the robot drives in a straight line. It can't steer yet — we'll fix that in the next tutorial.
 
-## Step 7: Generate and upload
+## Step 7: Upload to the robot
 
 If you have an Arduino connected:
 
 1. Set the **Loop** period to `20` ms in the toolbar (this means the robot reads its sensor and updates its motors 50 times per second)
-2. Select each wheel motor (**Left Wheel** / **Right Wheel**) and set its **Servo Pin** — for example, `9` for the left wheel and `10` for the right (otherwise Generate fails with a "has no pin configured" validation error)
-3. Click **Generate** — BraitenBot validates your diagram and produces an Arduino sketch
-4. Select your board in the **Device** dropdown
-5. Click **Upload to Arduino**
+2. Select each wheel motor (**Left Wheel** / **Right Wheel**) and set its **Servo Pin** — for example, `9` for the left wheel and `10` for the right (otherwise uploading fails with a "has no pin configured" validation error)
+3. Select your board in the **Device** dropdown
+4. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board
+
+If you don't have a board connected yet, you can still click the **▾** chevron next to the button, choose **Generate code only**, and then click the button to see the generated sketch.
 
 Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
 

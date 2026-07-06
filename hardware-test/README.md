@@ -57,7 +57,7 @@ Target: **Arduino UNO R4 Minima + Sensor Shield V5.0**.
 | Bump — front-left (also the MODE button) | D2 |
 | Bump — front-right / rear-left / rear-right | D3 / D4 / D7 |
 | Left / right wheel servo | D5 / D6 |
-| ToF #1 / #2 XSHUT | D8 / D12 |
+| Left / Right ToF XSHUT | D8 / D12 |
 | TM1637 display CLK / DIO | D9 / D10 |
 | Photocell left / right | A0 / A1 |
 | ToF ×2 + color sensor (I2C) | SDA / SCL (shared bus) |

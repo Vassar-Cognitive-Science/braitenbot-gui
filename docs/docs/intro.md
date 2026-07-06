@@ -31,8 +31,7 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 1. **Design** your circuit on the visual canvas
 2. **Simulate** signal flow to verify behavior
-3. **Generate** an Arduino sketch automatically
-4. **Upload** to your robot with one click
+3. **Generate** an Arduino sketch automatically — or upload it directly to the robot with one click
 
 ## Finding your way around
 

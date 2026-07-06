@@ -73,7 +73,7 @@ select,
 
 .diagram-layout {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: var(--palette-width, 200px) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.75rem;
   height: calc(100vh - 2rem);
@@ -100,6 +100,7 @@ select,
 }
  
 .node-palette {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 3px;
@@ -111,6 +112,40 @@ select,
   min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
+}
+
+/* Drag handle on the right (canvas-facing) edge of the palette */
+.palette-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+.palette-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.15s ease;
+  border-radius: 1px;
+}
+
+.palette-resize-handle:hover::after,
+.palette-resize-handle.dragging::after {
+  background: var(--line);
+}
+
+.palette-resize-handle.dragging::after {
+  background: var(--accent);
 }
 
 .node-palette::-webkit-scrollbar {
@@ -1024,6 +1059,9 @@ select,
 
 /* Base button — ghost default */
 .toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.32rem 0.6rem;
   border: 1px solid var(--line);
   background: transparent;
@@ -1032,6 +1070,12 @@ select,
   cursor: pointer;
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+/* Inline lucide-style icons: keep their intrinsic size inside flex buttons. */
+.lucide-icon {
+  flex-shrink: 0;
+  display: block;
 }
 
 /* Primary — filled, high contrast, draws the eye */
@@ -1080,6 +1124,80 @@ select,
   border-color: #c4a862;
   color: #d4bc78;
   font-weight: 600;
+}
+
+/* Split button — a primary segment plus a chevron that opens a menu to
+   re-point the primary action (Gmail "Send | Schedule send" pattern). */
+.toolbar-split {
+  position: relative;
+  display: inline-flex;
+}
+
+.toolbar-split-primary {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.toolbar-split-chevron {
+  margin-left: -1px;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  /* A hairline divider between the two segments. */
+  border-left-color: rgba(106, 171, 122, 0.5);
+}
+
+.toolbar-split-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.toolbar-split-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 3px;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toolbar-split-menu-item:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.toolbar-split-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-split-menu-item.current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.toolbar-split-menu-check {
+  display: inline-block;
+  width: 0.9em;
+  flex-shrink: 0;
+  text-align: center;
 }
 
 

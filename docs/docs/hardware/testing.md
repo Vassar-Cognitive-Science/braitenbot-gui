@@ -44,8 +44,8 @@ There are nine modes, one per device:
 |---|------|------|
 | `0001` | Left photocell | Raw light reading, 0–1023 (A0). Cover/uncover the sensor and watch it change. |
 | `0002` | Right photocell | Raw light reading, 0–1023 (A1). |
-| `0003` | ToF distance #1 | Distance in millimeters. `9999` means nothing in range; `----` means the sensor wasn't found at boot. |
-| `0004` | ToF distance #2 | Same as above, for the second distance sensor. |
+| `0003` | Left ToF distance | Distance in millimeters. `9999` means nothing in range; `----` means the sensor wasn't found at boot. |
+| `0004` | Right ToF distance | Same as above, for the right-side sensor. |
 | `0005` | Color sensor | The clear-light channel. The Serial Monitor also prints the red, green, and blue values. |
 | `0006` | Bump switches | Four digits, one per switch — front-left, front-right, rear-left, rear-right — each `1` when pressed, `0` when open. (Pressing front-left changes the mode, so test it by navigating; watch the other three here.) |
 | `0007` | Left wheel | Spins the left wheel forward → stop → reverse → stop on a repeating cycle. The display shows the commanded speed (e.g. `60`, `-60`). |

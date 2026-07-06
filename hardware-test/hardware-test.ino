@@ -224,11 +224,11 @@ void setup() {
   pinMode(TOF2_XSHUT_PIN, OUTPUT); digitalWrite(TOF2_XSHUT_PIN, LOW);
   delay(10);
 
-  Serial.print(F("ToF #1 (XSHUT pin ")); Serial.print(TOF1_XSHUT_PIN); Serial.print(F("): "));
+  Serial.print(F("Left ToF (XSHUT pin ")); Serial.print(TOF1_XSHUT_PIN); Serial.print(F("): "));
   tof1Present = bringUpTof(tof1, TOF1_XSHUT_PIN, TOF1_I2C_ADDR);
   Serial.println(tof1Present ? F("OK") : F("NOT FOUND"));
 
-  Serial.print(F("ToF #2 (XSHUT pin ")); Serial.print(TOF2_XSHUT_PIN); Serial.print(F("): "));
+  Serial.print(F("Right ToF (XSHUT pin ")); Serial.print(TOF2_XSHUT_PIN); Serial.print(F("): "));
   tof2Present = bringUpTof(tof2, TOF2_XSHUT_PIN, TOF2_I2C_ADDR);
   Serial.println(tof2Present ? F("OK") : F("NOT FOUND"));
 
@@ -335,25 +335,25 @@ void loop() {
     case MODE_TOF1: {
       if (!tof1Present) {
         showDashes();
-        Serial.println(F("ToF #1: not found at boot"));
+        Serial.println(F("Left ToF: not found at boot"));
         break;
       }
       static int held = 9999;
       readTof(tof1, TOF1_I2C_ADDR >> 1, held);  // 8-bit addr -> 7-bit
       showValue(held);
-      Serial.print(F("ToF #1 distance (mm): ")); Serial.println(held);
+      Serial.print(F("Left ToF distance (mm): ")); Serial.println(held);
       break;
     }
     case MODE_TOF2: {
       if (!tof2Present) {
         showDashes();
-        Serial.println(F("ToF #2: not found at boot"));
+        Serial.println(F("Right ToF: not found at boot"));
         break;
       }
       static int held = 9999;
       readTof(tof2, TOF2_I2C_ADDR >> 1, held);  // 8-bit addr -> 7-bit
       showValue(held);
-      Serial.print(F("ToF #2 distance (mm): ")); Serial.println(held);
+      Serial.print(F("Right ToF distance (mm): ")); Serial.println(held);
       break;
     }
     case MODE_COLOR: {

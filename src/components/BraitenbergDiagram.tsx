@@ -23,6 +23,15 @@ import { canInput, canOutput, isWheelNode, supportsArduinoPort } from './diagram
 import type { ConfigTarget } from './diagramShared';
 import type { useArduino } from '../hooks/useArduino';
 import { useSerialMonitor } from '../hooks/useSerialMonitor';
+import {
+  ChevronDownIcon,
+  GroupIcon,
+  SearchIcon,
+  UngroupIcon,
+  WaypointsIcon,
+} from './icons';
+import type { PrimaryAction } from '../lib/primaryAction';
+import { loadPrimaryAction, savePrimaryAction } from '../lib/primaryAction';
 
 const NODE_W = 148;
 const NODE_H = 64;
@@ -284,6 +293,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
   });
   const [showUploadErrorDialog, setShowUploadErrorDialog] = useState(false);
+  // Split-button primary action ("upload" vs "generate"), persisted so the
+  // toolbar's main button remembers the user's last choice across sessions.
+  const [primaryAction, setPrimaryAction] = useState<PrimaryAction>(() => loadPrimaryAction());
+  const [splitMenuOpen, setSplitMenuOpen] = useState(false);
+  const splitMenuRef = useRef<HTMLDivElement | null>(null);
   const [showSerialMonitor, setShowSerialMonitor] = useState(false);
   const serialMonitor = useSerialMonitor();
   const { pauseForUpload } = serialMonitor;
@@ -766,6 +780,35 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     await uploadTestSketch(selectedBoard.fqbn, selectedBoard.port);
   }, [selectedBoard, uploadTestSketch, pauseForUpload]);
 
+  // Choosing an option in the split-button menu only re-points the primary
+  // segment (and persists it) — it does not run anything. The user then clicks
+  // the primary segment to execute, matching the Gmail "Send | Schedule send"
+  // pattern.
+  const selectPrimaryAction = useCallback((action: PrimaryAction) => {
+    setPrimaryAction(action);
+    savePrimaryAction(action);
+    setSplitMenuOpen(false);
+  }, []);
+
+  // Close the split-button menu on an outside click or Escape.
+  useEffect(() => {
+    if (!splitMenuOpen) return;
+    const onPointerDown = (event: Event) => {
+      if (splitMenuRef.current && !splitMenuRef.current.contains(event.target as Node)) {
+        setSplitMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSplitMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [splitMenuOpen]);
+
   // Serial monitor open/close. The toolbar button toggles both the panel and
   // the underlying monitor process together; closing the panel stops it.
   const openSerialMonitor = useCallback(() => {
@@ -1239,6 +1282,27 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       ? connections.find((connection) => connection.id === configTarget.id) ?? null
       : null;
 
+  // Split-button derived state. Upload requires the desktop shell, a working
+  // arduino-cli, and a selected board; generate-only is always available (it
+  // never touches hardware — matching the old always-on Generate button).
+  const uploadBusy = uploadStatus === 'compiling' || uploadStatus === 'uploading';
+  const uploadSupported = tauriAvailable && cliAvailable;
+  const canUpload = uploadSupported && !!selectedBoard && !!selectedBoard.fqbn;
+  const primaryIsUpload = primaryAction === 'upload';
+  const primaryLabel = primaryIsUpload
+    ? uploadStatus === 'compiling'
+      ? 'Compiling…'
+      : uploadStatus === 'uploading'
+        ? 'Uploading…'
+        : uploadStatus === 'success'
+          ? 'Uploaded!'
+          : uploadStatus === 'error'
+            ? 'Upload failed'
+            : 'Upload to Arduino'
+    : 'Generate';
+  const primaryDisabled = primaryIsUpload ? !canUpload || uploadBusy : false;
+  const runPrimaryAction = primaryIsUpload ? handleUploadToArduino : handleGenerate;
+
   return (
     <section className="diagram-layout">
       <NodePalette compoundTypes={compoundTypes} isEditingCompound={editingPath.length > 0} />
@@ -1257,9 +1321,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 : `Wrap the ${selectedNodeIds.size} selected nodes in a new compound subdiagram.`
             }
           >
-            {selectedNodeIds.size >= 2
-              ? `Group ${selectedNodeIds.size}`
-              : 'Group'}
+            <GroupIcon />
+            <span>
+              {selectedNodeIds.size >= 2
+                ? `Group ${selectedNodeIds.size}`
+                : 'Group'}
+            </span>
           </button>
           <button
             type="button"
@@ -1272,7 +1339,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 : 'Select a single compound instance to ungroup it.'
             }
           >
-            Ungroup
+            <UngroupIcon />
+            <span>Ungroup</span>
           </button>
         </div>
 
@@ -1284,7 +1352,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             className={`toolbar-btn toolbar-secondary toolbar-trace ${traceMode ? 'active' : ''}`}
             onClick={() => setTraceMode((v) => !v)}
           >
-            {traceMode ? 'Exit Trace' : 'Trace Signal Flow'}
+            <WaypointsIcon />
+            <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
         </div>
 
@@ -1304,12 +1373,78 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             />
             <span className="toolbar-setting-unit">ms</span>
           </label>
-          <button
-            className="toolbar-btn toolbar-primary toolbar-generate"
-            onClick={handleGenerate}
-          >
-            Generate
-          </button>
+          <div className="toolbar-split" ref={splitMenuRef}>
+            <button
+              type="button"
+              className="toolbar-btn toolbar-primary toolbar-split-primary"
+              onClick={runPrimaryAction}
+              disabled={primaryDisabled}
+              title={
+                primaryIsUpload
+                  ? canUpload
+                    ? 'Compile the diagram and upload it to the connected board.'
+                    : 'Select a connected board to upload.'
+                  : 'Compile the diagram and show the generated Arduino code.'
+              }
+            >
+              {primaryLabel}
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn toolbar-primary toolbar-split-chevron"
+              onClick={() => setSplitMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={splitMenuOpen}
+              aria-label="Choose the primary action"
+              title="Choose the primary action"
+            >
+              <ChevronDownIcon size={14} />
+            </button>
+            {splitMenuOpen && (
+              <div className="toolbar-split-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={primaryIsUpload}
+                  className={`toolbar-split-menu-item ${primaryIsUpload ? 'current' : ''}`.trim()}
+                  onClick={() => selectPrimaryAction('upload')}
+                  disabled={!uploadSupported}
+                  title={
+                    uploadSupported
+                      ? undefined
+                      : 'Uploading needs the desktop app and arduino-cli.'
+                  }
+                >
+                  <span className="toolbar-split-menu-check" aria-hidden="true">
+                    {primaryIsUpload ? '✓' : ''}
+                  </span>
+                  Upload to robot
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={!primaryIsUpload}
+                  className={`toolbar-split-menu-item ${!primaryIsUpload ? 'current' : ''}`.trim()}
+                  onClick={() => selectPrimaryAction('generate')}
+                >
+                  <span className="toolbar-split-menu-check" aria-hidden="true">
+                    {!primaryIsUpload ? '✓' : ''}
+                  </span>
+                  Generate code only
+                </button>
+              </div>
+            )}
+          </div>
+          {primaryIsUpload && uploadBusy && (
+            <button
+              type="button"
+              className="toolbar-btn toolbar-tertiary"
+              onClick={cancelUpload}
+              title="Cancel the in-progress upload"
+            >
+              Cancel
+            </button>
+          )}
         </div>
 
         <div className="toolbar-group toolbar-serial">
@@ -1374,36 +1509,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   <path d="M2.3 2.6v3.4h3.4" />
                 </svg>
               </button>
-              <button
-                className="toolbar-btn toolbar-primary"
-                onClick={handleUploadToArduino}
-                disabled={
-                  !selectedBoard ||
-                  !selectedBoard.fqbn ||
-                  uploadStatus === 'compiling' ||
-                  uploadStatus === 'uploading'
-                }
-              >
-                {uploadStatus === 'compiling'
-                  ? 'Compiling…'
-                  : uploadStatus === 'uploading'
-                    ? 'Uploading…'
-                    : uploadStatus === 'success'
-                      ? 'Uploaded!'
-                      : uploadStatus === 'error'
-                        ? 'Upload failed'
-                        : 'Upload to Arduino'}
-              </button>
-              {(uploadStatus === 'compiling' || uploadStatus === 'uploading') && (
-                <button
-                  type="button"
-                  className="toolbar-btn toolbar-tertiary"
-                  onClick={cancelUpload}
-                  title="Cancel the in-progress upload"
-                >
-                  Cancel
-                </button>
-              )}
               {lastResult && !lastResult.success && (
                 <button
                   type="button"
@@ -1425,7 +1530,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 }
                 title="View live serial output from the board"
               >
-                Monitor
+                <SearchIcon />
+                <span>Monitor</span>
               </button>
             </>
           )}

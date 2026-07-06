@@ -7,11 +7,11 @@ title: Under the Hood
 
 You don't need anything on this page to use BraitenBot — the editor and tutorials
 cover everything at the diagram level. This is for the curious: what the app
-actually produces when you click **Generate**, and how your work is saved.
+actually produces when you generate or upload a sketch, and how your work is saved.
 
 ## From diagram to sketch
 
-When you click **Generate**, BraitenBot turns your visual diagram into a complete
+When you click **Upload to robot** or **Generate code only**, BraitenBot turns your visual diagram into a complete
 Arduino sketch (a `.ino` file) in four steps:
 
 1. **Validate** — check the diagram for problems that would stop it from running

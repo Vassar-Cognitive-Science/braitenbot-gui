@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DragEvent, PointerEvent } from 'react';
 import type {
   CompoundTypeDefinition,
   DiagramNode,
@@ -7,6 +7,8 @@ import type {
   NodeTypeId,
 } from '../types/diagram';
 import { NODE_TYPES } from '../types/diagram';
+import { BASIC_COMPUTE_TYPES, KIT_OUTPUTS, KIT_SENSORS } from './palettePresets';
+import type { KitPreset } from './palettePresets';
 
 /**
  * Drag payload carried on the dataTransfer when a palette item is dragged onto
@@ -81,41 +83,35 @@ function loadPaletteTab(): PaletteTab {
   }
 }
 
-// ---- Kit presets -----------------------------------------------------------
+// ---- Palette width ---------------------------------------------------------
 
-/**
- * A Basic-tab preset: a friendly kit name that drops a normal node of an
- * existing type with its pins/params pre-filled to match the reference build
- * (see docs/docs/hardware/assembly.md). `kind` selects the accent color;
- * `meta` is the small pin label shown under the name.
- */
-interface KitPreset {
-  key: string;
-  type: NodeTypeId;
-  label: string;
-  meta: string;
-  kind: 'sensor' | 'output';
-  params?: Partial<DiagramNode>;
+const PALETTE_WIDTH_KEY = 'braitenbot-gui:palette-width:v1';
+const PALETTE_WIDTH_DEFAULT = 200;
+const PALETTE_WIDTH_MIN = 180;
+const PALETTE_WIDTH_MAX = 420;
+
+function loadPaletteWidth(): number {
+  try {
+    const raw = localStorage.getItem(PALETTE_WIDTH_KEY);
+    if (!raw) return PALETTE_WIDTH_DEFAULT;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return PALETTE_WIDTH_DEFAULT;
+    return Math.min(PALETTE_WIDTH_MAX, Math.max(PALETTE_WIDTH_MIN, n));
+  } catch {
+    return PALETTE_WIDTH_DEFAULT;
+  }
 }
 
-const KIT_SENSORS: KitPreset[] = [
-  { key: 'photocell-left', type: 'sensor-analog', label: 'Left Photocell', meta: 'A0', kind: 'sensor', params: { arduinoPort: 'A0' } },
-  { key: 'photocell-right', type: 'sensor-analog', label: 'Right Photocell', meta: 'A1', kind: 'sensor', params: { arduinoPort: 'A1' } },
-  { key: 'bump-fl', type: 'sensor-digital', label: 'Bump Front-Left', meta: 'D2', kind: 'sensor', params: { arduinoPort: '2', pullup: true } },
-  { key: 'bump-fr', type: 'sensor-digital', label: 'Bump Front-Right', meta: 'D3', kind: 'sensor', params: { arduinoPort: '3', pullup: true } },
-  { key: 'bump-rl', type: 'sensor-digital', label: 'Bump Rear-Left', meta: 'D4', kind: 'sensor', params: { arduinoPort: '4', pullup: true } },
-  { key: 'bump-rr', type: 'sensor-digital', label: 'Bump Rear-Right', meta: 'D7', kind: 'sensor', params: { arduinoPort: '7', pullup: true } },
-  { key: 'color', type: 'sensor-color', label: 'Color Sensor', meta: 'I2C', kind: 'sensor' },
-  { key: 'tof-1', type: 'sensor-tof', label: 'ToF Distance 1', meta: 'XSHUT D8', kind: 'sensor', params: { xshutPin: '8' } },
-  { key: 'tof-2', type: 'sensor-tof', label: 'ToF Distance 2', meta: 'XSHUT D12', kind: 'sensor', params: { xshutPin: '12' } },
-];
+function savePaletteWidth(width: number): void {
+  try {
+    localStorage.setItem(PALETTE_WIDTH_KEY, String(width));
+  } catch {
+    /* private mode / quota — ignore */
+  }
+}
 
-const KIT_OUTPUTS: KitPreset[] = [
-  { key: 'display', type: 'display-tm1637', label: '7-Segment Display', meta: 'CLK D9 / DIO D10', kind: 'output', params: { clkPin: '9', gpioPin: '10' } },
-];
-
-/** Generic starter compute nodes shown on the Basic tab (no preset params). */
-const BASIC_COMPUTE_TYPES: NodeTypeId[] = ['compute-threshold', 'compute-summation', 'compute-delay'];
+// Kit presets live in palettePresets.ts (data-only module, keeps this file
+// component-only for fast refresh).
 
 interface NodePaletteProps {
   compoundTypes: CompoundTypeDefinition[];
@@ -127,6 +123,9 @@ export function NodePalette({ compoundTypes, isEditingCompound }: NodePalettePro
   const [collapsedPaletteSections, setCollapsedPaletteSections] = useState<
     Record<PaletteSection, boolean>
   >(loadCollapsedPaletteSections);
+  const [paletteWidth, setPaletteWidth] = useState<number>(loadPaletteWidth);
+  const dragState = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
   useEffect(() => {
     try {
@@ -147,6 +146,47 @@ export function NodePalette({ compoundTypes, isEditingCompound }: NodePalettePro
     }
   }, [collapsedPaletteSections]);
 
+  // Sync palette width to a CSS variable on :root so the grid layout tracks it.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--palette-width', `${paletteWidth}px`);
+  }, [paletteWidth]);
+
+  const handleResizePointerDown = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    dragState.current = { startX: e.clientX, startWidth: paletteWidth };
+    setIsDraggingHandle(true);
+  }, [paletteWidth]);
+
+  const handleResizePointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    const delta = e.clientX - dragState.current.startX;
+    const newWidth = Math.min(
+      PALETTE_WIDTH_MAX,
+      Math.max(PALETTE_WIDTH_MIN, dragState.current.startWidth + delta),
+    );
+    setPaletteWidth(newWidth);
+  }, []);
+
+  const handleResizePointerUp = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    if (!dragState.current) return;
+    const delta = e.clientX - dragState.current.startX;
+    const newWidth = Math.min(
+      PALETTE_WIDTH_MAX,
+      Math.max(PALETTE_WIDTH_MIN, dragState.current.startWidth + delta),
+    );
+    dragState.current = null;
+    setIsDraggingHandle(false);
+    savePaletteWidth(newWidth);
+  }, []);
+
+  const handleResizeDoubleClick = useCallback(() => {
+    dragState.current = null;
+    setIsDraggingHandle(false);
+    setPaletteWidth(PALETTE_WIDTH_DEFAULT);
+    savePaletteWidth(PALETTE_WIDTH_DEFAULT);
+  }, []);
+
   const renderPreset = (preset: KitPreset) => (
     <div
       key={preset.key}
@@ -163,6 +203,16 @@ export function NodePalette({ compoundTypes, isEditingCompound }: NodePalettePro
 
   return (
     <aside className="node-palette">
+      {/* Drag handle on the right (canvas-facing) edge */}
+      <div
+        className={`palette-resize-handle${isDraggingHandle ? ' dragging' : ''}`}
+        aria-hidden="true"
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        onPointerCancel={handleResizePointerUp}
+        onDoubleClick={handleResizeDoubleClick}
+      />
       <div className="palette-tabs" role="tablist" aria-label="Palette mode">
         {(['basic', 'advanced'] as const).map((id) => (
           <button
