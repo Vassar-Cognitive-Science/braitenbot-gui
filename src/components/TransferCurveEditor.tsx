@@ -1,6 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, KeyboardEvent } from 'react';
 import type { TransferPoint } from '../types/diagram';
+import { NumberInput } from './NumberInput';
+import {
+  CURVE_X_MIN,
+  CURVE_X_MAX,
+  CURVE_Y_MIN,
+  CURVE_Y_MAX,
+  clampInteriorX,
+  clampAxisY,
+} from '../lib/transferCurve';
 
 interface TransferCurveEditorProps {
   points: TransferPoint[];
@@ -17,11 +26,15 @@ const PLOT_W = SVG_W - PAD_LEFT - PAD_RIGHT;
 const PLOT_H = SVG_H - PAD_TOP - PAD_BOTTOM;
 const POINT_R = 6;
 
+// A press that moves less than this many pixels counts as a click (select),
+// not a drag (move).
+const CLICK_SLOP = 3;
+
 // Signal domain: -100 to 100 on both axes.
-const X_MIN = -100;
-const X_MAX = 100;
-const Y_MIN = -100;
-const Y_MAX = 100;
+const X_MIN = CURVE_X_MIN;
+const X_MAX = CURVE_X_MAX;
+const Y_MIN = CURVE_Y_MIN;
+const Y_MAX = CURVE_Y_MAX;
 
 function toSvgX(val: number): number {
   return PAD_LEFT + ((val - X_MIN) / (X_MAX - X_MIN)) * PLOT_W;
@@ -63,8 +76,26 @@ function isEndpoint(idx: number, length: number): boolean {
 export function TransferCurveEditor({ points, onChange }: TransferCurveEditorProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
+  // Tracks the in-progress press so mouseup can tell a click (select) from a
+  // drag (move), and so the follow-up svg click can be suppressed.
+  const pressRef = useRef<{ idx: number; startX: number; startY: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
 
   const sorted = ensureEndpoints(points);
+
+  // Re-derive the selected point from the freshly-sorted array every render so
+  // the editor never edits a stale index.
+  const selectedPoint =
+    selectedIdx !== null && selectedIdx >= 0 && selectedIdx < sorted.length
+      ? sorted[selectedIdx]
+      : null;
+  const selectedIsEndpoint = selectedIdx !== null && isEndpoint(selectedIdx, sorted.length);
+  const xBounds =
+    selectedPoint && selectedIdx !== null && !selectedIsEndpoint
+      ? { min: sorted[selectedIdx - 1].x + 1, max: sorted[selectedIdx + 1].x - 1 }
+      : { min: X_MIN, max: X_MAX };
 
   const getSvgCoords = useCallback((e: MouseEvent): { x: number; y: number } => {
     const svg = svgRef.current;
@@ -80,7 +111,14 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
   }).join(' ');
 
   const handleSvgClick = useCallback((e: MouseEvent) => {
+    // A click that concluded a point press was already handled on mouseup.
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (draggingIdx !== null) return;
+    // Clicking empty plot deselects any active point.
+    setSelectedIdx(null);
     const { x, y } = getSvgCoords(e);
     const domainX = fromSvgX(x);
     const domainY = fromSvgY(y);
@@ -95,19 +133,31 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
   const handlePointMouseDown = useCallback((e: MouseEvent, idx: number) => {
     e.stopPropagation();
     setDraggingIdx(idx);
+    pressRef.current = { idx, startX: e.clientX, startY: e.clientY, moved: false };
   }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (draggingIdx === null) return;
+    const press = pressRef.current;
+    if (press && !press.moved) {
+      if (
+        Math.abs(e.clientX - press.startX) >= CLICK_SLOP ||
+        Math.abs(e.clientY - press.startY) >= CLICK_SLOP
+      ) {
+        press.moved = true;
+      }
+    }
+    // Hold position until the press crosses the click threshold, so a plain
+    // click never nudges the point.
+    if (press && !press.moved) return;
+
     const { x, y } = getSvgCoords(e);
     let domainX = fromSvgX(x);
     const domainY = fromSvgY(y);
     if (isEndpoint(draggingIdx, sorted.length)) {
       domainX = draggingIdx === 0 ? X_MIN : X_MAX;
     } else {
-      const prevX = sorted[draggingIdx - 1].x;
-      const nextX = sorted[draggingIdx + 1].x;
-      domainX = Math.max(prevX + 1, Math.min(nextX - 1, domainX));
+      domainX = clampInteriorX(domainX, sorted[draggingIdx - 1].x, sorted[draggingIdx + 1].x);
     }
     const updated = sorted.map((p, i) =>
       i === draggingIdx ? { x: domainX, y: domainY } : p,
@@ -116,6 +166,22 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
   }, [draggingIdx, sorted, onChange, getSvgCoords]);
 
   const handleMouseUp = useCallback(() => {
+    const press = pressRef.current;
+    if (press) {
+      // Suppress the click event that fires right after this mouseup.
+      suppressClickRef.current = true;
+      if (!press.moved) {
+        setSelectedIdx(press.idx);
+      }
+    }
+    pressRef.current = null;
+    setDraggingIdx(null);
+  }, []);
+
+  // Leaving the SVG ends the interaction, but no click event follows — don't
+  // arm the suppression flag or it would swallow the next real click.
+  const handleMouseLeave = useCallback(() => {
+    pressRef.current = null;
     setDraggingIdx(null);
   }, []);
 
@@ -123,8 +189,27 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
     e.stopPropagation();
     if (sorted.length <= 2) return;
     if (isEndpoint(idx, sorted.length)) return;
+    // The first click of the double-click already selected this point, so the
+    // deleted point is the selected one: just clear the selection.
+    setSelectedIdx(null);
     onChange(sorted.filter((_, i) => i !== idx));
   }, [sorted, onChange]);
+
+  const commitSelectedX = useCallback((value: number) => {
+    if (selectedIdx === null || selectedIsEndpoint) return;
+    const x = clampInteriorX(value, sorted[selectedIdx - 1].x, sorted[selectedIdx + 1].x);
+    onChange(sorted.map((p, i) => (i === selectedIdx ? { ...p, x } : p)));
+  }, [selectedIdx, selectedIsEndpoint, sorted, onChange]);
+
+  const commitSelectedY = useCallback((value: number) => {
+    if (selectedIdx === null) return;
+    const y = clampAxisY(value);
+    onChange(sorted.map((p, i) => (i === selectedIdx ? { ...p, y } : p)));
+  }, [selectedIdx, sorted, onChange]);
+
+  const handleEditorKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') setSelectedIdx(null);
+  }, []);
 
   const xTicks = [-100, -50, 0, 50, 100];
   const yTicks = [-100, -50, 0, 50, 100];
@@ -139,7 +224,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
         onClick={handleSvgClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
       >
         {/* Plot background */}
         <rect x={PAD_LEFT} y={PAD_TOP} width={PLOT_W} height={PLOT_H} className="transfer-bg" />
@@ -217,14 +302,42 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
             cx={toSvgX(p.x)}
             cy={toSvgY(p.y)}
             r={POINT_R}
-            className={`transfer-point ${draggingIdx === i ? 'dragging' : ''} ${isEndpoint(i, sorted.length) ? 'endpoint' : ''}`}
+            className={`transfer-point ${draggingIdx === i ? 'dragging' : ''} ${selectedIdx === i ? 'selected' : ''} ${isEndpoint(i, sorted.length) ? 'endpoint' : ''}`}
             onMouseDown={(e) => handlePointMouseDown(e, i)}
             onDoubleClick={(e) => handlePointDoubleClick(e, i)}
           />
         ))}
       </svg>
+
+      {selectedPoint && (
+        <div className="transfer-coord-editor" onKeyDown={handleEditorKeyDown}>
+          <label className="transfer-coord-field">
+            <span>X</span>
+            <NumberInput
+              value={selectedPoint.x}
+              onChange={commitSelectedX}
+              min={xBounds.min}
+              max={xBounds.max}
+              integer
+              disabled={selectedIsEndpoint}
+            />
+          </label>
+          <label className="transfer-coord-field">
+            <span>Y</span>
+            <NumberInput
+              value={selectedPoint.y}
+              onChange={commitSelectedY}
+              min={Y_MIN}
+              max={Y_MAX}
+              integer
+            />
+          </label>
+        </div>
+      )}
+
       <div className="transfer-curve-hint">
-        Click to add points. Drag to move. Double-click to remove.
+        Click empty space to add a point. Drag to move. Click a point to edit its
+        coordinates. Double-click to remove.
       </div>
     </div>
   );

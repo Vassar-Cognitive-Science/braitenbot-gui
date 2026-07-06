@@ -345,6 +345,50 @@ select,
   pointer-events: auto;
 }
 
+.canvas-zoom-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.1rem 0.15rem;
+  background: var(--line);
+}
+
+.canvas-block-scale {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.2rem;
+}
+
+.canvas-block-scale-label {
+  border: none;
+  background: none;
+  padding: 0.32rem 0.15rem;
+  font-size: var(--text-xs, 0.72rem);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.canvas-block-scale-label:hover {
+  color: var(--text);
+}
+
+.canvas-block-scale-slider {
+  width: 84px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.canvas-block-scale-value {
+  min-width: 2.6rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs, 0.72rem);
+  color: var(--muted);
+  text-align: right;
+}
+
 .diagram-canvas.panning,
 .diagram-canvas.panning * {
   cursor: grabbing !important;
@@ -453,6 +497,11 @@ select,
   cursor: move;
   z-index: 2;
   pointer-events: auto;
+  /* Global block-size scale. transform-origin top-left keeps left/top in
+     unscaled node coordinates so the JS connection math only has to scale
+     width/height, not re-anchor the corner. */
+  transform: scale(var(--block-scale, 1));
+  transform-origin: top left;
 }
 
 .diagram-node.selected {
@@ -957,6 +1006,33 @@ select,
   fill: #d4bc78;
   stroke: #d4bc78;
   cursor: grabbing;
+}
+
+.transfer-point.selected {
+  fill: var(--accent);
+  stroke: #d4bc78;
+  stroke-width: 2.5;
+}
+
+.transfer-coord-editor {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.transfer-coord-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.transfer-coord-field input[type='number'] {
+  width: 4.5rem;
 }
 
 .transfer-curve-hint {

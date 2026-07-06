@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, MouseEvent, PointerEvent } from 'react';
+import type { CSSProperties, DragEvent, MouseEvent, PointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, OutputPortId } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts, DEFAULT_TOF_MAX_MM } from '../types/diagram';
@@ -37,6 +37,15 @@ const NODE_W = 148;
 const NODE_H = 64;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 const TM1637_DEFAULT_BRIGHTNESS = 3;
+
+// Global block-size scale applied to every rendered node (a view preference,
+// independent of canvas zoom). Persisted to localStorage; never written into
+// the diagram file (node positions stay in unscaled world coordinates).
+const MIN_BLOCK_SCALE = 0.6;
+const MAX_BLOCK_SCALE = 1.5;
+const BLOCK_SCALE_STEP = 0.05;
+const DEFAULT_BLOCK_SCALE = 1;
+const BLOCK_SCALE_STORAGE_KEY = 'braitenbot-gui:block-scale:v1';
 
 interface RobotOverlayLayout {
   bodyCx: number;
@@ -115,30 +124,39 @@ function staggeredLabelT(index: number, count: number): number {
   return Math.max(0.3, Math.min(0.7, t));
 }
 
-/** Horizontal offset (px, local to the node) of the output anchor for a given port. */
+/**
+ * Horizontal offset (px, in canvas space) of the output anchor for a given
+ * port. `scale` is the current block scale so the endpoint lands on the
+ * handle, which CSS positions at a percentage of the (scaled) node width.
+ */
 function portOffsetX(
   node: DiagramNode,
   fromPort?: OutputPortId,
   compoundTypes?: CompoundTypeDefinition[],
+  scale = 1,
 ): number {
   const ports = getOutputPorts(node.type, node, compoundTypes);
-  if (!ports || ports.length === 0) return NODE_W / 2;
+  if (!ports || ports.length === 0) return (NODE_W / 2) * scale;
   const idx = fromPort ? ports.indexOf(fromPort) : -1;
   const i = idx >= 0 ? idx : 0;
-  return ((i + 0.5) / ports.length) * NODE_W;
+  return ((i + 0.5) / ports.length) * NODE_W * scale;
 }
 
-/** Horizontal offset (px, local to the node) of the input anchor for a given port. */
+/**
+ * Horizontal offset (px, in canvas space) of the input anchor for a given
+ * port. See `portOffsetX` for the `scale` argument.
+ */
 function inputPortOffsetX(
   node: DiagramNode,
   toPort?: string,
   compoundTypes?: CompoundTypeDefinition[],
+  scale = 1,
 ): number {
   const ports = getInputPorts(node.type, node, compoundTypes);
-  if (!ports || ports.length === 0) return NODE_W / 2;
+  if (!ports || ports.length === 0) return (NODE_W / 2) * scale;
   const idx = toPort ? ports.indexOf(toPort) : -1;
   const i = idx >= 0 ? idx : 0;
-  return ((i + 0.5) / ports.length) * NODE_W;
+  return ((i + 0.5) / ports.length) * NODE_W * scale;
 }
 
 function weightToColor(weight: number): string {
@@ -310,6 +328,29 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // so a whole drag collapses to one entry (reset at each drag start).
   const didPushDragUndoRef = useRef(false);
   const { zoom, pan, setPan, resetView, zoomByStep } = useViewport(canvasRef);
+  // Global block-size scale (a view preference, distinct from canvas zoom).
+  // Restored from localStorage; only the rendered node size changes, never the
+  // stored node positions.
+  const [blockScale, setBlockScale] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(BLOCK_SCALE_STORAGE_KEY);
+      if (raw) {
+        const parsed = Number(JSON.parse(raw));
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    } catch { /* ignore storage errors */ }
+    return DEFAULT_BLOCK_SCALE;
+  });
+  const handleBlockScaleChange = useCallback((next: number) => {
+    setBlockScale(next);
+    try {
+      localStorage.setItem(BLOCK_SCALE_STORAGE_KEY, JSON.stringify(next));
+    } catch { /* ignore storage errors */ }
+  }, []);
+  const resetBlockScale = useCallback(
+    () => handleBlockScaleChange(DEFAULT_BLOCK_SCALE),
+    [handleBlockScaleChange],
+  );
   // Connection whose weight badge is being dragged along its curve, for the
   // grabbing cursor. Null when no badge is being dragged.
   const [draggingBadgeId, setDraggingBadgeId] = useState<string | null>(null);
@@ -321,21 +362,24 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
   const nodeWorldPos = useCallback(
     (node: DiagramNode): { x: number; y: number } => {
+      // Wheel-anchored motors are centered on their wheel. The node renders
+      // with transform-origin top-left, so back off half the *scaled* size to
+      // keep the visual center on the wheel at any block scale.
       if (node.id === 'motor-left') {
         return {
-          x: robotLayout.leftWheelCx * zoom - NODE_W / 2,
-          y: robotLayout.leftWheelCy * zoom - NODE_H / 2,
+          x: robotLayout.leftWheelCx * zoom - (NODE_W / 2) * blockScale,
+          y: robotLayout.leftWheelCy * zoom - (NODE_H / 2) * blockScale,
         };
       }
       if (node.id === 'motor-right') {
         return {
-          x: robotLayout.rightWheelCx * zoom - NODE_W / 2,
-          y: robotLayout.rightWheelCy * zoom - NODE_H / 2,
+          x: robotLayout.rightWheelCx * zoom - (NODE_W / 2) * blockScale,
+          y: robotLayout.rightWheelCy * zoom - (NODE_H / 2) * blockScale,
         };
       }
       return { x: node.x * zoom, y: node.y * zoom };
     },
-    [zoom, robotLayout],
+    [zoom, robotLayout, blockScale],
   );
 
   const [scopeOpen, setScopeOpen] = useState(true);
@@ -896,9 +940,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         if (!from || !to) return null;
         const fromWorld = nodeWorldPos(from);
         const toWorld = nodeWorldPos(to);
-        const x1 = fromWorld.x + portOffsetX(from, connection.fromPort, compoundTypes);
-        const y1 = fromWorld.y + NODE_H;
-        const x2 = toWorld.x + inputPortOffsetX(to, connection.toPort, compoundTypes);
+        const x1 = fromWorld.x + portOffsetX(from, connection.fromPort, compoundTypes, blockScale);
+        const y1 = fromWorld.y + NODE_H * blockScale;
+        const x2 = toWorld.x + inputPortOffsetX(to, connection.toPort, compoundTypes, blockScale);
         const y2 = toWorld.y;
 
         const key = [connection.from, connection.to].sort().join('::');
@@ -916,7 +960,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
-  }, [connections, nodeMap, nodeWorldPos, compoundTypes]);
+  }, [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -999,6 +1043,42 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         if (configTarget.kind === 'node') deleteNode(configTarget.id);
         if (configTarget.kind === 'connection') deleteConnection(configTarget.id);
       }
+      // Trace mode: arrow keys adjust the selected node's input value, so the
+      // user can click a node and nudge it without grabbing the tiny slider.
+      // Up/Right increase, Down/Left decrease; Shift steps by 10.
+      const arrowDelta =
+        event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 :
+        event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0;
+      if (arrowDelta !== 0 && !mod && traceMode && configTarget?.kind === 'node') {
+        if (isBlocked()) return;
+        const node = nodeMap[configTarget.id];
+        if (!node) return;
+        const nodeType = TYPE_BY_ID[node.type];
+        const step = arrowDelta * (event.shiftKey ? 10 : 1);
+        if (node.type === 'sensor-digital') {
+          event.preventDefault();
+          setSensorValues((prev) => ({ ...prev, [node.id]: arrowDelta > 0 ? 100 : 0 }));
+        } else if (nodeType.kind === 'sensor' && node.type !== 'sensor-color') {
+          event.preventDefault();
+          setSensorValues((prev) => ({
+            ...prev,
+            [node.id]: Math.max(0, Math.min(100, (prev[node.id] ?? 50) + step)),
+          }));
+        } else if (node.type === 'compound-input') {
+          event.preventDefault();
+          setSensorValues((prev) => ({
+            ...prev,
+            [node.id]: Math.max(-100, Math.min(100, (prev[node.id] ?? 0) + step)),
+          }));
+        } else if (nodeType.kind === 'constant') {
+          event.preventDefault();
+          setNodes((prev) => prev.map((n) =>
+            n.id === node.id
+              ? { ...n, constantValue: Math.max(-100, Math.min(100, (n.constantValue ?? 0) + step)) }
+              : n,
+          ));
+        }
+      }
       // Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y.
       if (mod && ((key === 'z' && event.shiftKey) || key === 'y')) {
         if (isBlocked()) return;
@@ -1012,7 +1092,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, nodeMap, setNodes]);
 
   const beginNodeDrag = useCallback((event: MouseEvent, nodeId: string) => {
     if (event.button !== 0) return;
@@ -1167,8 +1247,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     pushUndo();
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const screenX = event.clientX - rect.left - NODE_W / 2;
-    const screenY = event.clientY - rect.top - NODE_H / 2;
+    // Center the (scaled) node under the cursor: the node renders with
+    // transform-origin top-left, so offset by half the scaled size.
+    const screenX = event.clientX - rect.left - (NODE_W / 2) * blockScale;
+    const screenY = event.clientY - rect.top - (NODE_H / 2) * blockScale;
     const x = (screenX - pan.x) / zoom;
     const y = (screenY - pan.y) / zoom;
 
@@ -1586,7 +1668,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         )}
         <div
           className="diagram-world"
-          style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0)` }}
+          style={{
+            transform: `translate3d(${pan.x}px, ${pan.y}px, 0)`,
+            ['--block-scale' as string]: blockScale,
+          } as CSSProperties}
         >
         <div
           className="robot-overlay robot-body"
@@ -1642,8 +1727,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               <path
                 className="draft-link"
                 d={makePath(
-                  srcWorld.x + portOffsetX(src, linkDraftSource.port, compoundTypes),
-                  srcWorld.y + NODE_H,
+                  srcWorld.x + portOffsetX(src, linkDraftSource.port, compoundTypes, blockScale),
+                  srcWorld.y + NODE_H * blockScale,
                   linkDraftPoint.x,
                   linkDraftPoint.y,
                 )}
@@ -1724,6 +1809,30 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         />
 
         <div className="canvas-zoom-overlay">
+          <div className="canvas-block-scale" title="Resize all blocks (double-click to reset)">
+            <button
+              type="button"
+              className="canvas-block-scale-label"
+              onClick={resetBlockScale}
+              title="Reset block size to 100%"
+              aria-label={`Block size ${Math.round(blockScale * 100)}%. Click to reset.`}
+            >
+              Blocks
+            </button>
+            <input
+              type="range"
+              className="canvas-block-scale-slider"
+              min={MIN_BLOCK_SCALE}
+              max={MAX_BLOCK_SCALE}
+              step={BLOCK_SCALE_STEP}
+              value={blockScale}
+              onChange={(event) => handleBlockScaleChange(Number(event.target.value))}
+              onDoubleClick={resetBlockScale}
+              aria-label="Block size"
+            />
+            <span className="canvas-block-scale-value">{Math.round(blockScale * 100)}%</span>
+          </div>
+          <div className="canvas-zoom-divider" />
           <button
             type="button"
             className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"

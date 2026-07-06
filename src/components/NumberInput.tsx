@@ -8,6 +8,7 @@ interface NumberInputProps {
   step?: number;
   /** Round committed values to whole numbers (parallel to parseInt semantics). */
   integer?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -20,7 +21,7 @@ interface NumberInputProps {
  * text (empty, "-", "1e") stays in the field until blur, which reverts the
  * display to the last committed value without ever committing a default.
  */
-export function NumberInput({ value, onChange, min, max, step, integer }: NumberInputProps) {
+export function NumberInput({ value, onChange, min, max, step, integer, disabled }: NumberInputProps) {
   const [text, setText] = useState(() => value.toString());
   const lastCommitted = useRef(value);
 
@@ -46,6 +47,7 @@ export function NumberInput({ value, onChange, min, max, step, integer }: Number
       min={min}
       max={max}
       step={step}
+      disabled={disabled}
       value={text}
       onChange={(event) => {
         const next = event.target.value;
