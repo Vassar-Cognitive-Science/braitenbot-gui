@@ -1043,6 +1043,42 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         if (configTarget.kind === 'node') deleteNode(configTarget.id);
         if (configTarget.kind === 'connection') deleteConnection(configTarget.id);
       }
+      // Trace mode: arrow keys adjust the selected node's input value, so the
+      // user can click a node and nudge it without grabbing the tiny slider.
+      // Up/Right increase, Down/Left decrease; Shift steps by 10.
+      const arrowDelta =
+        event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 :
+        event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0;
+      if (arrowDelta !== 0 && !mod && traceMode && configTarget?.kind === 'node') {
+        if (isBlocked()) return;
+        const node = nodeMap[configTarget.id];
+        if (!node) return;
+        const nodeType = TYPE_BY_ID[node.type];
+        const step = arrowDelta * (event.shiftKey ? 10 : 1);
+        if (node.type === 'sensor-digital') {
+          event.preventDefault();
+          setSensorValues((prev) => ({ ...prev, [node.id]: arrowDelta > 0 ? 100 : 0 }));
+        } else if (nodeType.kind === 'sensor' && node.type !== 'sensor-color') {
+          event.preventDefault();
+          setSensorValues((prev) => ({
+            ...prev,
+            [node.id]: Math.max(0, Math.min(100, (prev[node.id] ?? 50) + step)),
+          }));
+        } else if (node.type === 'compound-input') {
+          event.preventDefault();
+          setSensorValues((prev) => ({
+            ...prev,
+            [node.id]: Math.max(-100, Math.min(100, (prev[node.id] ?? 0) + step)),
+          }));
+        } else if (nodeType.kind === 'constant') {
+          event.preventDefault();
+          setNodes((prev) => prev.map((n) =>
+            n.id === node.id
+              ? { ...n, constantValue: Math.max(-100, Math.min(100, (n.constantValue ?? 0) + step)) }
+              : n,
+          ));
+        }
+      }
       // Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y.
       if (mod && ((key === 'z' && event.shiftKey) || key === 'y')) {
         if (isBlocked()) return;
@@ -1056,7 +1092,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, nodeMap, setNodes]);
 
   const beginNodeDrag = useCallback((event: MouseEvent, nodeId: string) => {
     if (event.button !== 0) return;
