@@ -25,6 +25,9 @@ npm run tauri:dev    # run the desktop app (primary dev workflow)
 npm run tauri:build  # produce a distributable desktop bundle
 npm run dev          # frontend-only Vite dev server (Tauri mode, no shell)
 npm run build        # frontend-only production build for Tauri
+npm run typecheck    # tsc --noEmit (fast type check, no output)
+npm run lint         # ESLint (flat config, --max-warnings 0)
+npm test             # vitest run (unit tests)
 ```
 
 ## Architecture
@@ -34,12 +37,15 @@ npm run build        # frontend-only production build for Tauri
 | File | Purpose |
 |---|---|
 | `src/components/BraitenbergDiagram.tsx` | Core diagram editor — node/connection state, drag-drop, robot overlay, config panel |
+| `src/components/Oscilloscope.tsx` | Real-time signal oscilloscope panel driven by `useScopeSimulation` |
+| `src/components/NumberInput.tsx` | Controlled numeric input with keyboard/scroll increment |
 | `src/components/SetupModal.tsx` | First-run Arduino detection/setup dialog |
 | `src/components/TransferCurveEditor.tsx` | Per-connection transfer curve editor |
 | `src/App.css` | All styling (layout, nodes, robot overlay, config panel) |
 | `src/App.tsx` | Root component wiring the diagram and setup modal |
 | `src/hooks/useArduino.ts` | Arduino detection + compile/upload via Tauri |
 | `src/hooks/useDiagramPersistence.ts` | Local-storage persistence for diagrams |
+| `src/hooks/useScopeSimulation.ts` | Tick-stepped simulation loop with rolling scope buffers |
 | `src/hooks/useTraceSimulation.ts` | Signal-flow simulation/tracing |
 | `src/lib/tauri.ts` | Tauri environment detection + invoke helpers |
 | `src/lib/diagramFile.ts` | Diagram import/export |
@@ -49,10 +55,11 @@ npm run build        # frontend-only production build for Tauri
 
 ### Node Types
 
-- **Sensors**: `sensor-analog`, `sensor-digital`, `sensor-i2c` — configurable Arduino port
-- **Compute**: `compute-threshold`, `compute-delay`, `compute-summation`, `compute-multiply` — intermediate signal processing
+- **Sensors**: `sensor-analog`, `sensor-digital`, `sensor-color` (TCS34725 RGBC), `sensor-tof` (VL53L4CD ToF distance)
+- **Compute**: `compute-threshold`, `compute-delay`, `compute-summation`, `compute-multiply`, `compute-oscillator`, `compute-noise`
 - **Constants**: `constant` — fixed-value input
-- **Actuators**: `motor`, `servo` — outputs (two motors per diagram anchor to the wheels)
+- **Outputs**: `servo-cr` (continuous servo), `servo-positional`, `digital-out`, `display-tm1637` (7-segment)
+- **Compound**: `compound` — user-defined sub-diagram instance; `compound-input` / `compound-output` port anchors (body-only)
 
 ### Diagram Data Model
 

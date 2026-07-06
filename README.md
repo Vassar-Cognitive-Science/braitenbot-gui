@@ -26,7 +26,7 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 
 ### Prerequisites
 
-- Node.js ≥ 18
+- Node.js ≥ 20
 - npm ≥ 9
 - Rust toolchain (for the Tauri desktop build — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/))
 
@@ -36,6 +36,9 @@ sensors to motors. This GUI focuses on composing those circuits visually.
 npm install
 npm run tauri:dev     # run the desktop app in development
 npm run tauri:build   # produce a distributable desktop bundle
+npm run typecheck     # type-check without emitting
+npm run lint          # ESLint
+npm test              # unit tests (vitest)
 ```
 
 `npm run tauri:dev` automatically runs the frontend dev server via Vite; you do
