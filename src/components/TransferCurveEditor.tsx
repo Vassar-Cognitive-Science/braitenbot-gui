@@ -178,6 +178,13 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
     setDraggingIdx(null);
   }, []);
 
+  // Leaving the SVG ends the interaction, but no click event follows — don't
+  // arm the suppression flag or it would swallow the next real click.
+  const handleMouseLeave = useCallback(() => {
+    pressRef.current = null;
+    setDraggingIdx(null);
+  }, []);
+
   const handlePointDoubleClick = useCallback((e: MouseEvent, idx: number) => {
     e.stopPropagation();
     if (sorted.length <= 2) return;
@@ -217,7 +224,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
         onClick={handleSvgClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
       >
         {/* Plot background */}
         <rect x={PAD_LEFT} y={PAD_TOP} width={PLOT_W} height={PLOT_H} className="transfer-bg" />
