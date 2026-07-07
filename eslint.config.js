@@ -31,6 +31,24 @@ export default tseslint.config(
     },
   },
 
+  // --- Relay server (Node) ---
+  {
+    files: ['relay/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+      },
+    },
+  },
+
   // --- Plain JS/MJS utility scripts ---
   {
     files: ['scripts/**/*.mjs'],

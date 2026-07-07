@@ -122,7 +122,7 @@ describe('simulateGraph tick-stepped mode', () => {
     expect(r.nodeValues['inst-1/d1']).toBeCloseTo(50, 9);
   });
 
-  it('oscillator phase advances with state.t', () => {
+  it('oscillator phase advances with the tick index', () => {
     const osc: DiagramNode = {
       id: 'o1', type: 'compute-oscillator', label: 'o', x: 0, y: 0, frequencyHz: 1, amplitude: 100,
     };
@@ -137,20 +137,21 @@ describe('simulateGraph tick-stepped mode', () => {
       lin({ id: 'c1', from: 'o1', to: 'sum1' }),
       lin({ id: 'c2', from: 'sum1', to: 'motor-left' }),
     ];
-    const state = createSimulationState(nodes, 20);
+    // 250ms loop so whole ticks hit the sine's quarter periods at 1Hz.
+    const state = createSimulationState(nodes, 250);
 
-    // At t=0: 100 * sin(0) = 0.
-    state.t = 0;
+    // Tick 0 (t=0): 100 * sin(0) = 0.
+    state.tick = 0;
     let r = simulateGraph(nodes, connections, {}, state);
     expect(r.nodeValues.o1).toBeCloseTo(0, 9);
 
-    // At t=250ms with 1Hz: 100 * sin(π/2) = 100.
-    state.t = 250;
+    // Tick 1 (t=250ms) with 1Hz: 100 * sin(π/2) = 100.
+    state.tick = 1;
     r = simulateGraph(nodes, connections, {}, state);
     expect(r.nodeValues.o1).toBeCloseTo(100, 9);
 
-    // At t=750ms: 100 * sin(3π/2) = -100.
-    state.t = 750;
+    // Tick 3 (t=750ms): 100 * sin(3π/2) = -100.
+    state.tick = 3;
     r = simulateGraph(nodes, connections, {}, state);
     expect(r.nodeValues.o1).toBeCloseTo(-100, 9);
   });
