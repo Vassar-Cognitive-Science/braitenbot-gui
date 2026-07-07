@@ -18,8 +18,10 @@ export interface KitPreset {
 }
 
 export const KIT_SENSORS: KitPreset[] = [
-  { key: 'photocell-left', type: 'sensor-analog', label: 'Left Photocell', meta: 'A0', kind: 'sensor', params: { arduinoPort: 'A0' } },
-  { key: 'photocell-right', type: 'sensor-analog', label: 'Right Photocell', meta: 'A1', kind: 'sensor', params: { arduinoPort: 'A1' } },
+  // Photocells are wired so more light reads lower; invert by default so a
+  // fresh drop gives new users the expected more light → more signal behavior.
+  { key: 'photocell-left', type: 'sensor-analog', label: 'Left Photocell', meta: 'A0', kind: 'sensor', params: { arduinoPort: 'A0', invert: true } },
+  { key: 'photocell-right', type: 'sensor-analog', label: 'Right Photocell', meta: 'A1', kind: 'sensor', params: { arduinoPort: 'A1', invert: true } },
   { key: 'bump-fl', type: 'sensor-digital', label: 'Bump Front-Left', meta: 'D2', kind: 'sensor', params: { arduinoPort: '2', pullup: true } },
   { key: 'bump-fr', type: 'sensor-digital', label: 'Bump Front-Right', meta: 'D3', kind: 'sensor', params: { arduinoPort: '3', pullup: true } },
   { key: 'bump-rl', type: 'sensor-digital', label: 'Bump Rear-Left', meta: 'D4', kind: 'sensor', params: { arduinoPort: '4', pullup: true } },
