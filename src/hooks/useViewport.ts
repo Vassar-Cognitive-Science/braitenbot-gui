@@ -22,7 +22,8 @@ interface ViewportState {
 type ViewportAction =
   | { type: 'zoomAtPoint'; nextZoom: number; screenX: number; screenY: number }
   | { type: 'reset' }
-  | { type: 'setPan'; value: SetStateAction<Point> };
+  | { type: 'setPan'; value: SetStateAction<Point> }
+  | { type: 'apply'; pan: Point; zoom: number };
 
 const INITIAL_VIEWPORT: ViewportState = { zoom: 1, pan: { x: 0, y: 0 } };
 
@@ -52,6 +53,13 @@ function viewportReducer(state: ViewportState, action: ViewportAction): Viewport
       if (next === state.pan) return state;
       return { ...state, pan: next };
     }
+    case 'apply': {
+      const clamped = clampZoom(action.zoom);
+      if (clamped === state.zoom && action.pan.x === state.pan.x && action.pan.y === state.pan.y) {
+        return state;
+      }
+      return { zoom: clamped, pan: { x: action.pan.x, y: action.pan.y } };
+    }
   }
 }
 
@@ -62,14 +70,24 @@ export interface Viewport {
   zoomAtPoint: (nextZoom: number, screenX: number, screenY: number) => void;
   resetView: () => void;
   zoomByStep: (factor: number) => void;
+  /** Set pan+zoom directly — used by follow-the-host to track the host. */
+  applyViewport: (pan: Point, zoom: number) => void;
 }
 
-export function useViewport(canvasRef: RefObject<HTMLDivElement | null>): Viewport {
+export function useViewport(
+  canvasRef: RefObject<HTMLDivElement | null>,
+  // Fired on a manual wheel gesture, so follow-the-host can break follow.
+  onUserGesture?: () => void,
+): Viewport {
   const [state, dispatch] = useReducer(viewportReducer, INITIAL_VIEWPORT);
   const { zoom, pan } = state;
 
   const zoomAtPoint = useCallback((nextZoom: number, screenX: number, screenY: number) => {
     dispatch({ type: 'zoomAtPoint', nextZoom, screenX, screenY });
+  }, []);
+
+  const applyViewport = useCallback((nextPan: Point, nextZoom: number) => {
+    dispatch({ type: 'apply', pan: nextPan, zoom: nextZoom });
   }, []);
 
   const resetView = useCallback(() => {
@@ -97,6 +115,7 @@ export function useViewport(canvasRef: RefObject<HTMLDivElement | null>): Viewpo
       // Let the config panel scroll its own overflow; don't hijack the wheel
       // to pan/zoom the canvas when the pointer is over it.
       if ((event.target as Element | null)?.closest('.diagram-config-panel')) return;
+      onUserGesture?.();
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
         const rect = canvas.getBoundingClientRect();
@@ -110,7 +129,7 @@ export function useViewport(canvasRef: RefObject<HTMLDivElement | null>): Viewpo
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', onWheel);
-  }, [zoom, zoomAtPoint, setPan, canvasRef]);
+  }, [zoom, zoomAtPoint, setPan, canvasRef, onUserGesture]);
 
-  return { zoom, pan, setPan, zoomAtPoint, resetView, zoomByStep };
+  return { zoom, pan, setPan, zoomAtPoint, resetView, zoomByStep, applyViewport };
 }

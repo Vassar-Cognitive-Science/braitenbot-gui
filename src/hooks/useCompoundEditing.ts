@@ -1,14 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
+import type { DiagramStore } from '../doc/DiagramStore';
 
 interface UseCompoundEditingParams {
+  store: DiagramStore;
   topNodes: DiagramNode[];
   topConnections: DiagramConnection[];
-  setTopNodes: Dispatch<SetStateAction<DiagramNode[]>>;
-  setTopConnections: Dispatch<SetStateAction<DiagramConnection[]>>;
   compoundTypes: CompoundTypeDefinition[];
-  setCompoundTypes: Dispatch<SetStateAction<CompoundTypeDefinition[]>>;
 }
 
 export interface CompoundEditing {
@@ -18,86 +17,52 @@ export interface CompoundEditing {
   // The compound type currently being edited, if any.
   currentCompoundId: string | null;
   currentCompound: CompoundTypeDefinition | null;
-  // The routed view + setters: top-level state, or the open compound body.
+  // The routed view: top-level state, or the open compound body. Mutations go
+  // through the store's context-routed methods (the store tracks the same
+  // editing context), not through setters here.
   nodes: DiagramNode[];
   connections: DiagramConnection[];
-  setNodes: Dispatch<SetStateAction<DiagramNode[]>>;
-  setConnections: Dispatch<SetStateAction<DiagramConnection[]>>;
   // Descend into a compound instance's body for editing.
   enterCompound: (compoundTypeId: string) => void;
 }
 
 export function useCompoundEditing({
+  store,
   topNodes,
   topConnections,
-  setTopNodes,
-  setTopConnections,
   compoundTypes,
-  setCompoundTypes,
 }: UseCompoundEditingParams): CompoundEditing {
-  const [editingPath, setEditingPath] = useState<string[]>([]);
+  const [rawEditingPath, setEditingPath] = useState<string[]>([]);
 
-  // The compound type currently being edited, if any. Body edits flow into
-  // its body.nodes / body.connections instead of the top-level state.
+  // Prune the editing path to compound types that still exist, at read time. An
+  // undo/redo (or later a remote edit) can delete the compound you are inside;
+  // without this the routed view would strand on a missing body. Deriving the
+  // pruned path (rather than writing state in an effect) keeps this reactive
+  // without cascading renders.
+  const editingPath = useMemo(() => {
+    const valid: string[] = [];
+    for (const id of rawEditingPath) {
+      if (compoundTypes.some((c) => c.id === id)) valid.push(id);
+      else break;
+    }
+    return valid.length === rawEditingPath.length ? rawEditingPath : valid;
+  }, [rawEditingPath, compoundTypes]);
+
   const currentCompoundId = editingPath.length > 0 ? editingPath[editingPath.length - 1] : null;
   const currentCompound = currentCompoundId
     ? compoundTypes.find((c) => c.id === currentCompoundId) ?? null
     : null;
 
+  // Keep the store's routing context in lockstep with the visible layer.
+  // useLayoutEffect (not useEffect) so the store never routes a mutation with
+  // a stale context: it runs synchronously in the same commit, before any
+  // event handler can fire against the new view.
+  useLayoutEffect(() => {
+    store.setEditingContext(currentCompoundId);
+  }, [store, currentCompoundId]);
+
   const nodes = currentCompound ? currentCompound.body.nodes : topNodes;
   const connections = currentCompound ? currentCompound.body.connections : topConnections;
-
-  const setNodes = useCallback<Dispatch<SetStateAction<DiagramNode[]>>>(
-    (action) => {
-      if (currentCompoundId) {
-        setCompoundTypes((prev) =>
-          prev.map((c) =>
-            c.id === currentCompoundId
-              ? {
-                  ...c,
-                  body: {
-                    ...c.body,
-                    nodes:
-                      typeof action === 'function'
-                        ? (action as (p: DiagramNode[]) => DiagramNode[])(c.body.nodes)
-                        : action,
-                  },
-                }
-              : c,
-          ),
-        );
-      } else {
-        setTopNodes(action);
-      }
-    },
-    [currentCompoundId, setCompoundTypes, setTopNodes],
-  );
-
-  const setConnections = useCallback<Dispatch<SetStateAction<DiagramConnection[]>>>(
-    (action) => {
-      if (currentCompoundId) {
-        setCompoundTypes((prev) =>
-          prev.map((c) =>
-            c.id === currentCompoundId
-              ? {
-                  ...c,
-                  body: {
-                    ...c.body,
-                    connections:
-                      typeof action === 'function'
-                        ? (action as (p: DiagramConnection[]) => DiagramConnection[])(c.body.connections)
-                        : action,
-                  },
-                }
-              : c,
-          ),
-        );
-      } else {
-        setTopConnections(action);
-      }
-    },
-    [currentCompoundId, setCompoundTypes, setTopConnections],
-  );
 
   const enterCompound = useCallback((compoundTypeId: string) => {
     setEditingPath((prev) => [...prev, compoundTypeId]);
@@ -110,8 +75,6 @@ export function useCompoundEditing({
     currentCompound,
     nodes,
     connections,
-    setNodes,
-    setConnections,
     enterCompound,
   };
 }

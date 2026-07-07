@@ -16,16 +16,68 @@ export interface TraceResult {
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
 
 /**
- * Per-tick simulation state. When passed to simulateGraph, oscillators use
- * `t` as their phase clock and delay nodes draw from / write to the per-node
- * ring buffers. Without state, simulateGraph is a stateless snapshot:
- * delays output 0 and oscillators fall back to Date.now() for phase.
+ * Per-tick simulation state. When passed to simulateGraph, oscillators
+ * derive their phase from the tick index, noise nodes draw from a
+ * deterministic PRNG keyed on (seed, node id, tick), and delay nodes draw
+ * from / write to the per-node ring buffers. Without state, simulateGraph
+ * is a stateless snapshot evaluated at tick 0 with seed 0: delays output 0
+ * and oscillator/noise values are fixed — the snapshot is a pure function
+ * of its inputs.
+ *
+ * Determinism contract: two simulations constructed with the same seed and
+ * stepped through the same (diagram, inputs, tick) sequence produce
+ * bit-identical traces on any JS engine. No wall clock and no
+ * Math.random() anywhere in the simulation.
  */
 export interface SimulationState {
-  /** Virtual time in ms since the simulation started. */
-  t: number;
+  /**
+   * Integer tick index — the source of truth for simulation time. A late
+   * joiner can be handed a tick number and step in lockstep from there
+   * (delay ring buffers still need warm-up; see the determinism tests).
+   */
+  tick: number;
+  /** Loop period in ms. Simulation time is derived as tick * loopPeriodMs. */
+  loopPeriodMs: number;
+  /** PRNG seed (uint32) for noise nodes. */
+  seed: number;
   /** Per-delay-node ring buffers. */
   delays: Map<string, { values: number[]; idx: number }>;
+}
+
+/** Simulation time in ms — derived from the tick index, never accumulated. */
+export function simTimeMs(state: SimulationState): number {
+  return state.tick * state.loopPeriodMs;
+}
+
+/**
+ * Deterministic noise sample in [-1, 1) — a pure function of
+ * (seed, nodeId, tick). The node id is folded in with an FNV-1a hash, then
+ * seed and tick are each folded through a splitmix32-style avalanche
+ * finalizer. Only 32-bit integer ops (Math.imul, xor, unsigned shifts) plus
+ * one final division by 2^32 are used — all bit-exact in IEEE-754 doubles,
+ * so every JS engine produces the identical value for the same triple.
+ */
+export function noiseSample(seed: number, nodeId: string, tick: number): number {
+  // FNV-1a over the node id.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < nodeId.length; i++) {
+    h = Math.imul(h ^ nodeId.charCodeAt(i), 0x01000193);
+  }
+  h = mix32(h, seed >>> 0);
+  h = mix32(h, tick >>> 0);
+  return (h / 0x100000000) * 2 - 1;
+}
+
+/** Fold `x` into `h` and avalanche (splitmix32 finalizer constants). */
+function mix32(h: number, x: number): number {
+  h = (h ^ x) >>> 0;
+  h = (h + 0x9e3779b9) >>> 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x21f0aaad);
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x735a2d97);
+  h = (h ^ (h >>> 15)) >>> 0;
+  return h;
 }
 
 /**
@@ -43,6 +95,7 @@ export function createSimulationState(
   loopPeriodMs: number,
   connections: DiagramConnection[] = [],
   compoundTypes: CompoundTypeDefinition[] = [],
+  seed = 0,
 ): SimulationState {
   const flat = flattenCompounds(nodes, connections, compoundTypes);
   const delays = new Map<string, { values: number[]; idx: number }>();
@@ -53,7 +106,7 @@ export function createSimulationState(
       delays.set(node.id, { values: new Array(size).fill(0), idx: 0 });
     }
   }
-  return { t: 0, delays };
+  return { tick: 0, loopPeriodMs, seed: seed >>> 0, delays };
 }
 
 /**
@@ -61,11 +114,13 @@ export function createSimulationState(
  * return the computed value at every node plus the signal carried on every
  * edge.
  *
- * When `state` is omitted this is a stateless snapshot — delay nodes
- * output 0 (no history) and oscillator/noise phase samples Date.now().
+ * When `state` is omitted this is a stateless snapshot evaluated at
+ * tick 0 / seed 0 — delay nodes output 0 (no history) and oscillator/noise
+ * values are fixed, making the snapshot a pure function of its inputs.
  * When `state` is supplied, it represents one tick of a running
- * simulation: oscillators use `state.t`, delays read from / write to the
- * ring buffers in `state.delays`. `state.delays` is mutated in place.
+ * simulation: oscillator phase and noise samples derive from `state.tick`,
+ * delays read from / write to the ring buffers in `state.delays`.
+ * `state.delays` is mutated in place.
  */
 export function simulateGraph(
   nodes: DiagramNode[],
@@ -118,10 +173,12 @@ export function simulateGraph(
     return nodeValues[edge.from] ?? 0;
   };
 
-  // Phase clock for oscillator/noise — use simulation time when running
-  // tick-stepped, otherwise wall clock so the static trace still animates
-  // between unrelated re-renders.
-  const phaseMs = state ? state.t : Date.now();
+  // Time and randomness derive exclusively from the integer tick index so
+  // two clients stepping the same tick sequence compute bit-identical
+  // values. Stateless snapshots evaluate at tick 0 with seed 0.
+  const tick = state?.tick ?? 0;
+  const seed = state?.seed ?? 0;
+  const phaseMs = state ? simTimeMs(state) : 0;
 
   for (const nodeId of order) {
     const node = nodeById.get(nodeId);
@@ -178,7 +235,10 @@ export function simulateGraph(
 
     if (node.type === 'compute-noise') {
       const amp = node.amplitude ?? 50;
-      nodeValues[nodeId] = amp * (Math.random() * 2 - 1);
+      // Deterministic: same (seed, node id, tick) → same sample on any
+      // client. Flattened compound noise nodes get instance-prefixed ids
+      // (`inst-1/n1`), which are identical across clients too.
+      nodeValues[nodeId] = amp * noiseSample(seed, nodeId, tick);
       continue;
     }
 
@@ -264,6 +324,12 @@ export function simulateGraph(
   return { nodeValues, edgeSignals, disconnected };
 }
 
+/**
+ * Static (stateless) trace of the diagram — a pure function of its inputs,
+ * evaluated at tick 0 with seed 0. Delay nodes read as 0 and
+ * oscillator/noise values are fixed; use useScopeSimulation for a running,
+ * tick-stepped trace.
+ */
 export function useTraceSimulation(
   nodes: DiagramNode[],
   connections: DiagramConnection[],

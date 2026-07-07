@@ -13,12 +13,16 @@ import { useScopeSimulation } from '../hooks/useScopeSimulation';
 import { Oscilloscope } from './Oscilloscope';
 import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
 import { useViewport, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '../hooks/useViewport';
-import { useDiagramUndo } from '../hooks/useDiagramUndo';
 import { useCompoundEditing } from '../hooks/useCompoundEditing';
+import { useDiagramSnapshot, useDiagramStore, useTraceSnapshot } from '../doc/useDiagramStore';
+import type { DiagramState } from '../lib/diagramFile';
 import { DiagramNodeView } from './DiagramNodeView';
 import { ConfigPanel } from './ConfigPanel';
 import { CodeDialog, UploadErrorDialog } from './dialogs';
 import { SerialMonitor } from './SerialMonitor';
+import { ShareMenu, SessionOverlays } from './ShareMenu';
+import { useSession, usePresence } from '../collab/useSession';
+import { sessionManager } from '../collab/SessionManager';
 import { canInput, canOutput, isWheelNode, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
 import type { useArduino } from '../hooks/useArduino';
@@ -243,8 +247,6 @@ function makeWheelNodes(layout: RobotOverlayLayout): DiagramNode[] {
   ];
 }
 
-const START_NODES: DiagramNode[] = makeWheelNodes(INITIAL_ROBOT_LAYOUT);
-
 interface BraitenbergDiagramProps {
   arduino: ReturnType<typeof useArduino>;
 }
@@ -265,11 +267,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     uploadTestSketch,
     cancelUpload,
   } = arduino;
-  // Top-level diagram state lives here; the user-visible `nodes` /
-  // `connections` below are a routed view that switches to a compound
-  // body when the user double-clicks into one (see `editingPath`).
-  const [topNodes, setTopNodes] = useState<DiagramNode[]>(START_NODES);
-  const [topConnections, setTopConnections] = useState<DiagramConnection[]>(START_CONNECTIONS);
+  // The whole diagram document (nodes, connections, compoundTypes,
+  // loopPeriodMs) lives in a Yjs-backed store. React reads a referentially
+  // stable snapshot; every mutation goes through the store's methods.
+  const store = useDiagramStore();
+  const { topNodes, topConnections, compoundTypes, loopPeriodMs } = useDiagramSnapshot(store);
   // Multi-selection for group operations. Click/shift-click on nodes maintain
   // this set; the "Group selection" toolbar action consumes it.
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
@@ -279,8 +281,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [linkDraftPoint, setLinkDraftPoint] = useState({ x: 0, y: 0 });
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<ConfigTarget | null>(null);
-  const [loopPeriodMs, setLoopPeriodMs] = useState(20);
-  const [compoundTypes, setCompoundTypes] = useState<CompoundTypeDefinition[]>([]);
 
   const {
     editingPath,
@@ -288,16 +288,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     currentCompoundId,
     nodes,
     connections,
-    setNodes,
-    setConnections,
     enterCompound,
   } = useCompoundEditing({
+    store,
     topNodes,
     topConnections,
-    setTopNodes,
-    setTopConnections,
     compoundTypes,
-    setCompoundTypes,
   });
   const [codeGenErrors, setCodeGenErrors] = useState<ValidationError[]>([]);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
@@ -322,12 +318,29 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedLayoutRef = useRef<RobotOverlayLayout | null>(null);
   const fallbackIdCounterRef = useRef(0);
-  const [traceMode, setTraceMode] = useState(false);
-  const [sensorValues, setSensorValues] = useState<Record<string, number>>({});
+  // Trace mode + sensor inputs live in the shared `trace` Y.Map (backed by the
+  // doc even solo). In a session, entering/exiting trace and moving a slider
+  // syncs to every participant; solo, behavior is unchanged (untracked writes,
+  // never autosaved/exported).
+  const trace = useTraceSnapshot(store);
+  const traceMode = trace.enabled;
+  const sensorValues = trace.inputs;
+  const setSensorValue = useCallback(
+    (key: string, value: number) => store.setTraceInput(key, value),
+    [store],
+  );
   // True once a live node drag has already captured its single undo snapshot,
   // so a whole drag collapses to one entry (reset at each drag start).
   const didPushDragUndoRef = useRef(false);
-  const { zoom, pan, setPan, resetView, zoomByStep } = useViewport(canvasRef);
+  // Follow-the-host: a guest's viewport tracks the host's published viewport;
+  // any manual pan/zoom breaks the follow (wired below via onUserGesture and
+  // the manual-gesture handlers).
+  const [followingHost, setFollowingHost] = useState(false);
+  const breakFollow = useCallback(() => setFollowingHost(false), []);
+  const { zoom, pan, setPan, resetView, zoomByStep, applyViewport } = useViewport(
+    canvasRef,
+    breakFollow,
+  );
   // Global block-size scale (a view preference, distinct from canvas zoom).
   // Restored from localStorage; only the rendered node size changes, never the
   // stored node positions.
@@ -359,6 +372,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const badgeClickSuppressRef = useRef(false);
   const panStateRef = useRef<{ startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+  // Throttle presence cursor/drag publishing to ~30Hz.
+  const lastPresenceMoveRef = useRef(0);
 
   const nodeWorldPos = useCallback(
     (node: DiagramNode): { x: number; y: number } => {
@@ -391,6 +406,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     traceMode,
     loopPeriodMs,
     compoundTypes,
+    // Shared seed so every participant produces an identical trace.
+    { seed: trace.seed },
   );
 
   const traceResult = scope.traceResult;
@@ -409,28 +426,68 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setToast(msg);
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3000);
   }, []);
+  // Pulse writes a shared event into the trace map; every client (including
+  // this one) applies it once via the pulse-apply effect below, so the
+  // initiator never double-applies. The writer prunes the event once expired.
   const pulseSensor = useCallback(
-    (id: string) => {
-      scope.pulse(id, 100, 200);
-      setPulsingId(id);
+    (sensorId: string) => {
+      const eventId = `pulse-${
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+          : `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
+      }`;
+      const durationTicks = Math.max(1, Math.round(200 / Math.max(1, loopPeriodMs)));
+      store.addTracePulse({
+        id: eventId,
+        sensorId,
+        value: 100,
+        startTick: scope.currentTick(),
+        durationTicks,
+      });
+      setPulsingId(sensorId);
       window.setTimeout(() => {
-        setPulsingId((prev) => (prev === id ? null : prev));
+        setPulsingId((prev) => (prev === sensorId ? null : prev));
       }, 200);
+      // Writer-side pruning. A peer whose trace view attaches after this
+      // window misses the pulse entirely (accepted, like tick drift).
+      window.setTimeout(() => store.removeTracePulse(eventId), 200 + 600);
     },
-    [scope],
+    [scope, store, loopPeriodMs],
   );
 
+  // Apply shared pulse events: each client fires every not-yet-seen event once
+  // through the tick-based pulse mechanism (relative to its own clock — see the
+  // documented tick-drift limitation). Forget ids once they leave the map.
+  const appliedPulsesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!traceMode) {
+      appliedPulsesRef.current.clear();
+      return;
+    }
+    const present = new Set<string>();
+    for (const p of trace.pulses) {
+      present.add(p.id);
+      if (appliedPulsesRef.current.has(p.id)) continue;
+      appliedPulsesRef.current.add(p.id);
+      scope.pulse(p.sensorId, p.value, p.durationTicks * loopPeriodMs);
+    }
+    for (const id of [...appliedPulsesRef.current]) {
+      if (!present.has(id)) appliedPulsesRef.current.delete(id);
+    }
+  }, [trace.pulses, traceMode, scope, loopPeriodMs]);
+
   const clearConfigTarget = useCallback(() => setConfigTarget(null), []);
-  const { pushUndo, undo, redo, clear: clearUndoHistory } = useDiagramUndo({
-    nodes,
-    connections,
-    compoundTypes,
-    currentCompoundId,
-    setTopNodes,
-    setTopConnections,
-    setCompoundTypes,
-    onRestore: clearConfigTarget,
-  });
+  // Undo/redo delegate to the store's Y.UndoManager. Clearing the config
+  // target mirrors the previous snapshot-restore behavior (a restored edit may
+  // no longer target the same node/connection).
+  const undo = useCallback(() => {
+    store.undo();
+    setConfigTarget(null);
+  }, [store]);
+  const redo = useCallback(() => {
+    store.redo();
+    setConfigTarget(null);
+  }, [store]);
 
   const isDiagramPristine = useMemo(
     () =>
@@ -440,36 +497,138 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     [nodes, connections],
   );
 
+  // Full-replacement helper shared by New/Open/restore. replaceAll also clears
+  // the undo history, so undoing back into a discarded diagram is impossible.
+  const applyDiagram = useCallback(
+    (next: DiagramState) => {
+      store.replaceAll(next);
+      setEditingPath([]);
+      setConfigTarget(null);
+    },
+    [store, setEditingPath],
+  );
+
   const resetToDefault = useCallback(() => {
-    clearUndoHistory();
-    setTopNodes(makeWheelNodes(robotLayout));
-    setTopConnections(START_CONNECTIONS);
-    setLoopPeriodMs(20);
-    setCompoundTypes([]);
-    setEditingPath([]);
-    setConfigTarget(null);
-  }, [robotLayout, clearUndoHistory, setEditingPath]);
+    applyDiagram({
+      nodes: makeWheelNodes(robotLayout),
+      connections: START_CONNECTIONS,
+      loopPeriodMs: 20,
+      compoundTypes: [],
+    });
+  }, [robotLayout, applyDiagram]);
+
+  // Collaborative session state. While in a session, guests autosave to a
+  // separate localStorage slot (the personal slot is sacred); the host keeps
+  // autosaving to their own slot — the host is the copy of record.
+  const session = useSession();
+  const sessionRole =
+    session.status === 'hosting' || session.status === 'joined' || session.status === 'reconnecting'
+      ? session.isHost
+        ? ('host' as const)
+        : ('guest' as const)
+      : null;
+  const inSession = sessionRole !== null;
+  // View-only guests can't mutate the document or trace inputs. The store
+  // enforces this at the choke-point; the UI also disables the controls so it
+  // doesn't feel broken. The host is never view-only.
+  const isViewOnly = inSession && session.role === 'view' && !session.isHost;
+
+  // Remote presence: peers in the SAME editing context (top level vs. the same
+  // compound body) get their selection/drag outlines and cursors rendered.
+  const peers = usePresence();
+  const visiblePeers = useMemo(
+    () => peers.filter((p) => (p.editingContext ?? null) === (currentCompoundId ?? null)),
+    [peers, currentCompoundId],
+  );
+  // node/connection id -> the color+name of a peer selecting or dragging it.
+  const remoteHighlight = useMemo(() => {
+    const map = new Map<string, { color: string; name: string }>();
+    for (const p of visiblePeers) {
+      for (const id of p.selection) if (!map.has(id)) map.set(id, { color: p.color, name: p.name });
+      if (p.dragging) map.set(p.dragging.nodeId, { color: p.color, name: p.name });
+    }
+    return map;
+  }, [visiblePeers]);
+
+  // Follow-the-host: the host publishes its viewport; a following guest tracks
+  // it. Break follow if we're no longer a guest.
+  const hostViewport = useMemo(
+    () => peers.find((p) => p.isHost)?.viewport ?? null,
+    [peers],
+  );
+  const canFollowHost = sessionRole === 'guest' && hostViewport !== null;
+  useEffect(() => {
+    // Leaving the guest role (host, or session ended) cancels any active follow.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (sessionRole !== 'guest') setFollowingHost(false);
+  }, [sessionRole]);
+  useEffect(() => {
+    if (!followingHost || !hostViewport) return;
+    applyViewport(hostViewport.pan, hostViewport.zoom);
+  }, [followingHost, hostViewport, applyViewport]);
+  const toggleFollowHost = useCallback(() => setFollowingHost((v) => !v), []);
+
+  // Publish our presence into awareness (no-ops when not in a session).
+  useEffect(() => {
+    const selection = [...selectedNodeIds];
+    if (configTarget?.kind === 'connection') selection.push(configTarget.id);
+    sessionManager.setPresenceSelection(selection);
+  }, [selectedNodeIds, configTarget]);
+  useEffect(() => {
+    sessionManager.setPresenceEditingContext(currentCompoundId);
+  }, [currentCompoundId]);
+  // Only the host publishes its viewport (the thing guests can follow).
+  useEffect(() => {
+    if (sessionRole === 'host') sessionManager.setPresenceViewport({ pan, zoom });
+  }, [sessionRole, pan, zoom]);
+
+  // Reset per-user editing UI when a session swaps the backing doc in (the
+  // compound you were inside no longer exists on the shared doc).
+  const prevSessionStatusRef = useRef(session.status);
+  useEffect(() => {
+    const prev = prevSessionStatusRef.current;
+    prevSessionStatusRef.current = session.status;
+    const enteredSession =
+      (session.status === 'hosting' || session.status === 'joined') &&
+      prev !== 'hosting' &&
+      prev !== 'joined' &&
+      prev !== 'reconnecting';
+    if (enteredSession) {
+      setEditingPath([]);
+      setConfigTarget(null);
+      store.clearUndoHistory();
+    }
+  }, [session.status, setEditingPath, store]);
+
+  // Current canonical state / fresh-doc replacement, for the Share menu.
+  const getCurrentState = useCallback((): DiagramState => {
+    const snap = store.getSnapshot();
+    return {
+      nodes: snap.topNodes,
+      connections: snap.topConnections,
+      loopPeriodMs: snap.loopPeriodMs,
+      compoundTypes: snap.compoundTypes,
+    };
+  }, [store]);
+
+  const applyDiagramFresh = useCallback(
+    (next: DiagramState) => {
+      store.resetDoc(next);
+      setEditingPath([]);
+      setConfigTarget(null);
+    },
+    [store, setEditingPath],
+  );
 
   // Persistence operates on the canonical top-level state — never on the
   // compound body currently in view — so reload/autosave round-trips
   // independent of which compound the user happens to be editing.
   useDiagramPersistence({
     state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes },
-    setters: {
-      // Persistence only calls this for full replacements (mount restore,
-      // file load), where undoing back into the previous diagram would be
-      // wrong — so the undo history dies with the old diagram.
-      setNodes: (next) => {
-        clearUndoHistory();
-        setTopNodes(next);
-      },
-      setConnections: setTopConnections,
-      setLoopPeriodMs,
-      setCompoundTypes,
-      setEditingPath,
-    },
+    applyDiagram,
     isPristine: isDiagramPristine,
     resetToDefault,
+    sessionRole,
   });
 
   // Group the currently-selected nodes into a new compound. Boundary-
@@ -480,174 +639,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // Wheel motors and other top-level-only types can't move into a body,
   // so they're filtered out of the selection silently before grouping.
   const handleGroupSelection = useCallback(() => {
-    const selectedNodes = nodes.filter(
-      (n) =>
-        selectedNodeIds.has(n.id) &&
-        !TYPE_BY_ID[n.type].topLevelOnly &&
-        !(n.type === 'servo-cr' && (n.id === 'motor-left' || n.id === 'motor-right')),
-    );
-    if (selectedNodes.length === 0) return;
-    pushUndo();
-
-    const selectedIds = new Set(selectedNodes.map((n) => n.id));
-    const isInternal = (conn: DiagramConnection) =>
-      selectedIds.has(conn.from) && selectedIds.has(conn.to);
-    const incomingBoundary = connections.filter(
-      (c) => selectedIds.has(c.to) && !selectedIds.has(c.from),
-    );
-    const outgoingBoundary = connections.filter(
-      (c) => selectedIds.has(c.from) && !selectedIds.has(c.to),
-    );
-    const internalConns = connections.filter((c) => isInternal(c));
-
-    const nextNumber = compoundTypes.length + 1;
-    const compoundTypeId = `compound-${nextNumber}-${Math.random().toString(36).slice(2, 8)}`;
-
-    // Compute centroid for placing the resulting instance node on the
-    // outer canvas, then translate body nodes so the selection's
-    // top-left maps to a comfortable origin inside the body.
-    const minX = Math.min(...selectedNodes.map((n) => n.x));
-    const minY = Math.min(...selectedNodes.map((n) => n.y));
-    const cx = (Math.min(...selectedNodes.map((n) => n.x)) + Math.max(...selectedNodes.map((n) => n.x))) / 2;
-    const cy = (Math.min(...selectedNodes.map((n) => n.y)) + Math.max(...selectedNodes.map((n) => n.y))) / 2;
-
-    const BODY_MARGIN = 120;
-    const bodyNodes: DiagramNode[] = selectedNodes.map((n) => ({
-      ...n,
-      x: n.x - minX + BODY_MARGIN + 100,
-      y: n.y - minY + BODY_MARGIN,
-    }));
-
-    // One input anchor per *distinct internal target* (not per boundary
-    // edge) and one output anchor per *distinct internal source*. This
-    // way a single internal output fanning out to multiple external
-    // destinations still presents one port on the compound. Names are
-    // generic ("in", "in_2", "out", …) so users can rename in the body
-    // editor without inheriting confusing external-endpoint context.
-    const inputTargetIds: string[] = [];
-    for (const edge of incomingBoundary) {
-      if (!inputTargetIds.includes(edge.to)) inputTargetIds.push(edge.to);
-    }
-    const outputSourceIds: string[] = [];
-    for (const edge of outgoingBoundary) {
-      if (!outputSourceIds.includes(edge.from)) outputSourceIds.push(edge.from);
-    }
-    const nameWithIndex = (base: string, i: number) => (i === 0 ? base : `${base}_${i + 1}`);
-    const inputPortIdByTarget = new Map<string, string>();
-    inputTargetIds.forEach((targetId, i) => {
-      inputPortIdByTarget.set(targetId, nameWithIndex('in', i));
-    });
-    const outputPortIdBySource = new Map<string, string>();
-    outputSourceIds.forEach((sourceId, i) => {
-      outputPortIdBySource.set(sourceId, nameWithIndex('out', i));
-    });
-
-    const inputAnchorNodes: DiagramNode[] = [...inputPortIdByTarget.entries()].map(
-      ([, portId], i) => ({
-        id: portId,
-        type: 'compound-input',
-        label: portId,
-        x: BODY_MARGIN,
-        y: BODY_MARGIN + i * (NODE_H + 20),
-      }),
-    );
-    const outputAnchorNodes: DiagramNode[] = [...outputPortIdBySource.entries()].map(
-      ([, portId], i) => ({
-        id: portId,
-        type: 'compound-output',
-        label: portId,
-        x: BODY_MARGIN + 700,
-        y: BODY_MARGIN + i * (NODE_H + 20),
-      }),
-    );
-
-    // Internal pass-through edges from input anchor → original target and
-    // from original source → output anchor. Unit weight, linear transfer:
-    // the user-facing weight/transfer stays on the *outer* edge so the
-    // compound instance reads identically to the pre-group wiring.
-    const linearOne = () => ({
-      weight: 1,
-      transferMode: 'linear' as const,
-      transferPoints: [
-        { x: -100, y: -100 },
-        { x: 100, y: 100 },
-      ],
-    });
-    const innerInputEdges: DiagramConnection[] = [...inputPortIdByTarget.entries()].map(
-      ([targetId, portId], i) => ({
-        id: `${compoundTypeId}/in-${i}`,
-        from: portId,
-        to: targetId,
-        ...linearOne(),
-      }),
-    );
-    const innerOutputEdges: DiagramConnection[] = [...outputPortIdBySource.entries()].map(
-      ([sourceId, portId], i) => ({
-        id: `${compoundTypeId}/out-${i}`,
-        from: sourceId,
-        to: portId,
-        ...linearOne(),
-      }),
-    );
-
-    const def: CompoundTypeDefinition = {
-      id: compoundTypeId,
-      displayName: `Compound ${nextNumber}`,
-      body: {
-        nodes: [...inputAnchorNodes, ...bodyNodes, ...outputAnchorNodes],
-        connections: [...internalConns, ...innerInputEdges, ...innerOutputEdges],
-      },
-    };
-
-    // Replace the selected nodes on the outer canvas with one compound
-    // instance positioned at the selection centroid.
-    const instanceId = `compound-inst-${Math.random().toString(36).slice(2, 8)}`;
-    const instanceNode: DiagramNode = {
-      id: instanceId,
-      type: 'compound',
-      label: def.displayName,
-      x: cx,
-      y: cy,
-      compoundTypeId,
-    };
-
-    // Rewire boundary edges to target the new instance + port. Internal
-    // edges are gone (moved into the body); external↔external edges are
-    // untouched. Multiple boundary edges that share an internal endpoint
-    // all route through the same port.
-    const rewiredConnections: DiagramConnection[] = [];
-    for (const conn of connections) {
-      if (isInternal(conn)) continue;
-      const inboundPort = selectedIds.has(conn.to) && !selectedIds.has(conn.from)
-        ? inputPortIdByTarget.get(conn.to)
-        : undefined;
-      const outboundPort = selectedIds.has(conn.from) && !selectedIds.has(conn.to)
-        ? outputPortIdBySource.get(conn.from)
-        : undefined;
-      if (inboundPort) {
-        rewiredConnections.push({ ...conn, to: instanceId, toPort: inboundPort });
-      } else if (outboundPort) {
-        rewiredConnections.push({ ...conn, from: instanceId, fromPort: outboundPort });
-      } else {
-        rewiredConnections.push(conn);
-      }
-    }
-
-    setCompoundTypes((prev) => [...prev, def]);
-    setNodes((prev) => [...prev.filter((n) => !selectedIds.has(n.id)), instanceNode]);
-    setConnections(rewiredConnections);
-    setSelectedNodeIds(new Set([instanceId]));
-    setConfigTarget({ kind: 'node', id: instanceId });
-  }, [
-    nodes,
-    connections,
-    selectedNodeIds,
-    compoundTypes.length,
-    pushUndo,
-    setCompoundTypes,
-    setNodes,
-    setConnections,
-  ]);
+    // Grouping (geometry, port synthesis, boundary rewiring) lives in the
+    // store as a single transaction so it undoes/redoes as one step.
+    store.stopCapturing();
+    const result = store.group(selectedNodeIds);
+    if (!result) return;
+    setSelectedNodeIds(new Set([result.instanceId]));
+    setConfigTarget({ kind: 'node', id: result.instanceId });
+  }, [store, selectedNodeIds]);
 
   // True when the selection is exactly one compound instance — that's the
   // only state in which "Ungroup" makes sense.
@@ -668,68 +667,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // inside the body stay as compound instances (single-level expansion).
   const handleUngroup = useCallback(() => {
     if (!ungroupCandidate) return;
-    const { node: instance, def } = ungroupCandidate;
-    pushUndo();
-
-    const prefix = `${instance.id}/`;
-    const idRemap = new Map<string, string>();
-    for (const n of def.body.nodes) idRemap.set(n.id, prefix + n.id);
-
-    // Translate body positions so the body's centroid lands on the instance.
-    const bodyXs = def.body.nodes.map((n) => n.x);
-    const bodyYs = def.body.nodes.map((n) => n.y);
-    const bodyCx = bodyXs.length ? (Math.min(...bodyXs) + Math.max(...bodyXs)) / 2 : 0;
-    const bodyCy = bodyYs.length ? (Math.min(...bodyYs) + Math.max(...bodyYs)) / 2 : 0;
-    const dx = instance.x - bodyCx;
-    const dy = instance.y - bodyCy;
-
-    const inlinedNodes: DiagramNode[] = def.body.nodes.map((n) => ({
-      ...n,
-      id: idRemap.get(n.id)!,
-      type:
-        n.type === 'compound-input' || n.type === 'compound-output'
-          ? 'compute-summation'
-          : n.type,
-      x: n.x + dx,
-      y: n.y + dy,
-    }));
-    const inlinedConns: DiagramConnection[] = def.body.connections.map((c) => ({
-      ...c,
-      id: prefix + c.id,
-      from: idRemap.get(c.from) ?? c.from,
-      to: idRemap.get(c.to) ?? c.to,
-    }));
-
-    // Rewire external edges that referenced this instance via a port. An
-    // edge without a port is dropped (the validator surfaces these).
-    const rewiredExternal: DiagramConnection[] = [];
-    for (const conn of connections) {
-      if (conn.from === instance.id) {
-        if (!conn.fromPort) continue;
-        const anchorId = prefix + conn.fromPort;
-        if (!idRemap.has(conn.fromPort)) continue;
-        const { fromPort: _fp, toPort: _tp, ...rest } = conn;
-        void _fp;
-        void _tp;
-        rewiredExternal.push({ ...rest, from: anchorId });
-      } else if (conn.to === instance.id) {
-        if (!conn.toPort) continue;
-        const anchorId = prefix + conn.toPort;
-        if (!idRemap.has(conn.toPort)) continue;
-        const { fromPort: _fp, toPort: _tp, ...rest } = conn;
-        void _fp;
-        void _tp;
-        rewiredExternal.push({ ...rest, to: anchorId });
-      } else {
-        rewiredExternal.push(conn);
-      }
-    }
-
-    setNodes((prev) => [...prev.filter((n) => n.id !== instance.id), ...inlinedNodes]);
-    setConnections([...rewiredExternal, ...inlinedConns]);
+    // Inlining (id remapping, position translation, edge rewiring) lives in
+    // the store as one transaction so it undoes/redoes as a single step.
+    store.stopCapturing();
+    store.ungroup(ungroupCandidate.node.id);
     setSelectedNodeIds(new Set());
     setConfigTarget(null);
-  }, [ungroupCandidate, connections, pushUndo, setNodes, setConnections]);
+  }, [ungroupCandidate, store]);
 
   const handleSerialDebugChange = useCallback((newValue: boolean) => {
     setSerialDebug(newValue);
@@ -908,17 +852,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const deleteNode = useCallback((nodeId: string) => {
     const node = nodeMap[nodeId];
     if (!node || isWheelNode(node.id)) return;
-    pushUndo();
-    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
-    setConnections((prev) => prev.filter((c) => c.from !== nodeId && c.to !== nodeId));
+    store.stopCapturing();
+    store.removeNodeWithConnections(nodeId);
     setConfigTarget(null);
-  }, [nodeMap, pushUndo, setNodes, setConnections]);
+  }, [nodeMap, store]);
 
   const deleteConnection = useCallback((connectionId: string) => {
-    pushUndo();
-    setConnections((prev) => prev.filter((c) => c.id !== connectionId));
+    store.stopCapturing();
+    store.removeConnection(connectionId);
     setConfigTarget(null);
-  }, [pushUndo, setConnections]);
+  }, [store]);
+
+  // Stable identity so the memoized DiagramNodeView isn't re-rendered by a
+  // fresh inline lambda on every parent render.
+  const setConstantValue = useCallback(
+    (id: string, value: number) => store.setConstantValue(id, value),
+    [store],
+  );
 
   const connectionPaths = useMemo(() => {
     // Group edges by unordered node pair {from, to} so parallel edges (e.g. an
@@ -971,33 +921,22 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       lastAppliedLayoutRef.current = layout;
       setRobotLayout(layout);
 
-      const snapMotor = (node: DiagramNode): DiagramNode => {
-        if (node.id === 'motor-left') {
-          return { ...node, x: layout.leftWheelCx - NODE_W / 2, y: layout.leftWheelCy - NODE_H / 2 };
-        }
-        if (node.id === 'motor-right') {
-          return { ...node, x: layout.rightWheelCx - NODE_W / 2, y: layout.rightWheelCy - NODE_H / 2 };
-        }
-        return node;
-      };
+      // On the first pass, snap the motors only. On later resizes, snap the
+      // motors and translate every other top-level node by the body delta. The
+      // store method always targets the top level (never an open compound body)
+      // via an untracked transaction, matching the old no-undo behavior.
+      const dx = prev === null ? 0 : layout.bodyCx - prev.bodyCx;
+      const dy = prev === null ? 0 : layout.bodyCy - prev.bodyCy;
+      if (prev !== null && dx === 0 && dy === 0) return;
 
-      // Always target the top-level diagram: the wheel anchors live there, and
-      // resize must not translate a compound body that happens to be open.
-      if (prev === null) {
-        setTopNodes((nodes) => nodes.map(snapMotor));
-        return;
-      }
-
-      const dx = layout.bodyCx - prev.bodyCx;
-      const dy = layout.bodyCy - prev.bodyCy;
-      if (dx === 0 && dy === 0) return;
-
-      setTopNodes((nodes) =>
-        nodes.map((node) => {
-          if (node.id === 'motor-left' || node.id === 'motor-right') return snapMotor(node);
-          return { ...node, x: node.x + dx, y: node.y + dy };
-        }),
-      );
+      store.applyMotorLayout({
+        leftX: layout.leftWheelCx - NODE_W / 2,
+        leftY: layout.leftWheelCy - NODE_H / 2,
+        rightX: layout.rightWheelCx - NODE_W / 2,
+        rightY: layout.rightWheelCy - NODE_H / 2,
+        dx,
+        dy,
+      });
     };
 
     const updateLayout = () => {
@@ -1009,7 +948,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     const observer = new ResizeObserver(updateLayout);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, []);
+  }, [store]);
 
   useEffect(() => {
     if (!configTarget) return;
@@ -1049,7 +988,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       const arrowDelta =
         event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 :
         event.key === 'ArrowDown' || event.key === 'ArrowLeft' ? -1 : 0;
-      if (arrowDelta !== 0 && !mod && traceMode && configTarget?.kind === 'node') {
+      if (arrowDelta !== 0 && !mod && traceMode && !isViewOnly && configTarget?.kind === 'node') {
         if (isBlocked()) return;
         const node = nodeMap[configTarget.id];
         if (!node) return;
@@ -1057,26 +996,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         const step = arrowDelta * (event.shiftKey ? 10 : 1);
         if (node.type === 'sensor-digital') {
           event.preventDefault();
-          setSensorValues((prev) => ({ ...prev, [node.id]: arrowDelta > 0 ? 100 : 0 }));
+          store.setTraceInput(node.id, arrowDelta > 0 ? 100 : 0);
         } else if (nodeType.kind === 'sensor' && node.type !== 'sensor-color') {
           event.preventDefault();
-          setSensorValues((prev) => ({
-            ...prev,
-            [node.id]: Math.max(0, Math.min(100, (prev[node.id] ?? 50) + step)),
-          }));
+          store.setTraceInput(node.id, Math.max(0, Math.min(100, (sensorValues[node.id] ?? 50) + step)));
         } else if (node.type === 'compound-input') {
           event.preventDefault();
-          setSensorValues((prev) => ({
-            ...prev,
-            [node.id]: Math.max(-100, Math.min(100, (prev[node.id] ?? 0) + step)),
-          }));
+          store.setTraceInput(node.id, Math.max(-100, Math.min(100, (sensorValues[node.id] ?? 0) + step)));
         } else if (nodeType.kind === 'constant') {
           event.preventDefault();
-          setNodes((prev) => prev.map((n) =>
-            n.id === node.id
-              ? { ...n, constantValue: Math.max(-100, Math.min(100, (n.constantValue ?? 0) + step)) }
-              : n,
-          ));
+          store.setConstantValue(
+            node.id,
+            Math.max(-100, Math.min(100, (node.constantValue ?? 0) + step)),
+          );
         }
       }
       // Redo: Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y.
@@ -1092,7 +1024,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, nodeMap, setNodes]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store]);
 
   const beginNodeDrag = useCallback((event: MouseEvent, nodeId: string) => {
     if (event.button !== 0) return;
@@ -1116,6 +1048,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     if (event.button === 0 && isBackground && !event.shiftKey) {
       setSelectedNodeIds(new Set());
     }
+    // Manually grabbing the canvas breaks follow-the-host.
+    breakFollow();
     panStateRef.current = {
       startClientX: event.clientX,
       startClientY: event.clientY,
@@ -1164,7 +1098,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       const px = e.clientX - rect.left - pan.x;
       const py = e.clientY - rect.top - pan.y;
       const t = nearestTOnCurve(conn.x1, conn.y1, conn.x2, conn.y2, px, py);
-      setConnections((prev) => prev.map((c) => (c.id === conn.id ? { ...c, labelT: t } : c)));
+      store.setConnectionLabelT(conn.id, t);
     };
     const up = () => {
       target.releasePointerCapture(pointerId);
@@ -1192,36 +1126,54 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
 
     if (draggingNodeId) {
-      // Capture one undo snapshot per drag, on the first move (before the
-      // node's position actually changes), so undo returns it to where the
-      // drag began.
+      // Start a fresh undo item on the first move of the drag, so the whole
+      // drag (many moveNode transactions, merged via captureTimeout) collapses
+      // to one undo entry that returns the node to where the drag began.
       if (!didPushDragUndoRef.current) {
-        pushUndo();
+        store.stopCapturing();
         didPushDragUndoRef.current = true;
       }
       const screenLeft = pointerX - nodeDragOffset.x;
       const screenTop = pointerY - nodeDragOffset.y;
       const worldX = (screenLeft - pan.x) / zoom;
       const worldY = (screenTop - pan.y) / zoom;
-      setNodes((prev) =>
-        prev.map((node) =>
-          node.id === draggingNodeId ? { ...node, x: worldX, y: worldY } : node,
-        ),
-      );
+      store.moveNode(draggingNodeId, worldX, worldY);
     }
 
     if (linkDraftSource) {
       setLinkDraftPoint({ x: pointerX - pan.x, y: pointerY - pan.y });
     }
+
+    // Publish cursor (and drag) presence, throttled to ~30Hz. World coords match
+    // node.x/y so the remote-cursor layer positions consistently.
+    if (inSession) {
+      const nowT = performance.now();
+      if (nowT - lastPresenceMoveRef.current >= 33) {
+        lastPresenceMoveRef.current = nowT;
+        const worldX = (pointerX - pan.x) / zoom;
+        const worldY = (pointerY - pan.y) / zoom;
+        sessionManager.setPresenceCursor({ x: worldX, y: worldY });
+        if (draggingNodeId) {
+          sessionManager.setPresenceDragging({ nodeId: draggingNodeId, x: worldX, y: worldY });
+        }
+      }
+    }
   };
 
   const handleCanvasMouseUp = () => {
+    if (draggingNodeId) sessionManager.setPresenceDragging(null);
     setDraggingNodeId(null);
     setLinkDraftSource(null);
     if (panStateRef.current) {
       panStateRef.current = null;
       setIsPanning(false);
     }
+  };
+
+  const handleCanvasMouseLeave = () => {
+    handleCanvasMouseUp();
+    // Don't leave a frozen remote cursor parked at the canvas edge.
+    if (inSession) sessionManager.setPresenceCursor(null);
   };
 
   const handleDropNode = (event: DragEvent) => {
@@ -1244,7 +1196,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     // Compound instances need their target type id from the drag payload.
     const compoundTypeId = nodeTypeId === 'compound' ? payload.compoundTypeId ?? null : null;
     if (nodeTypeId === 'compound' && !compoundTypeId) return;
-    pushUndo();
+    store.stopCapturing();
 
     const rect = canvasRef.current.getBoundingClientRect();
     // Center the (scaled) node under the cursor: the node renders with
@@ -1259,42 +1211,39 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       compoundTypeId
         ? compoundTypes.find((c) => c.id === compoundTypeId)?.displayName ?? 'Compound'
         : TYPE_BY_ID[nodeTypeId].displayName;
-    setNodes((prev) => {
-      const nodeNumber = prev.filter((node) => node.type === nodeTypeId).length + 1;
-      const nodeType = TYPE_BY_ID[nodeTypeId];
-      return [
-        ...prev,
-        {
-          id,
-          type: nodeTypeId,
-          label: payload.label ?? `${baseLabel} ${nodeNumber}`,
-          x,
-          y,
-          arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
-          threshold:
-            nodeType.mode === 'threshold' || nodeTypeId === 'digital-out' ? 50 : undefined,
-          delayMs: nodeType.mode === 'delay' ? 100 : undefined,
-          frequencyHz: nodeType.mode === 'oscillator' ? 1.0 : undefined,
-          amplitude:
-            nodeType.mode === 'oscillator'
-              ? 100
-              : nodeType.mode === 'noise'
-                ? 50
-                : undefined,
-          constantValue: nodeType.kind === 'constant' ? 0 : undefined,
-          servoPin:
-            nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
-          clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
-          gpioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
-          xshutPin: nodeType.id === 'sensor-tof' ? '' : undefined,
-          maxDistanceMm: nodeType.id === 'sensor-tof' ? DEFAULT_TOF_MAX_MM : undefined,
-          brightness:
-            nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
-          compoundTypeId: compoundTypeId ?? undefined,
-          // Kit presets pre-fill pins/params on top of the type defaults above.
-          ...payload.params,
-        },
-      ];
+    const nodeType = TYPE_BY_ID[nodeTypeId];
+    // Number the new node within its current editing context (matches the
+    // routed `nodes` view the drop lands in).
+    const nodeNumber = nodes.filter((node) => node.type === nodeTypeId).length + 1;
+    store.addNode({
+      id,
+      type: nodeTypeId,
+      label: payload.label ?? `${baseLabel} ${nodeNumber}`,
+      x,
+      y,
+      arduinoPort: supportsArduinoPort(nodeType) ? '' : undefined,
+      threshold:
+        nodeType.mode === 'threshold' || nodeTypeId === 'digital-out' ? 50 : undefined,
+      delayMs: nodeType.mode === 'delay' ? 100 : undefined,
+      frequencyHz: nodeType.mode === 'oscillator' ? 1.0 : undefined,
+      amplitude:
+        nodeType.mode === 'oscillator'
+          ? 100
+          : nodeType.mode === 'noise'
+            ? 50
+            : undefined,
+      constantValue: nodeType.kind === 'constant' ? 0 : undefined,
+      servoPin:
+        nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
+      clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+      gpioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+      xshutPin: nodeType.id === 'sensor-tof' ? '' : undefined,
+      maxDistanceMm: nodeType.id === 'sensor-tof' ? DEFAULT_TOF_MAX_MM : undefined,
+      brightness:
+        nodeType.id === 'display-tm1637' ? TM1637_DEFAULT_BRIGHTNESS : undefined,
+      compoundTypeId: compoundTypeId ?? undefined,
+      // Kit presets pre-fill pins/params on top of the type defaults above.
+      ...payload.params,
     });
   };
 
@@ -1340,23 +1289,20 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setLinkDraftSource(null);
       return;
     }
-    pushUndo();
+    store.stopCapturing();
     const { id: fromId, port: fromPort } = linkDraftSource;
-    setConnections((prev) => [
-      ...prev,
-      {
-        id: makeId('link'),
-        from: fromId,
-        ...(fromPort ? { fromPort } : {}),
-        to: toId,
-        ...(toPort ? { toPort } : {}),
-        weight: DEFAULT_CONNECTION_WEIGHT,
-        transferMode: 'linear',
-        transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
-      },
-    ]);
+    store.addConnection({
+      id: makeId('link'),
+      from: fromId,
+      ...(fromPort ? { fromPort } : {}),
+      to: toId,
+      ...(toPort ? { toPort } : {}),
+      weight: DEFAULT_CONNECTION_WEIGHT,
+      transferMode: 'linear',
+      transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
+    });
     setLinkDraftSource(null);
-  }, [canConnect, showToast, pushUndo, setConnections, makeId]);
+  }, [canConnect, showToast, store, makeId]);
 
   const selectedNode = configTarget?.kind === 'node' ? nodeMap[configTarget.id] : null;
   const selectedConnection =
@@ -1432,11 +1378,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <span className="toolbar-group-label">Simulate</span>
           <button
             className={`toolbar-btn toolbar-secondary toolbar-trace ${traceMode ? 'active' : ''}`}
-            onClick={() => setTraceMode((v) => !v)}
+            onClick={() => store.setTraceEnabled(!traceMode)}
+            disabled={isViewOnly}
+            title={isViewOnly ? 'View-only: the host controls trace mode.' : undefined}
           >
             <WaypointsIcon />
             <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
+          {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
         </div>
 
         <div className="toolbar-separator" />
@@ -1451,7 +1400,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               step={1}
               integer
               value={loopPeriodMs}
-              onChange={setLoopPeriodMs}
+              onChange={(value) => store.setLoopPeriodMs(value)}
             />
             <span className="toolbar-setting-unit">ms</span>
           </label>
@@ -1619,6 +1568,17 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           )}
         </div>
 
+        <div className="toolbar-separator" />
+
+        <ShareMenu
+          getCurrentState={getCurrentState}
+          applyDiagramFresh={applyDiagramFresh}
+          isPristine={isDiagramPristine}
+          showToast={showToast}
+          canFollowHost={canFollowHost}
+          followingHost={followingHost}
+          onToggleFollowHost={toggleFollowHost}
+        />
       </div>
 
       <div
@@ -1629,7 +1589,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleCanvasMove}
         onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseLeave}
       >
         {editingPath.length > 0 && (
           <div className="diagram-breadcrumb">
@@ -1663,7 +1623,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {traceMode && (
           <div className="trace-banner">
             <span>Trace Mode</span> — set sensor values to see signal propagation
-            <button className="trace-banner-close" onClick={() => setTraceMode(false)}>Exit</button>
+            <button
+              className="trace-banner-close"
+              onClick={() => store.setTraceEnabled(false)}
+              disabled={isViewOnly}
+            >
+              Exit
+            </button>
           </div>
         )}
         <div
@@ -1708,16 +1674,25 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           {connectionPaths.map((connection) => {
             const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
             const stroke = edgeSignal !== undefined ? signalToStroke(edgeSignal) : null;
+            const remote = remoteHighlight.get(connection.id);
             return (
-              <path
-                key={connection.id}
-                className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
-                d={connection.d}
-                style={stroke
-                  ? { stroke: stroke.color, strokeWidth: stroke.width, opacity: stroke.opacity }
-                  : { stroke: weightToColor(connection.weight) }
-                }
-              />
+              <g key={connection.id}>
+                {remote && (
+                  <path
+                    className="connection-remote-select"
+                    d={connection.d}
+                    style={{ stroke: remote.color }}
+                  />
+                )}
+                <path
+                  className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
+                  d={connection.d}
+                  style={stroke
+                    ? { stroke: stroke.color, strokeWidth: stroke.width, opacity: stroke.opacity }
+                    : { stroke: weightToColor(connection.weight) }
+                  }
+                />
+              </g>
             );
           })}
           {linkDraftSource && nodeMap[linkDraftSource.id] && (() => {
@@ -1765,6 +1740,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
         {nodes.map((node) => {
           const worldPos = nodeWorldPos(node);
+          const remote = remoteHighlight.get(node.id);
           return (
             <DiagramNodeView
               key={node.id}
@@ -1786,23 +1762,36 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               lookupPortValue={lookupPortValue}
               setSelectedNodeIds={setSelectedNodeIds}
               setConfigTarget={setConfigTarget}
-              setSensorValues={setSensorValues}
-              setNodes={setNodes}
+              setSensorValue={setSensorValue}
+              setConstantValue={setConstantValue}
+              readOnly={isViewOnly}
+              remoteColor={remote?.color}
+              remoteLabel={remote?.name}
             />
           );
         })}
+        {visiblePeers.map((peer) =>
+          peer.cursor ? (
+            <div
+              key={`cursor-${peer.clientId}`}
+              className="remote-cursor"
+              style={{ left: `${peer.cursor.x * zoom}px`, top: `${peer.cursor.y * zoom}px`, color: peer.color }}
+              aria-hidden="true"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                <path d="M1 1 L1 11 L4 8 L6.5 13 L8.5 12 L6 7 L10 7 Z" stroke="rgba(0,0,0,0.4)" strokeWidth="0.5" />
+              </svg>
+              <span className="remote-cursor-label" style={{ background: peer.color }}>{peer.name}</span>
+            </div>
+          ) : null,
+        )}
         </div>
 
         <ConfigPanel
           selectedNode={selectedNode}
           selectedConnection={selectedConnection}
           hasTarget={configTarget !== null}
-          currentCompoundId={currentCompoundId}
-          pushUndo={pushUndo}
-          setNodes={setNodes}
-          setConnections={setConnections}
-          setCompoundTypes={setCompoundTypes}
-          setTopNodes={setTopNodes}
+          store={store}
           deleteNode={deleteNode}
           deleteConnection={deleteConnection}
           onClose={clearConfigTarget}
@@ -1836,7 +1825,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <button
             type="button"
             className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
-            onClick={() => zoomByStep(1 / ZOOM_STEP)}
+            onClick={() => { breakFollow(); zoomByStep(1 / ZOOM_STEP); }}
             disabled={zoom <= MIN_ZOOM + 1e-6}
             aria-label="Zoom out"
             title="Zoom out"
@@ -1862,7 +1851,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <button
             type="button"
             className="toolbar-btn toolbar-tertiary toolbar-zoom-level"
-            onClick={resetView}
+            onClick={() => { breakFollow(); resetView(); }}
             title="Reset view (100%)"
             aria-label={`Current zoom ${Math.round(zoom * 100)}%. Click to reset.`}
           >
@@ -1871,7 +1860,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <button
             type="button"
             className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
-            onClick={() => zoomByStep(ZOOM_STEP)}
+            onClick={() => { breakFollow(); zoomByStep(ZOOM_STEP); }}
             disabled={zoom >= MAX_ZOOM - 1e-6}
             aria-label="Zoom in"
             title="Zoom in"
@@ -1940,6 +1929,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           onClose={closeSerialMonitor}
         />
       )}
+      <SessionOverlays />
       {toast && (
         <div className="toast" role="status">{toast}</div>
       )}

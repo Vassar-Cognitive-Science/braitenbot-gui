@@ -9,7 +9,7 @@ import {
 
 /**
  * A rolling buffer of samples for a single node, keyed in the parent map by
- * node id. Time values are in ms of simulation time (state.t).
+ * node id. Time values are in ms of simulation time (tick * loopPeriodMs).
  */
 export interface ScopeRow {
   times: number[];
@@ -17,14 +17,16 @@ export interface ScopeRow {
 }
 
 /**
- * An active pulse injection on a sensor. Until `endsAtT` the sensor's value
- * is overridden with `value` regardless of the slider position. Triggered
- * by the per-sensor "▶" button so users can probe latches, pulse responses,
- * and edge-triggered behaviors without dropping the slider.
+ * An active pulse injection on a sensor. Until `endsAtTick` the sensor's
+ * value is overridden with `value` regardless of the slider position.
+ * Triggered by the per-sensor "▶" button so users can probe latches, pulse
+ * responses, and edge-triggered behaviors without dropping the slider.
+ * Tick-based so a pulse is reproducible as (start tick, duration in ticks)
+ * — phase 4 turns this into a shared timestamped event.
  */
 interface Pulse {
   value: number;
-  endsAtT: number;
+  endsAtTick: number;
 }
 
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
@@ -35,6 +37,12 @@ const DIAGRAM_UPDATE_EVERY = 2;
 export interface UseScopeSimulationOptions {
   /** Visible scope window in seconds. */
   windowSec?: number;
+  /**
+   * PRNG seed for noise nodes. When omitted, a fresh seed is generated
+   * each time the simulation (re)starts. A collaborative session passes
+   * the shared session seed here so all clients produce identical traces.
+   */
+  seed?: number;
 }
 
 export interface UseScopeSimulationResult {
@@ -51,10 +59,19 @@ export interface UseScopeSimulationResult {
   /** Discard buffer history and reset the sim clock. */
   clear: () => void;
   /**
-   * Inject a temporary override on a sensor for `durationMs`. Stacks if
-   * called rapidly — the most recent call wins.
+   * Inject a temporary override on a sensor for `durationMs` (internally
+   * rounded to whole ticks). Stacks if called rapidly — the most recent
+   * call wins.
    */
   pulse: (sensorId: string, value: number, durationMs: number) => void;
+  /** Current integer tick index (0 when not running) — for shared pulse events. */
+  currentTick: () => number;
+  /**
+   * PRNG seed of the current simulation run — read directly (e.g. to put
+   * it in a shared session doc). Set via options.seed; otherwise freshly
+   * generated whenever the simulation (re)starts.
+   */
+  seedRef: React.MutableRefObject<number>;
 }
 
 /**
@@ -78,10 +95,12 @@ export function useScopeSimulation(
 ): UseScopeSimulationResult {
   const windowSec = options.windowSec ?? 5;
   const windowMs = windowSec * 1000;
+  const optionSeed = options.seed;
 
   const stateRef = useRef<SimulationState | null>(null);
   const buffersRef = useRef<Map<string, ScopeRow>>(new Map());
   const timeRef = useRef(0);
+  const seedRef = useRef(0);
   const pulsesRef = useRef<Map<string, Pulse>>(new Map());
 
   // Latest props for the interval callback — refs avoid restarting the
@@ -103,26 +122,36 @@ export function useScopeSimulation(
   const [paused, setPaused] = useState(false);
 
   const initSim = useCallback(() => {
+    // Seed chosen at session start — wall clock is fine here because it is
+    // outside the simulation; every value thereafter derives from the seed
+    // and the integer tick index. A shared session passes options.seed.
+    const seed = optionSeed ?? (Date.now() >>> 0);
+    seedRef.current = seed;
     stateRef.current = createSimulationState(
       nodesRef.current,
       loopPeriodMs,
       connectionsRef.current,
       compoundTypesRef.current,
+      seed,
     );
     timeRef.current = 0;
     buffersRef.current = new Map();
     pulsesRef.current = new Map();
     setCurrent(EMPTY);
-  }, [loopPeriodMs]);
+  }, [loopPeriodMs, optionSeed]);
 
   const clear = useCallback(() => {
     initSim();
   }, [initSim]);
 
   const pulse = useCallback((sensorId: string, value: number, durationMs: number) => {
-    const now = timeRef.current;
-    pulsesRef.current.set(sensorId, { value, endsAtT: now + durationMs });
-  }, []);
+    const state = stateRef.current;
+    if (!state) return;
+    const ticks = Math.max(1, Math.round(durationMs / Math.max(1, loopPeriodMs)));
+    pulsesRef.current.set(sensorId, { value, endsAtTick: state.tick + ticks });
+  }, [loopPeriodMs]);
+
+  const currentTick = useCallback(() => stateRef.current?.tick ?? 0, []);
 
   // Reset when the sim is turned on, or when the diagram's structure or
   // loop period changes in a way that the existing buffers/state no
@@ -145,13 +174,15 @@ export function useScopeSimulation(
     const interval = window.setInterval(() => {
       const state = stateRef.current;
       if (!state) return;
-      state.t += loopPeriodMs;
-      timeRef.current = state.t;
+      // The integer tick index is the source of truth; ms time is derived.
+      state.tick += 1;
+      const t = state.tick * loopPeriodMs;
+      timeRef.current = t;
 
       // Resolve sensor inputs with active pulses overriding the slider.
       const effective: Record<string, number> = { ...sensorValuesRef.current };
       for (const [id, p] of pulsesRef.current) {
-        if (state.t < p.endsAtT) {
+        if (state.tick < p.endsAtTick) {
           effective[id] = p.value;
         } else {
           pulsesRef.current.delete(id);
@@ -168,7 +199,7 @@ export function useScopeSimulation(
 
       // Append to scope buffers and prune the trailing edge.
       const buffers = buffersRef.current;
-      const cutoff = state.t - windowMs;
+      const cutoff = t - windowMs;
       for (const node of nodesRef.current) {
         const v = result.nodeValues[node.id] ?? 0;
         let row = buffers.get(node.id);
@@ -176,7 +207,7 @@ export function useScopeSimulation(
           row = { times: [], values: [] };
           buffers.set(node.id, row);
         }
-        row.times.push(state.t);
+        row.times.push(t);
         row.values.push(v);
         while (row.times.length > 0 && row.times[0] < cutoff) {
           row.times.shift();
@@ -207,6 +238,8 @@ export function useScopeSimulation(
     setPaused,
     clear,
     pulse,
+    currentTick,
+    seedRef,
   };
 }
 

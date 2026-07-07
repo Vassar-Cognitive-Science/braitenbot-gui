@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
-import type { CompoundTypeDefinition, DiagramConnection, DiagramNode, TransferPoint } from '../types/diagram';
+import { useCallback, useEffect } from 'react';
+import type { DiagramConnection, DiagramNode, TransferPoint } from '../types/diagram';
 import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import type { DiagramStore } from '../doc/DiagramStore';
 import { TransferCurveEditor } from './TransferCurveEditor';
 import { NumberInput } from './NumberInput';
 import {
@@ -22,12 +22,7 @@ interface ConfigPanelProps {
   selectedNode: DiagramNode | null;
   selectedConnection: DiagramConnection | null;
   hasTarget: boolean;
-  currentCompoundId: string | null;
-  pushUndo: () => void;
-  setNodes: Dispatch<SetStateAction<DiagramNode[]>>;
-  setConnections: Dispatch<SetStateAction<DiagramConnection[]>>;
-  setCompoundTypes: Dispatch<SetStateAction<CompoundTypeDefinition[]>>;
-  setTopNodes: Dispatch<SetStateAction<DiagramNode[]>>;
+  store: DiagramStore;
   deleteNode: (id: string) => void;
   deleteConnection: (id: string) => void;
   onClose: () => void;
@@ -37,51 +32,32 @@ export function ConfigPanel({
   selectedNode,
   selectedConnection,
   hasTarget,
-  currentCompoundId,
-  pushUndo,
-  setNodes,
-  setConnections,
-  setCompoundTypes,
-  setTopNodes,
+  store,
   deleteNode,
   deleteConnection,
   onClose,
 }: ConfigPanelProps) {
   // One undo entry per config-target "session". A session begins when the
   // selected target changes (including after an undo/redo, which clears the
-  // selection) and ends when it changes again. The first mutation in a
-  // session pushes a snapshot; later ones (e.g. a slider or transfer-curve
-  // drag firing many onChange calls) don't, so a whole tweak collapses to one
-  // undo entry.
-  const pushedThisSessionRef = useRef(false);
+  // selection). stopCapturing() at that boundary starts a fresh undo item, so
+  // the many onChange calls of a single slider/curve drag merge into one entry.
   const targetId = selectedNode?.id ?? selectedConnection?.id ?? null;
   useEffect(() => {
-    pushedThisSessionRef.current = false;
-  }, [targetId]);
-
-  const ensureConfigUndo = useCallback(() => {
-    if (!pushedThisSessionRef.current) {
-      pushUndo();
-      pushedThisSessionRef.current = true;
-    }
-  }, [pushUndo]);
+    store.stopCapturing();
+  }, [store, targetId]);
 
   const patchNode = useCallback(
     (id: string, patch: Partial<DiagramNode>) => {
-      ensureConfigUndo();
-      setNodes((prev) => prev.map((node) => (node.id === id ? { ...node, ...patch } : node)));
+      store.patchNode(id, patch);
     },
-    [ensureConfigUndo, setNodes],
+    [store],
   );
 
   const patchConnection = useCallback(
     (id: string, patch: Partial<DiagramConnection>) => {
-      ensureConfigUndo();
-      setConnections((prev) =>
-        prev.map((connection) => (connection.id === id ? { ...connection, ...patch } : connection)),
-      );
+      store.patchConnection(id, patch);
     },
-    [ensureConfigUndo, setConnections],
+    [store],
   );
 
   return (
@@ -143,21 +119,7 @@ export function ConfigPanel({
               onChange={(event) => {
                 const newLabel = event.target.value;
                 if (selectedNode.type === 'compound' && selectedNode.compoundTypeId) {
-                  ensureConfigUndo();
-                  const typeId = selectedNode.compoundTypeId;
-                  setCompoundTypes((prev) =>
-                    prev.map((c) =>
-                      c.id === typeId ? { ...c, displayName: newLabel } : c,
-                    ),
-                  );
-                  const syncInstances = (prev: DiagramNode[]) =>
-                    prev.map((node) =>
-                      node.type === 'compound' && node.compoundTypeId === typeId
-                        ? { ...node, label: newLabel }
-                        : node,
-                    );
-                  setNodes(syncInstances);
-                  if (currentCompoundId) setTopNodes(syncInstances);
+                  store.renameCompound(selectedNode.compoundTypeId, newLabel);
                 } else {
                   patchNode(selectedNode.id, { label: newLabel });
                 }

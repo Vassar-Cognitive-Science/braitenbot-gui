@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Dispatch, MouseEvent, SetStateAction } from 'react';
+import type { CSSProperties, Dispatch, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import type { TraceResult } from '../hooks/useTraceSimulation';
@@ -28,8 +28,17 @@ interface DiagramNodeViewProps {
   lookupPortValue: (nodeId: string, portId: string) => number | undefined;
   setSelectedNodeIds: Dispatch<SetStateAction<Set<string>>>;
   setConfigTarget: Dispatch<SetStateAction<ConfigTarget | null>>;
-  setSensorValues: Dispatch<SetStateAction<Record<string, number>>>;
-  setNodes: Dispatch<SetStateAction<DiagramNode[]>>;
+  // Trace-mode sensor inputs. Writes the shared `trace` map (keyed nodeId or
+  // nodeId:channel) via an untracked store mutation — carries no undo entry.
+  setSensorValue: (key: string, value: number) => void;
+  // Trace-mode constant slider. Writes node.constantValue (shared document
+  // state) via an untracked store mutation — carries no undo entry.
+  setConstantValue: (id: string, value: number) => void;
+  // View-only role: disable every trace input (slider, toggle, pulse).
+  readOnly: boolean;
+  // A remote peer selecting/dragging this node — outline it in their color.
+  remoteColor?: string;
+  remoteLabel?: string;
 }
 
 function DiagramNodeViewInner({
@@ -51,8 +60,11 @@ function DiagramNodeViewInner({
   lookupPortValue,
   setSelectedNodeIds,
   setConfigTarget,
-  setSensorValues,
-  setNodes,
+  setSensorValue,
+  setConstantValue,
+  readOnly,
+  remoteColor,
+  remoteLabel,
 }: DiagramNodeViewProps) {
   const nodeType = TYPE_BY_ID[node.type];
   const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
@@ -104,8 +116,15 @@ function DiagramNodeViewInner({
         isDisconnected ? 'trace-disconnected' : '',
         hasSlider ? 'trace-expanded' : '',
         hasSlider && node.type === 'sensor-color' ? 'trace-color-expanded' : '',
+        remoteColor ? 'remote-selected' : '',
       ].filter(Boolean).join(' ')}
-      style={{ left: `${worldX}px`, top: `${worldY}px` }}
+      style={{
+        left: `${worldX}px`,
+        top: `${worldY}px`,
+        ...(remoteColor
+          ? ({ '--remote-color': remoteColor } as CSSProperties)
+          : null),
+      }}
       onMouseDown={(event) => beginNodeDrag(event, node.id)}
       onClick={(event) => {
         if (event.shiftKey) {
@@ -132,6 +151,11 @@ function DiagramNodeViewInner({
           : undefined
       }
     >
+      {remoteColor && remoteLabel && (
+        <span className="remote-owner-tag" style={{ background: remoteColor }} aria-hidden="true">
+          {remoteLabel}
+        </span>
+      )}
       <div className="node-label">{node.label}</div>
       <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
       {hasSlider && node.type === 'sensor-digital' && (
@@ -141,14 +165,12 @@ function DiagramNodeViewInner({
             className={`trace-digital-toggle ${
               (sensorValues[node.id] ?? 0) >= 50 ? 'high' : 'low'
             }`}
+            disabled={readOnly}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               const isHigh = (sensorValues[node.id] ?? 0) >= 50;
-              setSensorValues((prev) => ({
-                ...prev,
-                [node.id]: isHigh ? 0 : 100,
-              }));
+              setSensorValue(node.id, isHigh ? 0 : 100);
             }}
             title="Toggle digital input (LOW / HIGH)"
           >
@@ -158,6 +180,7 @@ function DiagramNodeViewInner({
             type="button"
             className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
             title="Pulse this sensor HIGH for 200ms"
+            disabled={readOnly}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
@@ -181,15 +204,13 @@ function DiagramNodeViewInner({
                 min="0"
                 max="100"
                 step="1"
+                disabled={readOnly}
                 value={sensorValues[`${node.id}:${ch}`] ?? 0}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
                   const v = parseFloat(e.target.value);
-                  setSensorValues((prev) => ({
-                    ...prev,
-                    [`${node.id}:${ch}`]: v,
-                  }));
+                  setSensorValue(`${node.id}:${ch}`, v);
                 }}
               />
             </div>
@@ -212,19 +233,16 @@ function DiagramNodeViewInner({
             min={sliderMin}
             max="100"
             step="1"
+            disabled={readOnly}
             value={sliderValue}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               const v = parseFloat(e.target.value);
               if (nodeType.kind === 'sensor' || isCompoundInput) {
-                setSensorValues((prev) => ({ ...prev, [node.id]: v }));
+                setSensorValue(node.id, v);
               } else {
-                setNodes((prev) =>
-                  prev.map((n) =>
-                    n.id === node.id ? { ...n, constantValue: v } : n,
-                  ),
-                );
+                setConstantValue(node.id, v);
               }
             }}
           />
@@ -234,6 +252,7 @@ function DiagramNodeViewInner({
               type="button"
               className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
               title="Pulse to 100 for 200ms"
+              disabled={readOnly}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
