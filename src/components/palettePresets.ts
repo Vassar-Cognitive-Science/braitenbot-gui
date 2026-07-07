@@ -34,4 +34,4 @@ export const KIT_OUTPUTS: KitPreset[] = [
 ];
 
 /** Generic starter compute nodes shown on the Basic tab (no preset params). */
-export const BASIC_COMPUTE_TYPES: NodeTypeId[] = ['compute-threshold', 'compute-summation', 'compute-delay'];
+export const BASIC_COMPUTE_TYPES: NodeTypeId[] = ['compute-threshold', 'compute-summation', 'compute-multiply', 'compute-delay'];
