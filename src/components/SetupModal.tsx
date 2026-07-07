@@ -61,7 +61,12 @@ export function SetupModal({ arduino }: SetupModalProps) {
         )}
         {isInstalling && (
           <>
-            <p>Installing the Arduino toolchains — this may take a few minutes…</p>
+            <p>
+              Installing the Arduino toolchains — this may take a few minutes.
+              On Windows, accept the administrator prompt when it appears: it
+              installs the USB drivers your computer needs to talk to the
+              board.
+            </p>
             <pre ref={logRef} className="setup-log">
               {installLog || 'Starting…'}
             </pre>

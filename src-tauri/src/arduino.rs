@@ -588,7 +588,10 @@ async fn install_avr_core_inner(app: &AppHandle) -> ArduinoResult<()> {
             INSTALL_LOG_EVENT,
             format!("\n→ Installing {} core (this may take a few minutes)...\n", core),
         );
-        stream_sidecar(app, &["core", "install", core]).await?;
+        // --run-post-install: arduino-cli skips a platform's post-install
+        // script (the Windows USB driver installer) in non-interactive
+        // sessions, and a GUI-spawned sidecar is always non-interactive.
+        stream_sidecar(app, &["core", "install", core, "--run-post-install"]).await?;
     }
 
     let _ = app.emit(
@@ -609,5 +612,167 @@ async fn install_avr_core_inner(app: &AppHandle) -> ArduinoResult<()> {
         INSTALL_LOG_EVENT,
         "\n✓ Arduino toolchains ready.\n".to_string(),
     );
+    Ok(())
+}
+
+// ---- Windows USB driver detection / repair ---------------------------------
+
+/// Suppresses the console window that would otherwise flash when spawning
+/// powershell.exe from a GUI process.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// USB vendor IDs that identify an Arduino-compatible board: Arduino SA,
+/// Arduino.org, WCH (CH340 clones), FTDI, Silicon Labs (CP210x), SparkFun.
+#[cfg(windows)]
+const BOARD_USB_VIDS: &str = "2341|2A03|1A86|0403|10C4|1B4F";
+
+/// A connected Arduino-like USB device whose Windows driver is missing or
+/// broken (nonzero PnP ConfigManagerErrorCode, e.g. 28 = "the drivers for
+/// this device are not installed").
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverIssue {
+    pub device_name: String,
+    pub error_code: u64,
+}
+
+/// Queries Windows PnP for a board stuck without a driver. This is the state
+/// a board lands in when the platform's post-install driver script never ran:
+/// the device is physically present but never enumerates as a COM port, so
+/// `arduino-cli board list` reports nothing at all.
+#[cfg(windows)]
+fn query_driver_issue() -> ArduinoResult<Option<DriverIssue>> {
+    use std::os::windows::process::CommandExt;
+
+    let script = format!(
+        "Get-CimInstance -ClassName Win32_PnPEntity -Filter 'ConfigManagerErrorCode <> 0' | \
+         Where-Object {{ $_.PNPDeviceID -match '^USB\\\\VID_({})' }} | \
+         Select-Object Name, ConfigManagerErrorCode | ConvertTo-Json -Compress",
+        BOARD_USB_VIDS
+    );
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()?;
+    if !output.status.success() {
+        return Err(ArduinoError::CliFailed(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = stdout.trim();
+    if stdout.is_empty() {
+        return Ok(None);
+    }
+    let parsed: serde_json::Value = serde_json::from_str(stdout)
+        .map_err(|e| ArduinoError::Parse(format!("{}: {}", e, stdout)))?;
+    // ConvertTo-Json emits a bare object for one match, an array for several.
+    let first = if parsed.is_array() {
+        parsed.get(0).cloned()
+    } else {
+        Some(parsed)
+    };
+    Ok(first.map(|entry| DriverIssue {
+        device_name: entry
+            .get("Name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown USB device")
+            .to_string(),
+        error_code: entry
+            .get("ConfigManagerErrorCode")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+    }))
+}
+
+/// Detects a plugged-in board whose Windows USB driver is missing. Always
+/// `None` on other platforms, so the frontend can call it unconditionally.
+#[tauri::command]
+pub async fn check_driver_issue() -> ArduinoResult<Option<DriverIssue>> {
+    #[cfg(windows)]
+    {
+        return tauri::async_runtime::spawn_blocking(query_driver_issue)
+            .await
+            .map_err(|e| ArduinoError::CliFailed(e.to_string()))?;
+    }
+    #[cfg(not(windows))]
+    Ok(None)
+}
+
+/// Runs each installed board platform's bundled `post_install.bat` driver
+/// installer elevated (dpinst needs administrator rights, so Windows shows a
+/// UAC prompt). Recovers boards whose cores were installed before the app
+/// passed `--run-post-install`, or where the user declined the UAC prompt
+/// during core installation.
+#[tauri::command]
+pub async fn install_drivers(app: AppHandle) -> ArduinoResult<()> {
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err(ArduinoError::CliFailed(
+            "Driver installation is only needed on Windows.".to_string(),
+        ))
+    }
+    #[cfg(windows)]
+    {
+        let (stdout, stderr, success) =
+            run_sidecar(&app, &["config", "get", "directories.data"]).await?;
+        if !success {
+            return Err(ArduinoError::CliFailed(stderr));
+        }
+        let hardware_dir = std::path::Path::new(stdout.trim())
+            .join("packages")
+            .join("arduino")
+            .join("hardware");
+
+        let mut scripts = Vec::new();
+        if hardware_dir.is_dir() {
+            for platform in fs::read_dir(&hardware_dir)? {
+                let platform = platform?.path();
+                if !platform.is_dir() {
+                    continue;
+                }
+                for version in fs::read_dir(&platform)? {
+                    let script = version?.path().join("post_install.bat");
+                    if script.is_file() {
+                        scripts.push(script);
+                    }
+                }
+            }
+        }
+        if scripts.is_empty() {
+            return Err(ArduinoError::CliFailed(
+                "No driver installer found — install the Arduino toolchains first.".to_string(),
+            ));
+        }
+
+        tauri::async_runtime::spawn_blocking(move || run_driver_scripts_elevated(&scripts))
+            .await
+            .map_err(|e| ArduinoError::CliFailed(e.to_string()))?
+    }
+}
+
+#[cfg(windows)]
+fn run_driver_scripts_elevated(scripts: &[std::path::PathBuf]) -> ArduinoResult<()> {
+    use std::os::windows::process::CommandExt;
+
+    for script in scripts {
+        // PowerShell single-quoted strings escape ' by doubling it.
+        let path = script.to_string_lossy().replace('\'', "''");
+        let ps = format!("Start-Process -FilePath '{}' -Verb RunAs -Wait", path);
+        let status = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()?;
+        // Start-Process throws (nonzero powershell exit) when the UAC prompt
+        // is declined; dpinst's own bitfield exit code is not propagated.
+        if !status.success() {
+            return Err(ArduinoError::CliFailed(
+                "Driver installation was cancelled or failed — accept the Windows administrator prompt to install the driver.".to_string(),
+            ));
+        }
+    }
     Ok(())
 }
