@@ -285,6 +285,12 @@ export function simulateGraph(
       nodeValues[nodeId] = sum > thresh ? 100 : 0;
     } else if (typeDef.mode === 'multiply') {
       nodeValues[nodeId] = inputs.reduce((a, b) => a * b, 1);
+    } else if (typeDef.mode === 'min') {
+      // inputs is non-empty here (the no-incoming case returned above), so
+      // Math.min has a defined result rather than +Infinity.
+      nodeValues[nodeId] = Math.min(...inputs);
+    } else if (typeDef.mode === 'max') {
+      nodeValues[nodeId] = Math.max(...inputs);
     } else if (typeDef.mode === 'delay') {
       nodeValues[nodeId] = sum;
     } else if (typeDef.mode === 'summation') {

@@ -1,6 +1,6 @@
 export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound' | 'port';
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
-export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'oscillator' | 'noise';
+export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'min' | 'max' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
 /** TCS34725 RGBC gain multipliers the UI offers; the emitter maps each to a
  *  CONTROL-register value. 16× is a good default for indoor/classroom light. */
@@ -25,6 +25,8 @@ export type NodeTypeId =
   | 'compute-delay'
   | 'compute-summation'
   | 'compute-multiply'
+  | 'compute-min'
+  | 'compute-max'
   | 'compute-oscillator'
   | 'compute-noise'
   | 'constant'
@@ -210,6 +212,8 @@ export const NODE_TYPES: NodeTypeDefinition[] = [
   { id: 'compute-delay', kind: 'compute', displayName: 'Delay', metaLabel: 'delay', mode: 'delay', hasInputs: true, maxInputs: 1, breaksCycles: true },
   { id: 'compute-summation', kind: 'compute', displayName: 'Summation', metaLabel: 'sum', mode: 'summation', hasInputs: true },
   { id: 'compute-multiply', kind: 'compute', displayName: 'Multiply', metaLabel: 'multiply', mode: 'multiply', hasInputs: true },
+  { id: 'compute-min', kind: 'compute', displayName: 'Minimum', metaLabel: 'min', mode: 'min', hasInputs: true },
+  { id: 'compute-max', kind: 'compute', displayName: 'Maximum', metaLabel: 'max', mode: 'max', hasInputs: true },
   { id: 'compute-oscillator', kind: 'compute', displayName: 'Oscillator', metaLabel: 'oscillator', mode: 'oscillator' },
   { id: 'compute-noise', kind: 'compute', displayName: 'Noise', metaLabel: 'noise', mode: 'noise' },
   { id: 'constant', kind: 'constant', displayName: 'Constant', metaLabel: 'constant' },

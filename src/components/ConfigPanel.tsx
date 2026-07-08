@@ -93,6 +93,12 @@ export function ConfigPanel({
               TYPE_BY_ID[selectedNode.type].mode === 'multiply' &&
               'Multiplies all incoming signals together. When one input is 0 or 1, it acts as a gate: the other signal passes through when the gate is on, and zero when the gate is off.'}
             {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+              TYPE_BY_ID[selectedNode.type].mode === 'min' &&
+              'Outputs the smallest of its incoming (weighted) signals. Useful for "respond to the nearest/weakest" behaviors, or as a ceiling when one input is a constant.'}
+            {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
+              TYPE_BY_ID[selectedNode.type].mode === 'max' &&
+              'Outputs the largest of its incoming (weighted) signals. Useful for "respond to the strongest" behaviors, or as a floor when one input is a constant.'}
+            {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&
               TYPE_BY_ID[selectedNode.type].mode === 'oscillator' &&
               'Generates a sine wave that oscillates over time. Useful as a central pattern generator for rhythmic motor behavior. Output ranges from -amplitude to +amplitude.'}
             {TYPE_BY_ID[selectedNode.type].kind === 'compute' &&

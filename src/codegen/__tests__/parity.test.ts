@@ -109,6 +109,21 @@ function aggregateProduct(graph: WiringGraph, nodeId: string, vals: Record<strin
   return acc;
 }
 
+function aggregateReduce(
+  graph: WiringGraph,
+  nodeId: string,
+  vals: Record<string, number>,
+  op: 'min' | 'max',
+): number {
+  // Mirrors emitter.ts emitReduceAggregation: seed with the first edge term,
+  // then fold the rest with min/max. Empty input is 0.0 (matches the trace
+  // simulator's disconnected → 0).
+  const incoming = graph.edges.filter((e) => e.to === nodeId);
+  if (incoming.length === 0) return 0;
+  const terms = incoming.map((edge) => applyEdgeTerm(edge, srcVal(vals, edge)));
+  return op === 'max' ? Math.max(...terms) : Math.min(...terms);
+}
+
 interface CResult {
   nodeValues: Record<string, number>;
 }
@@ -161,6 +176,10 @@ function simulateEmittedC(
       } else if (node.typeId === 'compute-multiply') {
         // emitter.ts (compute-multiply branch following summation)
         vals[nodeId] = aggregateProduct(graph, nodeId, vals);
+      } else if (node.typeId === 'compute-min') {
+        vals[nodeId] = aggregateReduce(graph, nodeId, vals, 'min');
+      } else if (node.typeId === 'compute-max') {
+        vals[nodeId] = aggregateReduce(graph, nodeId, vals, 'max');
       } else if (node.typeId === 'compute-delay') {
         // Delay nodes have multi-tick state in C; not part of parity.
         // Falling through to sum here so the value is at least defined,
@@ -467,6 +486,59 @@ describe('node parity (trace vs emitted C)', () => {
         { s1: 50, s2: 40, s3: 80 },
         ['m1', 'motor-L'],
       );
+    });
+  });
+
+  describe('min / max', () => {
+    it('min agrees on two mixed-sign inputs', () => {
+      const min: DiagramNode = { id: 'n1', type: 'compute-min', label: 'min', x: 0, y: 0 };
+      const nodes = [sensor('s1'), sensor('s2'), min, leftMotor()];
+      const connections = [
+        makeConn({ id: 'c1', from: 's1', to: 'n1' }),
+        makeConn({ id: 'c2', from: 's2', to: 'n1' }),
+        makeConn({ id: 'c3', from: 'n1', to: 'motor-L' }),
+      ];
+      expectParity(nodes, connections, { s1: 70, s2: 30 }, ['n1', 'motor-L']);
+      expectParity(nodes, connections, { s1: 20, s2: 90 }, ['n1', 'motor-L']);
+    });
+
+    it('max agrees on three inputs', () => {
+      const max: DiagramNode = { id: 'n1', type: 'compute-max', label: 'max', x: 0, y: 0 };
+      const nodes = [sensor('s1'), sensor('s2'), sensor('s3'), max, leftMotor()];
+      const connections = [
+        makeConn({ id: 'c1', from: 's1', to: 'n1' }),
+        makeConn({ id: 'c2', from: 's2', to: 'n1' }),
+        makeConn({ id: 'c3', from: 's3', to: 'n1' }),
+        makeConn({ id: 'c4', from: 'n1', to: 'motor-L' }),
+      ];
+      expectParity(nodes, connections, { s1: 40, s2: 90, s3: 60 }, ['n1', 'motor-L']);
+    });
+
+    it('respects per-edge weights before reducing (min of weighted terms)', () => {
+      // A negative weight flips a term, so the reduction runs over the
+      // post-weight values — both sides must agree on that ordering.
+      const min: DiagramNode = { id: 'n1', type: 'compute-min', label: 'min', x: 0, y: 0 };
+      const nodes = [sensor('s1'), sensor('s2'), min, leftMotor()];
+      const connections = [
+        makeConn({ id: 'c1', from: 's1', to: 'n1', weight: 1 }),
+        makeConn({ id: 'c2', from: 's2', to: 'n1', weight: -0.5 }),
+        makeConn({ id: 'c3', from: 'n1', to: 'motor-L' }),
+      ];
+      expectParity(nodes, connections, { s1: 20, s2: 80 }, ['n1', 'motor-L']);
+    });
+
+    it('caps a signal via max-with-a-constant (single input passes through)', () => {
+      // The "clamp to a floor" idiom: max(signal, constant).
+      const cst: DiagramNode = { id: 'k1', type: 'constant', label: 'floor', x: 0, y: 0, constantValue: 25 };
+      const max: DiagramNode = { id: 'n1', type: 'compute-max', label: 'max', x: 0, y: 0 };
+      const nodes = [sensor('s1'), cst, max, leftMotor()];
+      const connections = [
+        makeConn({ id: 'c1', from: 's1', to: 'n1' }),
+        makeConn({ id: 'c2', from: 'k1', to: 'n1' }),
+        makeConn({ id: 'c3', from: 'n1', to: 'motor-L' }),
+      ];
+      expectParity(nodes, connections, { s1: 10 }, ['n1', 'motor-L']); // floor wins
+      expectParity(nodes, connections, { s1: 70 }, ['n1', 'motor-L']); // signal wins
     });
   });
 
