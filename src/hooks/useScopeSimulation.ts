@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
 import {
+  type SimulationPlan,
   type SimulationState,
   type TraceResult,
+  buildSimulationPlan,
   createSimulationState,
   simulateGraph,
 } from './useTraceSimulation';
@@ -31,8 +33,13 @@ interface Pulse {
 
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
 
-/** State-update throttle for the diagram trace display, in ticks. */
-const DIAGRAM_UPDATE_EVERY = 2;
+/**
+ * Minimum wall-derived sim time between React state pushes for the diagram
+ * trace display (~10Hz). Scope buffers still append every tick — only the
+ * React re-render is throttled — and the cadence is independent of the loop
+ * period (a 5ms loop won't flood React at 200Hz).
+ */
+const DIAGRAM_UPDATE_INTERVAL_MS = 100;
 
 export interface UseScopeSimulationOptions {
   /** Visible scope window in seconds. */
@@ -102,6 +109,8 @@ export function useScopeSimulation(
   const timeRef = useRef(0);
   const seedRef = useRef(0);
   const pulsesRef = useRef<Map<string, Pulse>>(new Map());
+  // Sim time (ms) of the last React state push — throttles re-renders.
+  const lastDisplayPushRef = useRef(0);
 
   // Latest props for the interval callback — refs avoid restarting the
   // tick loop on every keystroke or slider drag.
@@ -117,6 +126,20 @@ export function useScopeSimulation(
   sensorValuesRef.current = sensorValues;
   // eslint-disable-next-line react-hooks/refs
   compoundTypesRef.current = compoundTypes;
+
+  // Compiled simulation plan — the structural work (flatten, toposort,
+  // adjacency, sorted transfers) done once per edit rather than every tick.
+  // Rebuilds when node/connection/compound identity changes; node-position
+  // drags rebuild too, which is still edit-time (not per-tick) and fine.
+  // Skipped entirely while the sim is off so trace mode adds zero cost to
+  // plain editing.
+  const plan = useMemo(
+    () => (enabled ? buildSimulationPlan(nodes, connections, compoundTypes) : null),
+    [enabled, nodes, connections, compoundTypes],
+  );
+  const planRef = useRef<SimulationPlan | null>(plan);
+  // eslint-disable-next-line react-hooks/refs
+  planRef.current = plan;    // intentional render-time ref sync — matches the prop refs above
 
   const [current, setCurrent] = useState<TraceResult>(EMPTY);
   const [paused, setPaused] = useState(false);
@@ -137,6 +160,9 @@ export function useScopeSimulation(
     timeRef.current = 0;
     buffersRef.current = new Map();
     pulsesRef.current = new Map();
+    // Reset the throttle marker so the first push lands ~one interval after
+    // start (sim time begins at 0) — never left starved indefinitely.
+    lastDisplayPushRef.current = 0;
     setCurrent(EMPTY);
   }, [loopPeriodMs, optionSeed]);
 
@@ -170,7 +196,6 @@ export function useScopeSimulation(
 
   useEffect(() => {
     if (!enabled || paused) return;
-    let tickCount = 0;
     const interval = window.setInterval(() => {
       const state = stateRef.current;
       if (!state) return;
@@ -195,6 +220,9 @@ export function useScopeSimulation(
         effective,
         state,
         compoundTypesRef.current,
+        // null only while disabled, and the interval doesn't run then — the
+        // ?? undefined fallback (plan built internally) is just type safety.
+        planRef.current ?? undefined,
       );
 
       // Append to scope buffers and prune the trailing edge.
@@ -221,8 +249,11 @@ export function useScopeSimulation(
         if (!liveIds.has(id)) buffers.delete(id);
       }
 
-      tickCount += 1;
-      if (tickCount % DIAGRAM_UPDATE_EVERY === 0) {
+      // Push to React state at most ~10Hz of sim time, regardless of loop
+      // period. Buffers above already captured this tick; only the re-render
+      // is throttled.
+      if (t - lastDisplayPushRef.current >= DIAGRAM_UPDATE_INTERVAL_MS) {
+        lastDisplayPushRef.current = t;
         setCurrent(result);
       }
     }, Math.max(1, loopPeriodMs));
