@@ -72,7 +72,7 @@ describe('validateGraph', () => {
     expect(errors.some((e) => e.message.includes('no pin configured'))).toBe(true);
   });
 
-  it('reports unreachable actuator', () => {
+  it('reports unreachable actuator as a non-blocking warning', () => {
     const nodes = [
       makeSensor(),
       makeMotor(),
@@ -80,7 +80,13 @@ describe('validateGraph', () => {
     ];
     const connections = [makeConnection()]; // only connects to motor-left
     const errors = validateGraph(nodes, connections);
-    expect(errors.some((e) => e.message.includes('Right Wheel') && e.message.includes('not connected'))).toBe(true);
+    // An unconnected output is allowed (e.g. testing the display with the
+    // wheels unsignaled) — surfaced as a warning so it never blocks the build.
+    const unreachable = errors.find(
+      (e) => e.message.includes('Right Wheel') && e.message.includes('not connected'),
+    );
+    expect(unreachable).toBeDefined();
+    expect(unreachable?.severity).toBe('warning');
   });
 
   it('rejects pin strings that are not plain pin references', () => {
