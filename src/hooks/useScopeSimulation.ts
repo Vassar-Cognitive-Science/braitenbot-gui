@@ -181,10 +181,15 @@ export function useScopeSimulation(
 
   // Reset when the sim is turned on, or when the diagram's structure or
   // loop period changes in a way that the existing buffers/state no
-  // longer model. We compare by id+typeId+delayMs instead of node-array
-  // identity so dragging a node or toggling trace mode doesn't trash
-  // accumulated history.
-  const structureKey = useMemo(() => structureFingerprint(nodes), [nodes]);
+  // longer model. Simulation state is solely delay ring buffers, so we
+  // fingerprint the FLATTENED delay nodes the plan sees (including those
+  // inside compound bodies) rather than the top-level node array. Keying
+  // off top-level nodes would miss a compound-body delay edit — which
+  // rebuilds the plan but leaves top-level nodes untouched — leaving the
+  // buffers desynced from the plan's delay ids until trace is toggled.
+  // Deriving from the plan also means node drags/labels don't trash
+  // accumulated history (the fingerprint string is unchanged).
+  const structureKey = useMemo(() => delayStructureFingerprint(plan), [plan]);
   useEffect(() => {
     if (!enabled) {
       stateRef.current = null;
@@ -274,12 +279,14 @@ export function useScopeSimulation(
   };
 }
 
-function structureFingerprint(nodes: DiagramNode[]): string {
-  // Only fields that change the sim's structural state need to be in
-  // here. Other fields (label, position, weights) can change without
-  // resetting the sim.
-  return nodes
-    .map((n) => `${n.id}:${n.type}:${n.delayMs ?? ''}`)
+function delayStructureFingerprint(plan: SimulationPlan | null): string {
+  // Sim state consists solely of delay ring buffers, whose ids and sizes
+  // derive from the flattened `compute-delay` nodes (id + delayMs; buffer
+  // size also depends on loopPeriodMs, already a separate reset dep). No
+  // plan (sim off) → empty; the reset effect no-ops while disabled anyway.
+  if (!plan) return '';
+  return [...plan.delayIds]
     .sort()
+    .map((id) => `${id}:${plan.nodeById.get(id)?.delayMs ?? ''}`)
     .join('|');
 }
