@@ -1,5 +1,26 @@
 # braitenbot-gui
 
+## 0.6.0
+
+### Minor Changes
+
+- fba57d0: Add Minimum and Maximum compute nodes (Advanced palette). Each reduces over its incoming weighted signals — `min`/`max` respectively — enabling winner/loser-take-all wiring and constant-based floors/ceilings that summation and multiply can't express. Faithful in both the trace simulator and generated Arduino code.
+- cb344c6: Add a Settings panel (opened from the native menu — macOS app menu ⌘, or File ▸ Settings… elsewhere) with an option to turn off the −1…1 connection-weight cap, allowing arbitrary weight values.
+- 388463b: Windows USB driver installation is now handled by the app instead of silently skipped.
+
+  - The one-time toolchain setup passes `--run-post-install` to `arduino-cli core install`, so each platform's bundled driver installer actually runs (arduino-cli skips it in non-interactive sessions, which a GUI-spawned sidecar always is). Windows shows an administrator prompt during install; the setup dialog now says to expect it.
+  - While no board is detected, the app probes Windows PnP for a plugged-in Arduino-compatible USB device stuck without a driver — the state that previously looked identical to "no board plugged in."
+  - When one is found, a "USB driver missing — install" prompt in the Device toolbar runs the Arduino driver installers elevated, then rescans for the board.
+
+### Patch Changes
+
+- 4452141: Allow diagrams with unconnected outputs to build. The "output not connected to any sensor" check is now a non-blocking warning instead of a blocking error, so you can (for example) wire up just the display and leave the wheels unsignaled for testing.
+- 388463b: The Basic palette tab now includes the Multiply compute node alongside Threshold, Summation, and Delay.
+- c44c615: Duplicate node names no longer block upload. The generated sketch already disambiguates repeated names with numeric suffixes (`Constant_1`, `Constant_2`, …), so the duplicate-name check is now a non-blocking warning that nudges toward distinct names for readability. Diagrams with several unnamed constants upload without renaming each one.
+- 23a92c9: Harden I2C color/ToF sensor handling. Validation now errors if any pin (analog A4/A5 or their digital aliases 18/19) collides with the I2C SDA/SCL pins while a color or ToF sensor is in the diagram. The generated TCS34725 driver is also more robust against the "color reads drop to 0" failure: it caps blocking I2C reads on AVR (`Wire.setWireTimeout`, guarded by `WIRE_HAS_TIMEOUT` so it still compiles on the UNO R4), holds the last good sample on a transient read failure instead of returning zeros, and after 10 consecutive failures runs a bus-clear + sensor re-init recovery routine. The driver now also defends against a physically wired but undiagrammed VL53L4CD ToF sensor, which powers up at the color sensor's shared 0x29 address and silently corrupts every read: before init (and on recovery), it probes the TCS ID register and, only if the response is wrong, evicts the stray ToF by writing its I2C address register to park it at 0x33, and it re-runs this eviction whenever a read returns all zeros with a bad ID.
+- e0a7b4b: The kit photocell presets (Left/Right Photocell on the Basic tab) now drop with "Invert signal" enabled, so new users get the expected more light → more signal behavior for simple vehicles. The photocells are wired as voltage dividers where the raw reading drops as light increases; the checkbox can still be unticked for the raw reading.
+- 9007aa7: Trace mode is much faster on large diagrams. The simulation now compiles a structural plan (flattened graph, topo order, edge adjacency, pre-sorted transfer curves) once per edit instead of rebuilding it every tick — removing an O(nodes × edges) per-tick cost — and diagram nodes only re-render when their displayed value actually changes, with on-canvas numbers updating at ~10Hz while the simulation and oscilloscope keep full tick rate. Traces are bit-identical to before.
+
 ## 0.5.0
 
 ### Minor Changes
