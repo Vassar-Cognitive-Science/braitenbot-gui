@@ -219,6 +219,43 @@ function emitProductAggregation(
 }
 
 /**
+ * Emit a min/max reduction over a node's incoming edge terms. Seeds the
+ * accumulator with the first term, then folds the rest with a single
+ * comparison per term into a temporary — this avoids the double-argument
+ * evaluation of the Arduino min()/max() macros (a transfer-function edge would
+ * otherwise be called twice) and doesn't depend on fmin/fmax being available
+ * in avr-libc. With no incoming edges the value is 0.0, matching the trace
+ * simulator (which reports such a node as disconnected → 0).
+ */
+function emitReduceAggregation(
+  graph: WiringGraph,
+  node: GraphNode,
+  indent: string,
+  op: 'min' | 'max',
+): string {
+  const iv = inputVar(node);
+  const terms: string[] = [];
+  for (const edge of incomingEdges(graph, node.id)) {
+    const src = nodeById(graph, edge.from);
+    if (!src) continue;
+    terms.push(emitEdgeTerm(graph, edge, src));
+  }
+  if (terms.length === 0) {
+    return `${indent}float ${iv} = 0.0;`;
+  }
+  const cmp = op === 'max' ? '>' : '<';
+  const lines: string[] = [`${indent}float ${iv} = ${terms[0]};`];
+  if (terms.length > 1) {
+    lines.push(`${indent}float ${iv}_t;`);
+    for (let i = 1; i < terms.length; i++) {
+      lines.push(`${indent}${iv}_t = ${terms[i]};`);
+      lines.push(`${indent}if (${iv}_t ${cmp} ${iv}) ${iv} = ${iv}_t;`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
  * C constant name used to refer to the pin a given node-type+field is wired
  * to. Centralized so new node types only have to register their naming
  * convention here (and existing types preserve their historical names).
@@ -388,6 +425,20 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
     loop: (node, { graph, indent }) =>
       [
         emitProductAggregation(graph, node, indent),
+        `${indent}float ${varName(node)} = ${inputVar(node)};`,
+      ].join('\n'),
+  },
+  'compute-min': {
+    loop: (node, { graph, indent }) =>
+      [
+        emitReduceAggregation(graph, node, indent, 'min'),
+        `${indent}float ${varName(node)} = ${inputVar(node)};`,
+      ].join('\n'),
+  },
+  'compute-max': {
+    loop: (node, { graph, indent }) =>
+      [
+        emitReduceAggregation(graph, node, indent, 'max'),
         `${indent}float ${varName(node)} = ${inputVar(node)};`,
       ].join('\n'),
   },
@@ -697,6 +748,7 @@ function collectSignalVars(graph: WiringGraph): string[] {
     'sensor-analog', 'sensor-digital', 'sensor-tof', 'sensor-color',
     'constant',
     'compute-threshold', 'compute-summation', 'compute-multiply', 'compute-delay',
+    'compute-min', 'compute-max',
     'compute-oscillator', 'compute-noise',
   ]);
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));

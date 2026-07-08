@@ -192,6 +192,53 @@ describe('generateSketch', () => {
     expect(code).toContain('float sig_Gate = input_Gate');
   });
 
+  it('generates max node as a seeded fold over weighted edges', () => {
+    const max: DiagramNode = {
+      id: 'max-1',
+      type: 'compute-max',
+      label: 'Max',
+      x: 0,
+      y: 0,
+    };
+    const s2 = makeSensor({ id: 'sensor-2', label: 'Sensor 2', arduinoPort: 'A1' });
+    const nodes: DiagramNode[] = [makeSensor(), s2, max, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'max-1', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-2', to: 'max-1', weight: 1 }),
+      conn({ id: 'c3', from: 'max-1', to: 'motor-left', weight: 1 }),
+    ];
+    const graph = buildGraph(nodes, connections);
+    const code = generateSketch(graph);
+
+    // Seed with the first term, then fold the rest via single-evaluation
+    // comparisons (no min()/max() macro, no fmin/fmax dependency).
+    expect(code).toContain('float input_Max = sig_Sensor_1');
+    expect(code).toContain('input_Max_t = sig_Sensor_2');
+    expect(code).toContain('if (input_Max_t > input_Max) input_Max = input_Max_t;');
+    expect(code).toContain('float sig_Max = input_Max');
+    expect(code).not.toContain('fmax');
+  });
+
+  it('generates min node with the opposite comparison', () => {
+    const min: DiagramNode = {
+      id: 'min-1',
+      type: 'compute-min',
+      label: 'Min',
+      x: 0,
+      y: 0,
+    };
+    const s2 = makeSensor({ id: 'sensor-2', label: 'Sensor 2', arduinoPort: 'A1' });
+    const nodes: DiagramNode[] = [makeSensor(), s2, min, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'min-1', weight: 1 }),
+      conn({ id: 'c2', from: 'sensor-2', to: 'min-1', weight: 1 }),
+      conn({ id: 'c3', from: 'min-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('if (input_Min_t < input_Min) input_Min = input_Min_t;');
+  });
+
   it('generates delay node as a float ring buffer', () => {
     const delayNode: DiagramNode = {
       id: 'delay-1',
