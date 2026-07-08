@@ -142,11 +142,12 @@ export function validateGraph(
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
-  // 0. Duplicate node labels
-  // Compound instances of the same type intentionally share a label (synced
-  // from the type's displayName). The emitter already disambiguates them with
-  // numeric suffixes, so we only flag duplicates that aren't all the same
-  // compound type.
+  // 0. Duplicate node labels — advisory only. The emitter disambiguates
+  // duplicate labels with numeric suffixes, so generated code is always
+  // valid; duplicates are just ambiguous to read in validation messages,
+  // the trace view, and the scope channel list. Compound instances of the
+  // same type intentionally share a label (synced from the type's
+  // displayName), so those aren't flagged at all.
   const labelCounts = new Map<string, DiagramNode[]>();
   for (const node of nodes) {
     const existing = labelCounts.get(node.label) ?? [];
@@ -165,8 +166,8 @@ export function validateGraph(
         for (const node of dupes) {
           errors.push({
             nodeId: node.id,
-            message: `Duplicate node name '${label}' — each node must have a unique name`,
-            severity: 'error',
+            message: `Duplicate node name '${label}' — rename for clarity (generated code stays valid)`,
+            severity: 'warning',
           });
         }
       }

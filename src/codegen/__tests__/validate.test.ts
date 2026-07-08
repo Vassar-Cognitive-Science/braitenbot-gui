@@ -293,12 +293,10 @@ describe('validateGraph', () => {
       makeConnection({ id: 'c2', from: 'inst-1', to: 'motor-left', fromPort: 'out' }),
     ];
     const errors = validateGraph(nodes, connections, [typeDef]);
-    expect(
-      errors.some((e) => e.severity === 'error' && e.message.includes('Duplicate')),
-    ).toBe(false);
+    expect(errors.some((e) => e.message.includes('Duplicate'))).toBe(false);
   });
 
-  it('still reports duplicate labels between non-compound nodes', () => {
+  it('reports duplicate labels between non-compound nodes as a non-blocking warning', () => {
     const nodes = [
       makeSensor({ id: 'sensor-1', label: 'Foo' }),
       makeSensor({ id: 'sensor-2', label: 'Foo', arduinoPort: 'A1' }),
@@ -306,8 +304,12 @@ describe('validateGraph', () => {
     ];
     const errors = validateGraph(nodes, []);
     expect(
-      errors.filter((e) => e.severity === 'error' && e.message.includes('Duplicate')),
+      errors.filter((e) => e.severity === 'warning' && e.message.includes('Duplicate')),
     ).toHaveLength(2);
+    // The emitter suffixes duplicate labels, so this must never block upload.
+    expect(
+      errors.some((e) => e.severity === 'error' && e.message.includes('Duplicate')),
+    ).toBe(false);
   });
 
   // --- Dangling edges (C6) ---------------------------------------------------

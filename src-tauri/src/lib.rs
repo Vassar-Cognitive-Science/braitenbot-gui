@@ -100,6 +100,8 @@ pub fn run() {
             arduino::stop_serial_monitor,
             arduino::check_avr_core,
             arduino::install_avr_core,
+            arduino::check_driver_issue,
+            arduino::install_drivers,
             diagram_io::save_diagram,
             diagram_io::load_diagram,
         ])

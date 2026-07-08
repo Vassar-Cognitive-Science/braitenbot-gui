@@ -266,6 +266,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     compileAndUpload,
     uploadTestSketch,
     cancelUpload,
+    driverIssue,
+    driverInstallStatus,
+    driverError,
+    installDrivers,
   } = arduino;
   // The whole diagram document (nodes, connections, compoundTypes,
   // loopPeriodMs) lives in a Yjs-backed store. React reads a referentially
@@ -1540,6 +1544,24 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                   <path d="M2.3 2.6v3.4h3.4" />
                 </svg>
               </button>
+              {driverIssue && (
+                <button
+                  type="button"
+                  className="driver-warning"
+                  onClick={() => void installDrivers()}
+                  disabled={driverInstallStatus === 'installing'}
+                  title={
+                    driverError ??
+                    `Windows sees "${driverIssue.deviceName}" but its USB driver is not installed (device error ${driverIssue.errorCode}). Click to run the Arduino driver installer, then accept the administrator prompt.`
+                  }
+                >
+                  {driverInstallStatus === 'installing'
+                    ? 'Installing driver…'
+                    : driverInstallStatus === 'error'
+                      ? '⚠ Driver install failed — retry'
+                      : '⚠ USB driver missing — install'}
+                </button>
+              )}
               {lastResult && !lastResult.success && (
                 <button
                   type="button"

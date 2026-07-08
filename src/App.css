@@ -1081,6 +1081,28 @@ select,
   color: #ff7a8c;
 }
 
+.driver-warning {
+  font-size: var(--text-xs);
+  color: #f0a500;
+  white-space: nowrap;
+  background: none;
+  border: 1px solid rgba(240, 165, 0, 0.45);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.driver-warning:hover:not(:disabled) {
+  border-color: #f0a500;
+  background: rgba(240, 165, 0, 0.1);
+}
+
+.driver-warning:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .upload-error-section {
   margin: 0.4rem 0 0;
   font-family: var(--font-mono);

@@ -34,6 +34,18 @@ export type UploadStatus = 'idle' | 'compiling' | 'uploading' | 'success' | 'err
 export type CoreInstallStatus = 'idle' | 'checking' | 'installing' | 'success' | 'error';
 
 /**
+ * A connected Arduino-like USB device whose Windows driver is missing or
+ * broken, as returned by the Rust `check_driver_issue` command. Always null
+ * on non-Windows platforms.
+ */
+export interface DriverIssue {
+  deviceName: string;
+  errorCode: number;
+}
+
+export type DriverInstallStatus = 'idle' | 'installing' | 'error';
+
+/**
  * Hook for driving arduino-cli through the Tauri backend. Handles board
  * detection and the compile-then-upload flow.
  */
@@ -50,6 +62,9 @@ export function useArduino() {
   const [coreInstallStatus, setCoreInstallStatus] = useState<CoreInstallStatus>('idle');
   const [installLog, setInstallLog] = useState<string>('');
   const [coreError, setCoreError] = useState<string | null>(null);
+  const [driverIssue, setDriverIssue] = useState<DriverIssue | null>(null);
+  const [driverInstallStatus, setDriverInstallStatus] = useState<DriverInstallStatus>('idle');
+  const [driverError, setDriverError] = useState<string | null>(null);
 
   // Pending "reset status back to idle" timer, kept so a rapid second upload
   // can clear the previous one instead of having its status clobbered mid-run.
@@ -192,6 +207,37 @@ export function useArduino() {
     }
   }, [tauriAvailable]);
 
+  // Probes (Windows only) for a plugged-in board that Windows sees but has no
+  // driver for — the failure mode when a core's post-install driver script
+  // never ran. Best-effort: detection errors never surface as their own UI.
+  const checkDrivers = useCallback(async () => {
+    if (!tauriAvailable) return;
+    try {
+      const issue = await invoke<DriverIssue | null>('check_driver_issue');
+      setDriverIssue(issue);
+    } catch {
+      // Leave the current value in place — a failed probe is not a signal.
+    }
+  }, [tauriAvailable]);
+
+  // Runs the board platforms' driver installers elevated (Windows shows a UAC
+  // prompt). Re-probes afterwards either way: a successful install makes the
+  // board's COM port appear on the next scan.
+  const installDrivers = useCallback(async () => {
+    if (!tauriAvailable) return;
+    setDriverInstallStatus('installing');
+    setDriverError(null);
+    try {
+      await invoke<void>('install_drivers');
+      setDriverInstallStatus('idle');
+    } catch (err) {
+      setDriverInstallStatus('error');
+      setDriverError(typeof err === 'string' ? err : String(err));
+    }
+    await checkDrivers();
+    await refreshBoards();
+  }, [tauriAvailable, checkDrivers, refreshBoards]);
+
   const checkCore = useCallback(async () => {
     if (!tauriAvailable) {
       setCoreInstalled(null);
@@ -274,6 +320,23 @@ export function useArduino() {
     return () => clearInterval(id);
   }, [cliAvailable, uploadStatus, coreInstallStatus, refreshBoards]);
 
+  // While no board is visible, periodically check whether one is actually
+  // plugged in but stuck without a USB driver. The Rust command is a cheap
+  // no-op off Windows (always null). A detected board clears the warning.
+  useEffect(() => {
+    if (!cliAvailable) return;
+    if (boards.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDriverIssue(null);
+      return;
+    }
+    checkDrivers();
+    const id = setInterval(() => {
+      checkDrivers();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [cliAvailable, boards.length, checkDrivers]);
+
   // Reflect the compile→upload phase transition emitted by the Rust backend.
   useEffect(() => {
     if (!tauriAvailable) return;
@@ -322,5 +385,9 @@ export function useArduino() {
     checkCore,
     installCore,
     dismissCoreInstall,
+    driverIssue,
+    driverInstallStatus,
+    driverError,
+    installDrivers,
   };
 }
