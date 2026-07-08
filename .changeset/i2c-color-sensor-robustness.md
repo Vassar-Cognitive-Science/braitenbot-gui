@@ -1,5 +1,0 @@
----
-"braitenbot-gui": patch
----
-
-Harden I2C color/ToF sensor handling. Validation now errors if any pin (analog A4/A5 or their digital aliases 18/19) collides with the I2C SDA/SCL pins while a color or ToF sensor is in the diagram. The generated TCS34725 driver is also more robust against the "color reads drop to 0" failure: it caps blocking I2C reads on AVR (`Wire.setWireTimeout`, guarded by `WIRE_HAS_TIMEOUT` so it still compiles on the UNO R4), holds the last good sample on a transient read failure instead of returning zeros, and after 10 consecutive failures runs a bus-clear + sensor re-init recovery routine. The driver now also defends against a physically wired but undiagrammed VL53L4CD ToF sensor, which powers up at the color sensor's shared 0x29 address and silently corrupts every read: before init (and on recovery), it probes the TCS ID register and, only if the response is wrong, evicts the stray ToF by writing its I2C address register to park it at 0x33, and it re-runs this eviction whenever a read returns all zeros with a bad ID.
