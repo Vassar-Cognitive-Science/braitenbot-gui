@@ -26,6 +26,8 @@ interface ConfigPanelProps {
   deleteNode: (id: string) => void;
   deleteConnection: (id: string) => void;
   onClose: () => void;
+  /** When false, connection weights accept any value (no [-1, 1] cap). */
+  capWeights: boolean;
 }
 
 export function ConfigPanel({
@@ -36,6 +38,7 @@ export function ConfigPanel({
   deleteNode,
   deleteConnection,
   onClose,
+  capWeights,
 }: ConfigPanelProps) {
   // One undo entry per config-target "session". A session begins when the
   // selected target changes (including after an undo/redo, which clears the
@@ -420,25 +423,30 @@ export function ConfigPanel({
 
           {(selectedConnection.transferMode ?? 'linear') === 'linear' && (
             <>
+              {/* The range slider needs finite bounds, so it's only shown when
+                  weights are capped. Uncapped, the numeric field alone accepts
+                  any value. */}
+              {capWeights && (
+                <label>
+                  Connection Weight
+                  <input
+                    type="range"
+                    min="-1"
+                    max="1"
+                    step="0.05"
+                    value={selectedConnection.weight}
+                    onChange={(event) => {
+                      const value = clampWeight(parseFloat(event.target.value));
+                      patchConnection(selectedConnection.id, { weight: value });
+                    }}
+                  />
+                </label>
+              )}
               <label>
-                Connection Weight
-                <input
-                  type="range"
-                  min="-1"
-                  max="1"
-                  step="0.05"
-                  value={selectedConnection.weight}
-                  onChange={(event) => {
-                    const value = clampWeight(parseFloat(event.target.value));
-                    patchConnection(selectedConnection.id, { weight: value });
-                  }}
-                />
-              </label>
-              <label>
-                Numeric Weight
+                {capWeights ? 'Numeric Weight' : 'Connection Weight'}
                 <NumberInput
-                  min={-1}
-                  max={1}
+                  min={capWeights ? -1 : undefined}
+                  max={capWeights ? 1 : undefined}
                   step={0.05}
                   value={selectedConnection.weight}
                   onChange={(value) => patchConnection(selectedConnection.id, { weight: value })}

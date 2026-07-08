@@ -36,12 +36,27 @@ pub fn run() {
                 Some("CmdOrCtrl+O"),
             )?;
 
-            let file_menu = SubmenuBuilder::new(app_handle, "File")
+            let settings_item = MenuItem::with_id(
+                app_handle,
+                "app_settings",
+                "Settings…",
+                true,
+                Some("CmdOrCtrl+,"),
+            )?;
+
+            // On macOS "Settings…" lives in the app menu (below); everywhere
+            // else there's no app menu, so it goes under File.
+            #[allow(unused_mut)]
+            let mut file_builder = SubmenuBuilder::new(app_handle, "File")
                 .item(&new_item)
                 .separator()
                 .item(&save_item)
-                .item(&load_item)
-                .build()?;
+                .item(&load_item);
+            #[cfg(not(target_os = "macos"))]
+            {
+                file_builder = file_builder.separator().item(&settings_item);
+            }
+            let file_menu = file_builder.build()?;
 
             let test_sketch_item = MenuItem::with_id(
                 app_handle,
@@ -57,6 +72,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             let app_menu = SubmenuBuilder::new(app_handle, "BraitenBot GUI")
                 .about(Some(AboutMetadata::default()))
+                .separator()
+                .item(&settings_item)
                 .separator()
                 .services()
                 .separator()
@@ -87,6 +104,9 @@ pub fn run() {
             }
             "hardware_test" => {
                 let _ = app_handle.emit("menu://upload-test-sketch", ());
+            }
+            "app_settings" => {
+                let _ = app_handle.emit("menu://settings", ());
             }
             _ => {}
         })
