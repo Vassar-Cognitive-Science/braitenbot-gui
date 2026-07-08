@@ -2,8 +2,6 @@ import React from 'react';
 import type { CSSProperties, Dispatch, MouseEvent, SetStateAction } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
-import type { TraceResult } from '../hooks/useTraceSimulation';
-import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
 
@@ -11,21 +9,39 @@ interface DiagramNodeViewProps {
   node: DiagramNode;
   // Pre-computed world position (in canvas px), passed as primitives so the
   // memo comparison stays cheap and stable during drags of other nodes.
+  // The trace props below follow the same philosophy: the parent extracts
+  // this node's own displayed values from the per-update TraceResult / trace
+  // input record and passes them as primitives (pre-formatted to display
+  // precision), so a simulation tick only re-renders the nodes whose
+  // displayed data actually changed.
   worldX: number;
   worldY: number;
   isSelected: boolean;
   isMultiSelected: boolean;
   traceMode: boolean;
-  traceResult: TraceResult;
+  // This node's formatted output value; undefined outside trace mode or when
+  // the node has no computed value.
+  traceValue?: string;
+  // Trace mode flagged this node as having no incoming connections.
+  isDisconnected: boolean;
+  // Comma-joined formatted output-port values in getOutputPorts order; an
+  // empty slot means that port has no value. Undefined outside trace mode or
+  // when the node has no output ports.
+  outputPortValues?: string;
+  // Same encoding for a compound instance's input ports.
+  inputPortValues?: string;
   compoundTypes: CompoundTypeDefinition[];
-  sensorValues: Record<string, number>;
-  pulsingId: string | null;
+  // This node's own trace input (sensor / compound-input slider state).
+  sensorValue?: number;
+  // Comma-joined per-channel trace inputs for a color sensor, in
+  // getOutputPorts('sensor-color') order. Undefined outside trace mode.
+  colorSensorValues?: string;
+  isPulsing: boolean;
   beginNodeDrag: (event: MouseEvent, nodeId: string) => void;
   beginLinkDrag: (event: MouseEvent, nodeId: string, port?: OutputPortId) => void;
   completeLink: (toId: string, toPort?: string) => void;
   enterCompound: (compoundTypeId: string) => void;
   pulseSensor: (id: string) => void;
-  lookupPortValue: (nodeId: string, portId: string) => number | undefined;
   setSelectedNodeIds: Dispatch<SetStateAction<Set<string>>>;
   setConfigTarget: Dispatch<SetStateAction<ConfigTarget | null>>;
   // Trace-mode sensor inputs. Writes the shared `trace` map (keyed nodeId or
@@ -48,16 +64,19 @@ function DiagramNodeViewInner({
   isSelected,
   isMultiSelected,
   traceMode,
-  traceResult,
+  traceValue,
+  isDisconnected,
+  outputPortValues,
+  inputPortValues,
   compoundTypes,
-  sensorValues,
-  pulsingId,
+  sensorValue,
+  colorSensorValues,
+  isPulsing,
   beginNodeDrag,
   beginLinkDrag,
   completeLink,
   enterCompound,
   pulseSensor,
-  lookupPortValue,
   setSelectedNodeIds,
   setConfigTarget,
   setSensorValue,
@@ -67,8 +86,6 @@ function DiagramNodeViewInner({
   remoteLabel,
 }: DiagramNodeViewProps) {
   const nodeType = TYPE_BY_ID[node.type];
-  const traceVal = traceMode ? traceResult.nodeValues[node.id] : undefined;
-  const isDisconnected = traceMode && traceResult.disconnected.has(node.id);
   const isCompoundInput = node.type === 'compound-input';
   const hasSlider =
     traceMode &&
@@ -82,8 +99,8 @@ function DiagramNodeViewInner({
     // handles, so keep the node meta as the channel legend rather than
     // a single "output" value.
     nodeMeta = `${nodeType.metaLabel} • RGBC outputs`;
-  } else if (traceVal !== undefined) {
-    nodeMeta = `output: ${formatTraceValue(traceVal)}`;
+  } else if (traceValue !== undefined) {
+    nodeMeta = `output: ${traceValue}`;
   } else if (supportsArduinoPort(nodeType) && node.arduinoPort?.trim()) {
     nodeMeta = `${nodeType.metaLabel} • port ${node.arduinoPort.trim()}`;
   } else if (nodeType.mode === 'threshold' && node.threshold !== undefined) {
@@ -157,28 +174,28 @@ function DiagramNodeViewInner({
         </span>
       )}
       <div className="node-label">{node.label}</div>
-      <div className={`node-meta ${traceVal !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
+      <div className={`node-meta ${traceValue !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
       {hasSlider && node.type === 'sensor-digital' && (
         <div className="trace-slider-row">
           <button
             type="button"
             className={`trace-digital-toggle ${
-              (sensorValues[node.id] ?? 0) >= 50 ? 'high' : 'low'
+              (sensorValue ?? 0) >= 50 ? 'high' : 'low'
             }`}
             disabled={readOnly}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              const isHigh = (sensorValues[node.id] ?? 0) >= 50;
+              const isHigh = (sensorValue ?? 0) >= 50;
               setSensorValue(node.id, isHigh ? 0 : 100);
             }}
             title="Toggle digital input (LOW / HIGH)"
           >
-            {(sensorValues[node.id] ?? 0) >= 50 ? 'HIGH' : 'LOW'}
+            {(sensorValue ?? 0) >= 50 ? 'HIGH' : 'LOW'}
           </button>
           <button
             type="button"
-            className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
+            className={`trace-pulse-btn ${isPulsing ? 'pulsing' : ''}`}
             title="Pulse this sensor HIGH for 200ms"
             disabled={readOnly}
             onMouseDown={(e) => e.stopPropagation()}
@@ -191,9 +208,13 @@ function DiagramNodeViewInner({
           </button>
         </div>
       )}
-      {hasSlider && node.type === 'sensor-color' && (
+      {hasSlider && node.type === 'sensor-color' && (() => {
+        // Decode the comma-joined per-channel values (same port order the
+        // parent used to encode them).
+        const channelValues = colorSensorValues?.split(',');
+        return (
         <div className="trace-color-sliders">
-          {getOutputPorts('sensor-color')!.map((ch) => (
+          {getOutputPorts('sensor-color')!.map((ch, i) => (
             <div className="trace-slider-row" key={ch}>
               <span className={`trace-slider-label output-port-label-${ch}`}>
                 {ch[0].toUpperCase()}
@@ -205,7 +226,7 @@ function DiagramNodeViewInner({
                 max="100"
                 step="1"
                 disabled={readOnly}
-                value={sensorValues[`${node.id}:${ch}`] ?? 0}
+                value={Number(channelValues?.[i] ?? 0)}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
@@ -216,13 +237,14 @@ function DiagramNodeViewInner({
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
       {hasSlider && node.type !== 'sensor-digital' && node.type !== 'sensor-color' && (() => {
         const sliderMin = nodeType.kind === 'constant' || isCompoundInput ? -100 : 0;
         const sliderValue = nodeType.kind === 'sensor'
-          ? (sensorValues[node.id] ?? 50)
+          ? (sensorValue ?? 50)
           : isCompoundInput
-            ? (sensorValues[node.id] ?? 0)
+            ? (sensorValue ?? 0)
             : (node.constantValue ?? 0);
         return (
         <div className="trace-slider-row">
@@ -250,7 +272,7 @@ function DiagramNodeViewInner({
           {(nodeType.kind === 'sensor' || isCompoundInput) && (
             <button
               type="button"
-              className={`trace-pulse-btn ${pulsingId === node.id ? 'pulsing' : ''}`}
+              className={`trace-pulse-btn ${isPulsing ? 'pulsing' : ''}`}
               title="Pulse to 100 for 200ms"
               disabled={readOnly}
               onMouseDown={(e) => e.stopPropagation()}
@@ -277,14 +299,12 @@ function DiagramNodeViewInner({
           );
         }
         const isCompound = node.type === 'compound';
+        // Pre-formatted per-port values from the parent; '' = no value.
+        const portValues = outputPortValues?.split(',');
         return ports.map((port, i) => {
           const leftPct = ((i + 0.5) / ports.length) * 100;
           const label = isCompound ? getPortLabel(port, node, compoundTypes) : port[0].toUpperCase();
-          const portValue = !traceMode
-            ? undefined
-            : isCompound
-              ? lookupPortValue(node.id, port)
-              : traceResult.nodeValues[`${node.id}:${port}`];
+          const portValue = portValues?.[i] || undefined;
           return (
             <span key={port}>
               <button
@@ -309,7 +329,7 @@ function DiagramNodeViewInner({
                   style={{ left: `${leftPct}%` }}
                   aria-hidden="true"
                 >
-                  {formatTraceValue(portValue)}
+                  {portValue}
                 </span>
               )}
             </span>
@@ -328,11 +348,12 @@ function DiagramNodeViewInner({
             />
           );
         }
+        // Pre-formatted per-port values from the parent (compound instances
+        // only); '' = no value.
+        const portValues = inputPortValues?.split(',');
         return inputs.map((port, i) => {
           const leftPct = ((i + 0.5) / inputs.length) * 100;
-          const portValue = node.type === 'compound' && traceMode
-            ? lookupPortValue(node.id, port)
-            : undefined;
+          const portValue = portValues?.[i] || undefined;
           return (
             <span key={port}>
               <button
@@ -356,7 +377,7 @@ function DiagramNodeViewInner({
                   style={{ left: `${leftPct}%` }}
                   aria-hidden="true"
                 >
-                  {formatTraceValue(portValue)}
+                  {portValue}
                 </span>
               )}
             </span>

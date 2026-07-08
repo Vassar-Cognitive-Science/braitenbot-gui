@@ -416,12 +416,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
   const traceResult = scope.traceResult;
 
-  const lookupPortValue = useCallback(
-    (nodeId: string, portId: string): number | undefined => {
-      return traceResult.nodeValues[`${nodeId}/${portId}`];
-    },
-    [traceResult.nodeValues],
-  );
   const [pulsingId, setPulsingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number>(0);
@@ -433,6 +427,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // Pulse writes a shared event into the trace map; every client (including
   // this one) applies it once via the pulse-apply effect below, so the
   // initiator never double-applies. The writer prunes the event once expired.
+  // Depend on scope.currentTick (a stable callback) rather than the scope
+  // object, which is rebuilt every render — keeping pulseSensor's identity
+  // stable so it doesn't bust the memoized DiagramNodeView on trace updates.
+  const currentTick = scope.currentTick;
   const pulseSensor = useCallback(
     (sensorId: string) => {
       const eventId = `pulse-${
@@ -445,7 +443,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         id: eventId,
         sensorId,
         value: 100,
-        startTick: scope.currentTick(),
+        startTick: currentTick(),
         durationTicks,
       });
       setPulsingId(sensorId);
@@ -456,7 +454,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       // window misses the pulse entirely (accepted, like tick drift).
       window.setTimeout(() => store.removeTracePulse(eventId), 200 + 600);
     },
-    [scope, store, loopPeriodMs],
+    [currentTick, store, loopPeriodMs],
   );
 
   // Apply shared pulse events: each client fires every not-yet-seen event once
@@ -1763,6 +1761,47 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         {nodes.map((node) => {
           const worldPos = nodeWorldPos(node);
           const remote = remoteHighlight.get(node.id);
+          // Per-node primitive trace props. traceResult is a fresh object on
+          // every simulation update, so extracting each node's displayed
+          // values here — already formatted to display precision — lets the
+          // memoized DiagramNodeView bail out unless something it actually
+          // renders changed (sub-display-precision jitter included).
+          const nodeType = TYPE_BY_ID[node.type];
+          const isCompound = node.type === 'compound';
+          const rawTraceValue = traceMode ? traceResult.nodeValues[node.id] : undefined;
+          // Compound instances publish per-port values keyed `${id}/${port}`;
+          // multi-output sources (color sensor) use `${id}:${port}`. Encode
+          // them as one comma-joined string ('' slot = no value) so the memo
+          // comparison stays a primitive.
+          const outputPorts = traceMode && canOutput(nodeType)
+            ? getOutputPorts(nodeType.id, node, compoundTypes)
+            : undefined;
+          const outputPortValues = outputPorts && outputPorts.length > 0
+            ? outputPorts
+                .map((port) => {
+                  const v = traceResult.nodeValues[
+                    isCompound ? `${node.id}/${port}` : `${node.id}:${port}`
+                  ];
+                  return v === undefined ? '' : formatTraceValue(v);
+                })
+                .join(',')
+            : undefined;
+          const inputPorts = traceMode && isCompound
+            ? getInputPorts(nodeType.id, node, compoundTypes)
+            : undefined;
+          const inputPortValues = inputPorts && inputPorts.length > 0
+            ? inputPorts
+                .map((port) => {
+                  const v = traceResult.nodeValues[`${node.id}/${port}`];
+                  return v === undefined ? '' : formatTraceValue(v);
+                })
+                .join(',')
+            : undefined;
+          const colorSensorValues = traceMode && node.type === 'sensor-color'
+            ? getOutputPorts('sensor-color')!
+                .map((ch) => sensorValues[`${node.id}:${ch}`] ?? 0)
+                .join(',')
+            : undefined;
           return (
             <DiagramNodeView
               key={node.id}
@@ -1772,16 +1811,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               isSelected={selectedNode?.id === node.id}
               isMultiSelected={selectedNodeIds.has(node.id)}
               traceMode={traceMode}
-              traceResult={traceResult}
+              traceValue={rawTraceValue !== undefined ? formatTraceValue(rawTraceValue) : undefined}
+              isDisconnected={traceMode && traceResult.disconnected.has(node.id)}
+              outputPortValues={outputPortValues}
+              inputPortValues={inputPortValues}
               compoundTypes={compoundTypes}
-              sensorValues={sensorValues}
-              pulsingId={pulsingId}
+              sensorValue={sensorValues[node.id]}
+              colorSensorValues={colorSensorValues}
+              isPulsing={pulsingId === node.id}
               beginNodeDrag={beginNodeDrag}
               beginLinkDrag={beginLinkDrag}
               completeLink={completeLink}
               enterCompound={enterCompound}
               pulseSensor={pulseSensor}
-              lookupPortValue={lookupPortValue}
               setSelectedNodeIds={setSelectedNodeIds}
               setConfigTarget={setConfigTarget}
               setSensorValue={setSensorValue}

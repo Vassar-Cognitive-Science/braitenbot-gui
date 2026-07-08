@@ -16,6 +16,119 @@ export interface TraceResult {
 const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
 
 /**
+ * Precomputed, structure-only artifacts for `simulateGraph`. Everything here
+ * depends solely on the diagram's shape (nodes, connections, compound types),
+ * not on sensor values / tick / seed, so it can be built once per edit and
+ * reused across the ~50 ticks/sec of a running simulation instead of being
+ * rebuilt on every tick.
+ *
+ * The plan holds the FLATTENED graph — building it runs `flattenCompounds`
+ * and `toposort` a single time. `buildSimulationPlan` is a pure function of
+ * its arguments; call it whenever the structure changes (node drags are fine
+ * — that's still edit-time, not per-tick).
+ */
+export interface SimulationPlan {
+  /** Flattened nodes (compound instances inlined). */
+  nodes: DiagramNode[];
+  /** Flattened connections. */
+  connections: DiagramConnection[];
+  /**
+   * Topo order of `nodes`, excluding delay-target edges (their output comes
+   * from a previous iteration). `null` when the graph has a non-delay cycle
+   * and `toposort` throws — callers treat that as an empty trace.
+   */
+  order: string[] | null;
+  nodeById: Map<string, DiagramNode>;
+  /** Ids of `compute-delay` nodes. */
+  delayIds: Set<string>;
+  /**
+   * Per-node incoming edges, in the SAME relative order the connections
+   * array holds them — identical to what `connections.filter(c => c.to === id)`
+   * would produce. Preserving this order keeps float summation bit-identical.
+   */
+  incoming: Map<string, DiagramConnection[]>;
+  /**
+   * Pre-sorted transfer points for each nonlinear edge (keyed by edge id).
+   * `interpolateTransfer` otherwise re-sorts on every edge evaluation every
+   * tick; sorting once here keeps the per-tick path allocation-free.
+   */
+  sortedPoints: Map<string, TransferPoint[]>;
+}
+
+/**
+ * Precompute the structure-only artifacts `simulateGraph` needs. Build once
+ * per structural change and hand the result to `simulateGraph` on every tick.
+ * When `simulateGraph` is called without a plan it builds one internally, so
+ * existing callers keep working unchanged.
+ */
+export function buildSimulationPlan(
+  nodes: DiagramNode[],
+  connections: DiagramConnection[],
+  compoundTypes: CompoundTypeDefinition[] = [],
+): SimulationPlan {
+  const flat = flattenCompounds(nodes, connections, compoundTypes);
+  const flatNodes = flat.nodes;
+  const flatConnections = flat.connections;
+
+  const nodeById = new Map(flatNodes.map((n) => [n.id, n]));
+  const delayIds = new Set(
+    flatNodes.filter((n) => n.type === 'compute-delay').map((n) => n.id),
+  );
+
+  let order: string[] | null;
+  try {
+    // Mirror the codegen: edges into delay nodes don't impose ordering,
+    // since the delay's output is taken from a previous iteration. This is
+    // the exact input the old per-tick toposort used.
+    order = toposort(
+      flatNodes.map((n) => n.id),
+      flatConnections
+        .filter((c) => !delayIds.has(c.to))
+        .map((c) => ({ from: c.from, to: c.to })),
+    );
+  } catch {
+    order = null;
+  }
+
+  // Build incoming adjacency by scanning connections in array order and
+  // appending — this reproduces `.filter(c => c.to === id)` order exactly,
+  // which matters because `inputs.push` order affects float summation.
+  const incoming = new Map<string, DiagramConnection[]>();
+  for (const edge of flatConnections) {
+    let list = incoming.get(edge.to);
+    if (!list) {
+      list = [];
+      incoming.set(edge.to, list);
+    }
+    list.push(edge);
+  }
+
+  // Sort each nonlinear edge's transfer points once. Linear edges aren't
+  // keyed here (they don't interpolate).
+  const sortedPoints = new Map<string, TransferPoint[]>();
+  for (const edge of flatConnections) {
+    if (edge.transferMode === 'nonlinear' && edge.transferPoints.length >= 2) {
+      sortedPoints.set(
+        edge.id,
+        [...edge.transferPoints].sort((a, b) => a.x - b.x),
+      );
+    }
+  }
+
+  return {
+    nodes: flatNodes,
+    connections: flatConnections,
+    order,
+    nodeById,
+    delayIds,
+    incoming,
+    sortedPoints,
+  };
+}
+
+const NO_EDGES: DiagramConnection[] = [];
+
+/**
  * Per-tick simulation state. When passed to simulateGraph, oscillators
  * derive their phase from the tick index, noise nodes draw from a
  * deterministic PRNG keyed on (seed, node id, tick), and delay nodes draw
@@ -128,33 +241,19 @@ export function simulateGraph(
   sensorValues: Record<string, number>,
   state?: SimulationState,
   compoundTypes: CompoundTypeDefinition[] = [],
+  plan?: SimulationPlan,
 ): TraceResult {
   if (nodes.length === 0) return EMPTY;
 
-  // Inline compound instances so simulation sees the same flat graph
-  // that codegen emits.
-  const flat = flattenCompounds(nodes, connections, compoundTypes);
-  nodes = flat.nodes;
-  connections = flat.connections;
+  // Reuse the precomputed structural plan when provided; otherwise build one
+  // now so existing callers get today's behavior unchanged. The plan already
+  // holds the flattened graph, topo order, adjacency and sorted transfers.
+  const p = plan ?? buildSimulationPlan(nodes, connections, compoundTypes);
+  nodes = p.nodes;
+  connections = p.connections;
+  const { nodeById, incoming, sortedPoints, order } = p;
 
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const delayIds = new Set(
-    nodes.filter((n) => n.type === 'compute-delay').map((n) => n.id),
-  );
-
-  let order: string[];
-  try {
-    // Mirror the codegen: edges into delay nodes don't impose ordering,
-    // since the delay's output is taken from a previous iteration.
-    order = toposort(
-      nodes.map((n) => n.id),
-      connections
-        .filter((c) => !delayIds.has(c.to))
-        .map((c) => ({ from: c.from, to: c.to })),
-    );
-  } catch {
-    return EMPTY;
-  }
+  if (order === null) return EMPTY;
   const nodeValues: Record<string, number> = {};
   const edgeSignals: Record<string, number> = {};
   const disconnected = new Set<string>();
@@ -252,8 +351,11 @@ export function simulateGraph(
       continue;
     }
 
-    // Gather weighted inputs and record per-edge signals
-    const incomingEdges = connections.filter((c) => c.to === nodeId);
+    // Gather weighted inputs and record per-edge signals. The adjacency list
+    // preserves the connections array's relative order — identical to the
+    // `.filter(c => c.to === nodeId)` it replaces — so float summation below
+    // stays bit-identical.
+    const incomingEdges = incoming.get(nodeId) ?? NO_EDGES;
 
     if (incomingEdges.length === 0) {
       nodeValues[nodeId] = 0;
@@ -264,7 +366,7 @@ export function simulateGraph(
     const inputs: number[] = [];
     for (const edge of incomingEdges) {
       const raw = readSource(edge);
-      const signal = applyTransfer(raw, edge);
+      const signal = applyTransfer(raw, edge, sortedPoints.get(edge.id));
       edgeSignals[edge.id] = signal;
       inputs.push(signal);
     }
@@ -299,7 +401,7 @@ export function simulateGraph(
   // nodes, both of which were skipped above.
   for (const edge of connections) {
     if (!(edge.id in edgeSignals)) {
-      edgeSignals[edge.id] = applyTransfer(readSource(edge), edge);
+      edgeSignals[edge.id] = applyTransfer(readSource(edge), edge, sortedPoints.get(edge.id));
     }
   }
 
@@ -312,9 +414,10 @@ export function simulateGraph(
       const buf = state.delays.get(node.id);
       if (!buf) continue;
       let sum = 0;
-      for (const edge of connections) {
-        if (edge.to !== node.id) continue;
-        sum += applyTransfer(readSource(edge), edge);
+      // Same edges in the same order the old `connections` scan visited them
+      // (adjacency preserves array order), so the accumulated sum is identical.
+      for (const edge of incoming.get(node.id) ?? NO_EDGES) {
+        sum += applyTransfer(readSource(edge), edge, sortedPoints.get(edge.id));
       }
       buf.values[buf.idx] = sum;
       buf.idx = (buf.idx + 1) % buf.values.length;
@@ -342,16 +445,22 @@ export function useTraceSimulation(
   );
 }
 
-function applyTransfer(input: number, edge: DiagramConnection): number {
+function applyTransfer(
+  input: number,
+  edge: DiagramConnection,
+  sortedPoints?: TransferPoint[],
+): number {
   if (edge.transferMode === 'nonlinear' && edge.transferPoints.length >= 2) {
-    return interpolateTransfer(input, edge.transferPoints);
+    // Prefer the plan's pre-sorted points; fall back to sorting on the spot
+    // when called without a plan (single-shot / non-hot paths).
+    const sorted = sortedPoints ?? [...edge.transferPoints].sort((a, b) => a.x - b.x);
+    return interpolateTransfer(input, sorted);
   }
   return input * edge.weight;
 }
 
-function interpolateTransfer(input: number, points: TransferPoint[]): number {
-  const sorted = [...points].sort((a, b) => a.x - b.x);
-
+/** Interpolate a value from transfer points that are ALREADY sorted by x. */
+function interpolateTransfer(input: number, sorted: TransferPoint[]): number {
   if (input <= sorted[0].x) return sorted[0].y;
   if (input >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y;
 
