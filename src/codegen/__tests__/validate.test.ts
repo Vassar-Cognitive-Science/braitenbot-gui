@@ -168,6 +168,50 @@ describe('validateGraph', () => {
     expect(errors.some((e) => e.message.includes('built-in LED'))).toBe(false);
   });
 
+  it('flags an analog sensor on A4 when a color sensor is present (I2C SDA conflict)', () => {
+    const colorSensor: DiagramNode = {
+      id: 'color-1', type: 'sensor-color', label: 'Front Color', x: 0, y: 0,
+    };
+    const nodes = [makeSensor({ arduinoPort: 'A4' }), colorSensor, makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    const conflict = errors.find(
+      (e) => e.severity === 'error' && e.message.includes('I2C SDA'),
+    );
+    expect(conflict).toBeDefined();
+    expect(conflict?.message).toContain('Sensor 1');
+    expect(conflict?.message).toContain('A4');
+  });
+
+  it('does NOT flag A4 when there is no I2C node in the graph', () => {
+    const nodes = [makeSensor({ arduinoPort: 'A4' }), makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(errors.some((e) => e.message.includes('I2C SDA'))).toBe(false);
+  });
+
+  it('flags an analog sensor on A5 when a color sensor is present (I2C SCL conflict)', () => {
+    const colorSensor: DiagramNode = {
+      id: 'color-1', type: 'sensor-color', label: 'Front Color', x: 0, y: 0,
+    };
+    const nodes = [makeSensor({ arduinoPort: 'A5' }), colorSensor, makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    const conflict = errors.find(
+      (e) => e.severity === 'error' && e.message.includes('I2C SCL'),
+    );
+    expect(conflict).toBeDefined();
+    expect(conflict?.message).toContain('A5');
+  });
+
+  it('flags the A4/A5 conflict for a ToF sensor too', () => {
+    const tof: DiagramNode = {
+      id: 'tof-1', type: 'sensor-tof', label: 'Distance', x: 0, y: 0, xshutPin: '7',
+    };
+    const nodes = [makeSensor({ arduinoPort: 'A4' }), tof, makeMotor()];
+    const errors = validateGraph(nodes, [makeConnection()]);
+    expect(
+      errors.some((e) => e.severity === 'error' && e.message.includes('I2C SDA')),
+    ).toBe(true);
+  });
+
   it('warns on edges with unknown fromPort', () => {
     const colorSensor: DiagramNode = {
       id: 'color-1',
