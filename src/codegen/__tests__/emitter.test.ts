@@ -544,12 +544,204 @@ describe('generateSketch', () => {
     const graph = buildGraph(nodes, connections);
     const code = generateSketch(graph);
 
-    // Driver must bail out on I2C error — endTransmission != 0 returns a zero sample.
+    // Driver must detect the I2C error — endTransmission != 0 triggers the
+    // last-good/recovery path (see the robustness test below).
     expect(code).toContain('if (Wire.endTransmission() != 0) {');
     // Single 8-byte read covers all four channels via auto-increment.
     expect(code).toContain('Wire.write(0xA0 | 0x14);');
     expect(code).toContain('uint8_t bytesRead = Wire.requestFrom(TCS34725_ADDR, (uint8_t)8);');
     expect(code).toContain('if (bytesRead != 8) {');
+  });
+
+  it('guards Wire.setWireTimeout in setup with WIRE_HAS_TIMEOUT for color sensors', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Layer 1: bounded blocking, guarded so it compiles on both FQBNs. The
+    // preprocessor directives must sit at column 0.
+    expect(code).toContain('\n#ifdef WIRE_HAS_TIMEOUT');
+    expect(code).toContain('  Wire.setWireTimeout(3000, true); // 3 ms; reset TWI hardware on timeout');
+    expect(code).toContain('\n#endif');
+    // The guarded timeout comes right after Wire.begin() in setup().
+    expect(code.indexOf('Wire.begin()')).toBeLessThan(code.indexOf('Wire.setWireTimeout(3000, true)'));
+  });
+
+  it('emits last-good hold, a failure counter, and a recovery routine for color sensors', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Layer 2 — last-good hold: file-scope statics and a return of the last
+    // good sample on failure instead of zeros.
+    expect(code).toContain('TCS34725Sample tcs34725_last = {0, 0, 0, 0};');
+    expect(code).toContain('uint8_t tcs34725_failures = 0;');
+    expect(code).toContain('return tcs34725_last;');
+    expect(code).toContain('tcs34725_last = s; // Layer 2: remember this good read');
+
+    // Layer 3 — escalating recovery after 10 consecutive failures.
+    expect(code).toContain('void tcs34725_recover() {');
+    expect(code).toContain('if (++tcs34725_failures >= 10) { tcs34725_recover(); tcs34725_failures = 0; }');
+    // Bus-clear + re-init sequence.
+    expect(code).toContain('Wire.end();');
+    expect(code).toContain('pinMode(SDA, INPUT_PULLUP);');
+    expect(code).toContain('for (int i = 0; i < 9 && digitalRead(SDA) == LOW; i++) {');
+
+    // Declaration order: recover() must be defined before read_all() calls it.
+    expect(code.indexOf('void tcs34725_recover()')).toBeLessThan(
+      code.indexOf('TCS34725Sample tcs34725_read_all()'),
+    );
+  });
+
+  it('recovery re-inits the sensor with the stored gain register', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined, colorGain: 60 }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // begin() stashes the gain into a file-scope static...
+    expect(code).toContain('uint8_t tcs34725_gain_reg = 0;');
+    expect(code).toContain('tcs34725_gain_reg = gain; // remember for recovery re-init');
+    // ...so recovery can re-initialize with the same configuration.
+    expect(code).toContain('tcs34725_begin(tcs34725_gain_reg);');
+  });
+
+  it('emits a defensive bus-claim that evicts a stray ToF for color sensors', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // ID probe accepts both the TCS34725 (0x44) and the kit's TCS34727 (0x4D).
+    expect(code).toContain('bool tcs34725_id_ok()');
+    expect(code).toContain('Wire.write(0x80 | 0x12); // command bit + ID register');
+    expect(code).toContain('return id == 0x44 || id == 0x4D; // TCS34725 / TCS34727');
+
+    // Claim probes first and, only on a bad ID, parks any VL53 at 0x33.
+    expect(code).toContain('void tcs34725_claim_bus()');
+    expect(code).toContain('if (tcs34725_id_ok()) return; // bus is clean');
+    expect(code).toContain('Wire.write(0x00); Wire.write(0x01); // register index 0x0001');
+    expect(code).toContain('Wire.write(0x33);                   // new 7-bit address (parking spot)');
+
+    // begin() claims the bus as its first statement.
+    const beginPos = code.indexOf('void tcs34725_begin(uint8_t gain) {');
+    const claimCallPos = code.indexOf('tcs34725_claim_bus(); // evict');
+    const gainStashPos = code.indexOf('tcs34725_gain_reg = gain; // remember');
+    expect(beginPos).toBeGreaterThan(-1);
+    expect(claimCallPos).toBeGreaterThan(beginPos);
+    expect(claimCallPos).toBeLessThan(gainStashPos);
+
+    // Forward-declaration order: id_ok and claim_bus defined before begin(),
+    // which is defined before recover() and read_all() (no prototypes).
+    expect(code.indexOf('bool tcs34725_id_ok()')).toBeLessThan(
+      code.indexOf('void tcs34725_claim_bus()'),
+    );
+    expect(code.indexOf('void tcs34725_claim_bus()')).toBeLessThan(beginPos);
+    expect(beginPos).toBeLessThan(code.indexOf('void tcs34725_recover()'));
+  });
+
+  it('re-claims the bus on an all-zero read with a bad ID in the read path', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      { ...conn({ id: 'c1', from: 'color-1', to: 'motor-left', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Zero-sample guard: all four channels zero AND a failed ID probe means a
+    // rebooted ToF is ANDing data to zero while still ACKing — reclaim + re-init.
+    expect(code).toContain(
+      'if (s.c == 0 && s.r == 0 && s.g == 0 && s.b == 0 && !tcs34725_id_ok()) {',
+    );
+    // The re-claim block sits before the sample is stored as last-good.
+    const guardPos = code.indexOf('!tcs34725_id_ok()) {');
+    const lastGoodPos = code.indexOf('tcs34725_last = s; // Layer 2: remember this good read');
+    expect(guardPos).toBeGreaterThan(-1);
+    expect(lastGoodPos).toBeGreaterThan(guardPos);
+  });
+
+  it('emits none of the bus-claim scaffolding without a color sensor', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'tof-1', type: 'sensor-tof', label: 'Front ToF', arduinoPort: undefined, xshutPin: '4' }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'tof-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // No color sensor → no TCS bus-claim driver, even with a ToF present.
+    expect(code).not.toContain('tcs34725_id_ok');
+    expect(code).not.toContain('tcs34725_claim_bus');
+    expect(code).not.toContain('0x44');
+    expect(code).not.toContain('0x4D');
+  });
+
+  it('keeps the ToF readdress dance before the color claim when both are present', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'tof-1', type: 'sensor-tof', label: 'Front ToF', arduinoPort: undefined, xshutPin: '4' }),
+      makeSensor({ id: 'color-1', type: 'sensor-color', label: 'Front Color', arduinoPort: undefined }),
+      makeMotor(),
+      makeRightMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'tof-1', to: 'motor-left', weight: 1 }),
+      { ...conn({ id: 'c2', from: 'color-1', to: 'motor-right', weight: 1 }), fromPort: 'red' },
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Both mechanisms present: the color driver's bus-claim AND the ToF
+    // readdress trick.
+    expect(code).toContain('void tcs34725_claim_bus()');
+    expect(code).toContain('tof_Front_ToF.InitSensor(0x54);');
+
+    // In setup(): the ToF readdress must run before tcs34725_begin() (which
+    // performs the claim), so a diagrammed ToF is already parked off 0x29.
+    const setupBody = code.slice(code.indexOf('void setup()'));
+    const initPos = setupBody.indexOf('tof_Front_ToF.InitSensor(0x54);');
+    const beginPos = setupBody.indexOf('tcs34725_begin(0x02);');
+    expect(initPos).toBeGreaterThan(-1);
+    expect(beginPos).toBeGreaterThan(-1);
+    expect(initPos).toBeLessThan(beginPos);
+  });
+
+  it('emits none of the I2C robustness scaffolding when there are no I2C nodes', () => {
+    const nodes: DiagramNode[] = [makeSensor(), makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).not.toContain('WIRE_HAS_TIMEOUT');
+    expect(code).not.toContain('tcs34725_recover');
+    expect(code).not.toContain('tcs34725_last');
+    expect(code).not.toContain('setWireTimeout');
+    expect(code).not.toContain('Wire.begin()');
   });
 
   it('emits TM1637 display include, declaration, brightness, and showNumberDec', () => {

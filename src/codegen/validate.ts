@@ -10,6 +10,20 @@ import {
   isValidOutputPort,
   getInputPorts,
 } from '../types/diagram';
+
+/**
+ * Physical I2C pins on Uno-form-factor boards (Uno/Nano, UNO R4 Minima).
+ * A4 doubles as SDA, A5 as SCL. On these boards the analog pins A4/A5 and the
+ * digital aliases 18/19 are the *same* physical pins as the dedicated SDA/SCL
+ * header pins, so wiring anything else there while an I2C device is present
+ * fights the bus. Maps a canonical pin key → the I2C signal it carries.
+ */
+const I2C_PHYSICAL_PINS: Record<string, 'SDA' | 'SCL'> = {
+  A4: 'SDA', // analog A4 == SDA
+  A5: 'SCL', // analog A5 == SCL
+  '18': 'SDA', // digital alias 18 == A4 == SDA
+  '19': 'SCL', // digital alias 19 == A5 == SCL
+};
 import { toposort, CycleError } from './toposort';
 import { flattenCompounds } from './flatten';
 
@@ -335,6 +349,33 @@ export function validateGraph(
         errors.push({
           nodeId: errNodeId,
           message: `${typeDef.displayName} '${name}' uses pin 13, which is wired to the board's built-in LED. Pick a different digital pin.`,
+          severity: 'error',
+        });
+      }
+    }
+  }
+
+  // 2d-i2c. A4/A5 conflict with I2C — on Uno-form-factor boards A4/A5 (and
+  // their digital aliases 18/19) are the physical SDA/SCL pins. If any I2C
+  // device is in the graph, sharing those pins with another node corrupts the
+  // bus (the reported "color sensor reads 0" symptom). Flag every pin field
+  // resolving to A4/A5 as an error when an I2C node is present.
+  const hasI2cDevice = flatNodes.some((n) => TYPE_BY_ID[n.type].protocol === 'i2c');
+  if (hasI2cDevice) {
+    for (const node of flatNodes) {
+      const typeDef = TYPE_BY_ID[node.type];
+      const name = label(node.id);
+      const errNodeId = topLevelId(node.id);
+      for (const field of typeDef.pinFields ?? []) {
+        const raw = node[field]?.trim();
+        if (!raw || !isValidPinString(raw)) continue;
+        const key = canonicalPin(node.type, field, raw);
+        const signal = I2C_PHYSICAL_PINS[key];
+        if (!signal) continue;
+        const shown = key.startsWith('A') ? key : `A${Number(key) - 14}`;
+        errors.push({
+          nodeId: errNodeId,
+          message: `${typeDef.displayName} '${name}' uses pin ${shown}, which is the I2C ${signal} pin shared with the color / ToF sensor. Pick a different pin.`,
           severity: 'error',
         });
       }
