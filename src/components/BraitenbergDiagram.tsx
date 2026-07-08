@@ -19,6 +19,8 @@ import type { DiagramState } from '../lib/diagramFile';
 import { DiagramNodeView } from './DiagramNodeView';
 import { ConfigPanel } from './ConfigPanel';
 import { CodeDialog, UploadErrorDialog } from './dialogs';
+import { SettingsModal } from './SettingsModal';
+import { useAppSettings } from '../settings/appSettings';
 import { SerialMonitor } from './SerialMonitor';
 import { ShareMenu, SessionOverlays } from './ShareMenu';
 import { useSession, usePresence } from '../collab/useSession';
@@ -307,6 +309,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
   });
   const [showUploadErrorDialog, setShowUploadErrorDialog] = useState(false);
+  const [appSettings, updateAppSettings] = useAppSettings();
+  const [showSettings, setShowSettings] = useState(false);
   // Split-button primary action ("upload" vs "generate"), persisted so the
   // toolbar's main button remembers the user's last choice across sessions.
   const [primaryAction, setPrimaryAction] = useState<PrimaryAction>(() => loadPrimaryAction());
@@ -825,6 +829,17 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     });
     return () => unlisten?.();
   }, [tauriAvailable, handleUploadTestSketch]);
+
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://settings', () => {
+      setShowSettings(true);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable]);
 
   const makeId = useCallback((prefix: string): string => {
     const uuid =
@@ -1795,6 +1810,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           deleteNode={deleteNode}
           deleteConnection={deleteConnection}
           onClose={clearConfigTarget}
+          capWeights={appSettings.capWeights}
         />
 
         <div className="canvas-zoom-overlay">
@@ -1916,6 +1932,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         open={showUploadErrorDialog}
         onClose={() => setShowUploadErrorDialog(false)}
         result={lastResult}
+      />
+
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={appSettings}
+        onChange={updateAppSettings}
       />
 
       {showSerialMonitor && selectedBoard && (
