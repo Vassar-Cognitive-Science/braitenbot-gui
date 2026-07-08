@@ -402,6 +402,11 @@ export function validateGraph(
   }
 
   // 4. Output unreachable from any source (BFS forward from all sources).
+  // A non-blocking warning, not an error: an unconnected output is a valid
+  // testing setup — e.g. wiring up only the display and leaving the wheels
+  // unsignaled — and the emitter drives such an output to a safe neutral
+  // (input aggregates to 0). We still surface it so a genuinely-forgotten
+  // connection doesn't pass silently.
   const reachable = new Set<string>();
   const adjacency = new Map<string, string[]>();
   for (const node of flatNodes) {
@@ -423,7 +428,7 @@ export function validateGraph(
       errors.push({
         nodeId: topLevelId(output.id),
         message: `${TYPE_BY_ID[output.type].displayName} '${label(output.id)}' is not connected to any sensor`,
-        severity: 'error',
+        severity: 'warning',
       });
     }
   }
