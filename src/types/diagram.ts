@@ -70,6 +70,11 @@ export interface DiagramNode {
   arduinoPort?: string;
   /** Use INPUT_PULLUP mode for digital sensors. Ignored for non-digital sensors. */
   pullup?: boolean;
+  /** Latch brief pulses on a digital sensor via a pin interrupt so pulses
+   *  shorter than the loop period (e.g. a clap on a sound sensor) register as
+   *  high for one full tick. Steady signals read the same as plain polling.
+   *  Ignored for non-digital sensors. */
+  pulseCapture?: boolean;
   /** Invert an analog sensor's signal (100 − value) so brighter/closer reads
    *  higher. Ignored for non-analog sensors. */
   invert?: boolean;

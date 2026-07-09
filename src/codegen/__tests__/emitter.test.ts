@@ -370,6 +370,78 @@ describe('generateSketch', () => {
     expect(code).not.toMatch(/=\s*digitalRead\(SENSOR_Bumper\)\s*\*/);
   });
 
+  it('emits interrupt-latched reads for pulse-capture digital sensors', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'dig-1',
+        type: 'sensor-digital',
+        label: 'Mic',
+        arduinoPort: '4',
+        pulseCapture: true,
+      }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'dig-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    // Latch flag and both ISR flavors (AVR pin-change / attachInterrupt).
+    expect(code).toContain('volatile bool pulse_Mic = false;');
+    expect(code).toContain('ISR(PCINT0_vect) { pulse_capture_poll(); }');
+    expect(code).toContain('if (digitalRead(SENSOR_Mic) == HIGH) pulse_Mic = true;');
+    expect(code).toContain('void pulse_isr_Mic() { pulse_Mic = true; }');
+    // setup(): PCINT mask enable on AVR, RISING attachInterrupt elsewhere.
+    expect(code).toContain('*digitalPinToPCMSK(SENSOR_Mic) |= _BV(digitalPinToPCMSKbit(SENSOR_Mic));');
+    expect(code).toContain('attachInterrupt(digitalPinToInterrupt(SENSOR_Mic), pulse_isr_Mic, RISING);');
+    // loop(): consume the latch atomically and OR with a live read so a
+    // steadily held signal doesn't drop after the one-shot edge interrupt.
+    expect(code).toContain('noInterrupts();');
+    expect(code).toContain('pulse_Mic = false;');
+    expect(code).toContain(
+      'float sig_Mic = (pulsed_Mic || digitalRead(SENSOR_Mic) == HIGH) ? 100.0 : 0.0;',
+    );
+  });
+
+  it('latches on the falling edge for pulse-capture sensors with INPUT_PULLUP', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({
+        id: 'dig-1',
+        type: 'sensor-digital',
+        label: 'Bumper',
+        arduinoPort: '4',
+        pullup: true,
+        pulseCapture: true,
+      }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'dig-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('if (digitalRead(SENSOR_Bumper) == LOW) pulse_Bumper = true;');
+    expect(code).toContain('attachInterrupt(digitalPinToInterrupt(SENSOR_Bumper), pulse_isr_Bumper, FALLING);');
+    expect(code).toContain(
+      'float sig_Bumper = (pulsed_Bumper || digitalRead(SENSOR_Bumper) == LOW) ? 100.0 : 0.0;',
+    );
+  });
+
+  it('emits no pulse-capture machinery when the option is off', () => {
+    const nodes: DiagramNode[] = [
+      makeSensor({ id: 'dig-1', type: 'sensor-digital', label: 'Mic', arduinoPort: '4' }),
+      makeMotor(),
+    ];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'dig-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).not.toContain('volatile bool pulse_');
+    expect(code).not.toContain('PCINT');
+    expect(code).not.toContain('attachInterrupt');
+  });
+
   it('emits a TCS34725 driver and one variable per channel for color sensors', () => {
     const nodes: DiagramNode[] = [
       makeSensor({

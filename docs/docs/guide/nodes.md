@@ -53,6 +53,7 @@ Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 **Configuration:**
 - **Arduino Port** — a free-text field for the digital pin number (e.g., `2`)
 - **INPUT_PULLUP** — checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
+- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling. One caveat: because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens.
 
 **Generated code:**
 ```cpp
@@ -61,6 +62,14 @@ float sig_sensor = digitalRead(PIN) * 100.0;
 
 // With pullup (inverted)
 float sig_sensor = (1 - digitalRead(PIN)) * 100.0;
+
+// With "catch brief pulses" — an interrupt sets pulse_sensor between reads;
+// the live read is OR'd in so a held signal stays high after the latch clears
+noInterrupts();
+bool pulsed_sensor = pulse_sensor;
+pulse_sensor = false;
+interrupts();
+float sig_sensor = (pulsed_sensor || digitalRead(PIN) == HIGH) ? 100.0 : 0.0;
 ```
 
 ---

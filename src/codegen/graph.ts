@@ -26,6 +26,7 @@ export interface GraphNode {
   arduinoPort?: string;
   protocol?: SensorProtocol;
   pullup?: boolean;
+  pulseCapture?: boolean;
   invert?: boolean;
   colorGain?: number;
   xshutPin?: string;
@@ -102,6 +103,7 @@ export function buildGraph(
       arduinoPort: node.arduinoPort,
       protocol: typeDef.protocol,
       pullup: node.pullup,
+      pulseCapture: node.pulseCapture,
       invert: node.invert,
       colorGain: node.colorGain,
       xshutPin: node.xshutPin,
