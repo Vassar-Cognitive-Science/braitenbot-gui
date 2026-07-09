@@ -332,15 +332,40 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
   },
   'sensor-digital': {
     setup: (node, { indent }) => {
+      const sid = readableId(node);
       const mode = node.pullup ? 'INPUT_PULLUP' : 'INPUT';
-      return `${indent}pinMode(SENSOR_${readableId(node)}, ${mode});`;
+      const lines = [`${indent}pinMode(SENSOR_${sid}, ${mode});`];
+      if (node.pulseCapture) {
+        lines.push('#if defined(ARDUINO_ARCH_AVR)');
+        lines.push(`${indent}*digitalPinToPCICR(SENSOR_${sid}) |= _BV(digitalPinToPCICRbit(SENSOR_${sid}));`);
+        lines.push(`${indent}*digitalPinToPCMSK(SENSOR_${sid}) |= _BV(digitalPinToPCMSKbit(SENSOR_${sid}));`);
+        lines.push('#else');
+        lines.push(
+          `${indent}attachInterrupt(digitalPinToInterrupt(SENSOR_${sid}), pulse_isr_${sid}, ${node.pullup ? 'FALLING' : 'RISING'});`,
+        );
+        lines.push('#endif');
+      }
+      return lines.join('\n');
     },
     loop: (node, { indent }) => {
+      const sid = readableId(node);
       // With INPUT_PULLUP the switch shorts the pin to GND when pressed,
       // so the raw read is inverted relative to "active = signal".
+      const activeLevel = node.pullup ? 'LOW' : 'HIGH';
+      if (node.pulseCapture) {
+        return [
+          `${indent}// The latch alone isn't enough: the interrupt fires once per edge, so a`,
+          `${indent}// signal still held at its active level must be OR'd in via a live read.`,
+          `${indent}noInterrupts();`,
+          `${indent}bool pulsed_${sid} = pulse_${sid};`,
+          `${indent}pulse_${sid} = false;`,
+          `${indent}interrupts();`,
+          `${indent}float ${varName(node)} = (pulsed_${sid} || digitalRead(SENSOR_${sid}) == ${activeLevel}) ? 100.0 : 0.0;`,
+        ].join('\n');
+      }
       const read = node.pullup
-        ? `(1 - digitalRead(SENSOR_${readableId(node)}))`
-        : `digitalRead(SENSOR_${readableId(node)})`;
+        ? `(1 - digitalRead(SENSOR_${sid}))`
+        : `digitalRead(SENSOR_${sid})`;
       return `${indent}float ${varName(node)} = ${read} * 100.0;`;
     },
   },
@@ -789,6 +814,45 @@ function i2cTypesIn(graph: WiringGraph): NodeTypeId[] {
   );
 }
 
+/**
+ * Interrupt-latch machinery for pulse-capture digital sensors. Emits one
+ * volatile flag per sensor plus the ISRs that set them. On classic AVR,
+ * attachInterrupt() only exists on pins 2/3, so we use pin-change interrupts
+ * instead — they cover every pin but fire on both edges and share one vector
+ * per port, so a single handler re-reads each watched pin and latches the
+ * ones sitting at their active level. (This claims the PCINT vectors, which
+ * is safe because generated sketches never use SoftwareSerial.) Boards where
+ * attachInterrupt() works on any pin (e.g. UNO R4) get a per-sensor
+ * edge-triggered ISR.
+ */
+function emitPulseCaptureHelper(nodes: GraphNode[]): string {
+  const lines: string[] = [
+    '// --- Pulse-capture latches for digital sensors ---',
+    '// The ISR latches pulses shorter than the loop period; the loop read',
+    '// consumes the latch (see the digital-sensor read in loop()).',
+  ];
+  for (const node of nodes) {
+    lines.push(`volatile bool pulse_${readableId(node)} = false;`);
+  }
+  lines.push('#if defined(ARDUINO_ARCH_AVR)');
+  lines.push('void pulse_capture_poll() {');
+  for (const node of nodes) {
+    const sid = readableId(node);
+    lines.push(`  if (digitalRead(SENSOR_${sid}) == ${node.pullup ? 'LOW' : 'HIGH'}) pulse_${sid} = true;`);
+  }
+  lines.push('}');
+  lines.push('ISR(PCINT0_vect) { pulse_capture_poll(); }');
+  lines.push('ISR(PCINT1_vect) { pulse_capture_poll(); }');
+  lines.push('ISR(PCINT2_vect) { pulse_capture_poll(); }');
+  lines.push('#else');
+  for (const node of nodes) {
+    const sid = readableId(node);
+    lines.push(`void pulse_isr_${sid}() { pulse_${sid} = true; }`);
+  }
+  lines.push('#endif');
+  return lines.join('\n');
+}
+
 function emitDriveHelper(leftWheel: GraphNode, rightWheel: GraphNode): string {
   const left = readableId(leftWheel);
   const right = readableId(rightWheel);
@@ -937,6 +1001,17 @@ export function generateSketch(graph: WiringGraph, options: GenerateSketchOption
   }
   if (globals.length) {
     sections.push(globals.join('\n'));
+    sections.push('');
+  }
+
+  // Pulse-capture latches — flags and ISRs for digital sensors that catch
+  // pulses shorter than the loop period. Emitted after the pin declarations
+  // the ISRs read.
+  const pulseNodes = graph.nodes.filter(
+    (n) => n.typeId === 'sensor-digital' && n.pulseCapture,
+  );
+  if (pulseNodes.length) {
+    sections.push(emitPulseCaptureHelper(pulseNodes));
     sections.push('');
   }
 

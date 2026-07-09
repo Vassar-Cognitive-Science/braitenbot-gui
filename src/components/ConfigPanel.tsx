@@ -151,16 +151,36 @@ export function ConfigPanel({
           )}
 
           {selectedNode.type === 'sensor-digital' && (
-            <label className="config-checkbox">
-              <input
-                type="checkbox"
-                checked={selectedNode.pullup ?? false}
-                onChange={(event) =>
-                  patchNode(selectedNode.id, { pullup: event.target.checked })
-                }
-              />
-              Enable INPUT_PULLUP
-            </label>
+            <>
+              <label className="config-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedNode.pullup ?? false}
+                  onChange={(event) =>
+                    patchNode(selectedNode.id, { pullup: event.target.checked })
+                  }
+                />
+                Enable INPUT_PULLUP
+              </label>
+              <label className="config-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedNode.pulseCapture ?? false}
+                  onChange={(event) =>
+                    patchNode(selectedNode.id, { pulseCapture: event.target.checked })
+                  }
+                />
+                Catch brief pulses
+              </label>
+              {selectedNode.pulseCapture && (
+                <p className="config-description">
+                  An interrupt latches pulses shorter than the loop period (like
+                  a clap on a sound sensor), so they read high for one full
+                  tick. Signals near the sensor's threshold may chatter more,
+                  since every brief spike now counts.
+                </p>
+              )}
+            </>
           )}
 
           {selectedNode.type === 'sensor-analog' && (
