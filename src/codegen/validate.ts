@@ -382,6 +382,55 @@ export function validateGraph(
     }
   }
 
+  // 2g. Pulse capture on pins the UNO R4 can't attach interrupts to.
+  // Classic AVR boards (Uno R3 / Nano) cover every pin via pin-change
+  // interrupts, but the UNO R4's RA4M1 only routes an IRQ channel to some
+  // header pins — attachInterrupt() on the rest silently does nothing, so the
+  // sensor quietly degrades to plain polling and brief pulses are missed.
+  // Channels are also shared between certain pins (e.g. 3 and A4), and only
+  // one pin per channel can attach, so two pulse-capture sensors on the same
+  // channel conflict. Both are warnings, not errors: on classic AVR every
+  // configuration works. Channel numbers come from the UNO R4 Minima
+  // variant's pinmux tables (arduino:renesas_uno core).
+  const R4_IRQ_CHANNELS: Record<string, number> = {
+    '0': 6, '1': 5, '2': 0, '3': 1, '8': 9, '12': 3, '13': 4,
+    A1: 6, A2: 7, A3: 2, A4: 1, A5: 2,
+  };
+  // Digital aliases 14–19 address the same physical pins as A0–A5.
+  const r4PinKey = (raw: string): string => {
+    const upper = raw.toUpperCase();
+    if (upper.startsWith('A')) return upper;
+    const n = Number(upper);
+    return n >= 14 && n <= 19 ? `A${n - 14}` : upper;
+  };
+  const irqChannelUsers = new Map<number, { nodeId: string; name: string; pin: string }[]>();
+  for (const node of flatNodes) {
+    if (node.type !== 'sensor-digital' || !node.pulseCapture) continue;
+    const raw = node.arduinoPort?.trim();
+    if (!raw || !isValidPinString(raw)) continue; // missing/invalid pins flagged above
+    const channel = R4_IRQ_CHANNELS[r4PinKey(raw)];
+    if (channel === undefined) {
+      errors.push({
+        nodeId: topLevelId(node.id),
+        message: `Digital Sensor '${label(node.id)}' has "Catch brief pulses" enabled on pin ${raw}, which cannot attach an interrupt on UNO R4 boards — brief pulses would be missed there (Uno R3 / Nano work on any pin). Pins 2, 3, 8, 12, and A1–A5 work on every board.`,
+        severity: 'warning',
+      });
+    } else {
+      const users = irqChannelUsers.get(channel) ?? [];
+      users.push({ nodeId: node.id, name: label(node.id), pin: raw });
+      irqChannelUsers.set(channel, users);
+    }
+  }
+  for (const users of irqChannelUsers.values()) {
+    if (users.length < 2) continue;
+    const names = users.map((u) => `'${u.name}' (pin ${u.pin})`).join(' and ');
+    errors.push({
+      nodeId: topLevelId(users[0].nodeId),
+      message: `${names} both catch brief pulses on pins that share a single interrupt channel on UNO R4 boards, so only one of them would work there. Move one to a pin on a different channel.`,
+      severity: 'warning',
+    });
+  }
+
   // 2e. Duplicate pins — two nodes (or two fields of one node) claiming the
   // same physical pin emit conflicting pinMode/attach code. Collect every
   // well-formed pin across all pin fields of all flattened nodes and flag

@@ -598,4 +598,82 @@ describe('validateGraph', () => {
     expect(orphanWarning).toBeDefined();
   });
 
+  describe('pulse capture pin support', () => {
+    function makePulseSensor(overrides: Partial<DiagramNode> = {}): DiagramNode {
+      return makeSensor({
+        id: 'dig-1',
+        type: 'sensor-digital',
+        label: 'Mic',
+        arduinoPort: '4',
+        pulseCapture: true,
+        ...overrides,
+      });
+    }
+
+    it('warns when pulse capture is on a pin with no UNO R4 interrupt', () => {
+      // Pin 4 has no IRQ channel on the R4; works on classic AVR only.
+      const nodes = [makePulseSensor(), makeMotor()];
+      const errors = validateGraph(nodes, [makeConnection({ from: 'dig-1' })]);
+      const warning = errors.find(
+        (e) => e.severity === 'warning' && e.message.includes('cannot attach an interrupt'),
+      );
+      expect(warning).toBeDefined();
+      expect(warning?.nodeId).toBe('dig-1');
+    });
+
+    it('treats digital aliases 14–19 as the A-bank pins (14 = A0 → warn)', () => {
+      const nodes = [makePulseSensor({ arduinoPort: '14' }), makeMotor()];
+      const errors = validateGraph(nodes, [makeConnection({ from: 'dig-1' })]);
+      expect(errors.some((e) => e.message.includes('cannot attach an interrupt'))).toBe(true);
+    });
+
+    it('does not warn on interrupt-capable pins (2, A1, alias 15)', () => {
+      for (const pin of ['2', 'A1', '15']) {
+        const nodes = [makePulseSensor({ arduinoPort: pin }), makeMotor()];
+        const errors = validateGraph(nodes, [makeConnection({ from: 'dig-1' })]);
+        expect(errors.filter((e) => e.message.includes('cannot attach an interrupt'))).toHaveLength(0);
+      }
+    });
+
+    it('does not warn when pulse capture is off', () => {
+      const nodes = [makePulseSensor({ pulseCapture: false }), makeMotor()];
+      const errors = validateGraph(nodes, [makeConnection({ from: 'dig-1' })]);
+      expect(errors.filter((e) => e.message.includes('interrupt'))).toHaveLength(0);
+    });
+
+    it('warns when two pulse-capture sensors share a UNO R4 interrupt channel', () => {
+      // Pin 3 and A4 both map to IRQ channel 1 on the R4 Minima.
+      const nodes = [
+        makePulseSensor({ id: 'dig-1', label: 'Mic', arduinoPort: '3' }),
+        makePulseSensor({ id: 'dig-2', label: 'Clap', arduinoPort: 'A4' }),
+        makeMotor(),
+      ];
+      const connections = [
+        makeConnection({ id: 'c1', from: 'dig-1' }),
+        makeConnection({ id: 'c2', from: 'dig-2' }),
+      ];
+      const errors = validateGraph(nodes, connections);
+      const warning = errors.find(
+        (e) => e.severity === 'warning' && e.message.includes('share a single interrupt channel'),
+      );
+      expect(warning).toBeDefined();
+      expect(warning?.message).toContain('Mic');
+      expect(warning?.message).toContain('Clap');
+    });
+
+    it('does not warn about channel sharing for sensors on distinct channels', () => {
+      const nodes = [
+        makePulseSensor({ id: 'dig-1', label: 'Mic', arduinoPort: '2' }),
+        makePulseSensor({ id: 'dig-2', label: 'Clap', arduinoPort: '8' }),
+        makeMotor(),
+      ];
+      const connections = [
+        makeConnection({ id: 'c1', from: 'dig-1' }),
+        makeConnection({ id: 'c2', from: 'dig-2' }),
+      ];
+      const errors = validateGraph(nodes, connections);
+      expect(errors.filter((e) => e.message.includes('share a single interrupt channel'))).toHaveLength(0);
+    });
+  });
+
 });

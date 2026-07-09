@@ -53,7 +53,7 @@ Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 **Configuration:**
 - **Arduino Port** — a free-text field for the digital pin number (e.g., `2`)
 - **INPUT_PULLUP** — checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
-- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling. One caveat: because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens.
+- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling. One caveat: because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens. Pin support differs by board: classic Uno R3 / Nano boards support every pin (via pin-change interrupts), but the UNO R4 can only attach interrupts on pins 2, 3, 8, 12, and A1–A5 — and pins 3 + A4 (and A3 + A5) share an interrupt channel, so only one pulse-capture sensor can use each pair. The diagram validator warns about both cases.
 
 **Generated code:**
 ```cpp
