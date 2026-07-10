@@ -37,6 +37,8 @@ interface DiagramNodeViewProps {
   // getOutputPorts('sensor-color') order. Undefined outside trace mode.
   colorSensorValues?: string;
   isPulsing: boolean;
+  // Duration of the "▶" sensor pulse — shown in the button tooltip.
+  pulseDurationMs: number;
   beginNodeDrag: (event: MouseEvent, nodeId: string) => void;
   beginLinkDrag: (event: MouseEvent, nodeId: string, port?: OutputPortId) => void;
   completeLink: (toId: string, toPort?: string) => void;
@@ -72,6 +74,7 @@ function DiagramNodeViewInner({
   sensorValue,
   colorSensorValues,
   isPulsing,
+  pulseDurationMs,
   beginNodeDrag,
   beginLinkDrag,
   completeLink,
@@ -196,7 +199,7 @@ function DiagramNodeViewInner({
           <button
             type="button"
             className={`trace-pulse-btn ${isPulsing ? 'pulsing' : ''}`}
-            title="Pulse this sensor HIGH for 200ms"
+            title={`Pulse this sensor HIGH for ${pulseDurationMs}ms`}
             disabled={readOnly}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -273,7 +276,7 @@ function DiagramNodeViewInner({
             <button
               type="button"
               className={`trace-pulse-btn ${isPulsing ? 'pulsing' : ''}`}
-              title="Pulse to 100 for 200ms"
+              title={`Pulse to 100 for ${pulseDurationMs}ms`}
               disabled={readOnly}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
