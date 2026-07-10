@@ -421,6 +421,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const traceResult = scope.traceResult;
 
   const [pulsingId, setPulsingId] = useState<string | null>(null);
+  // Duration of the "▶" sensor pulse in trace mode. Local UI preference: the
+  // duration is baked into each shared pulse event as durationTicks, so peers
+  // don't need to agree on this setting.
+  const [pulseDurationMs, setPulseDurationMs] = useState(200);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number>(0);
   const showToast = useCallback((msg: string) => {
@@ -442,7 +446,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
           : `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
       }`;
-      const durationTicks = Math.max(1, Math.round(200 / Math.max(1, loopPeriodMs)));
+      const durationTicks = Math.max(1, Math.round(pulseDurationMs / Math.max(1, loopPeriodMs)));
       store.addTracePulse({
         id: eventId,
         sensorId,
@@ -453,12 +457,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       setPulsingId(sensorId);
       window.setTimeout(() => {
         setPulsingId((prev) => (prev === sensorId ? null : prev));
-      }, 200);
+      }, pulseDurationMs);
       // Writer-side pruning. A peer whose trace view attaches after this
       // window misses the pulse entirely (accepted, like tick drift).
-      window.setTimeout(() => store.removeTracePulse(eventId), 200 + 600);
+      window.setTimeout(() => store.removeTracePulse(eventId), pulseDurationMs + 600);
     },
-    [currentTick, store, loopPeriodMs],
+    [currentTick, store, loopPeriodMs, pulseDurationMs],
   );
 
   // Apply shared pulse events: each client fires every not-yet-seen event once
@@ -1402,6 +1406,20 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             <WaypointsIcon />
             <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
+          {traceMode && (
+            <label className="toolbar-setting" title="How long the ▶ button holds a sensor pulse">
+              <span className="toolbar-setting-label">Pulse</span>
+              <NumberInput
+                min={10}
+                max={5000}
+                step={10}
+                integer
+                value={pulseDurationMs}
+                onChange={setPulseDurationMs}
+              />
+              <span className="toolbar-setting-unit">ms</span>
+            </label>
+          )}
           {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
         </div>
 
@@ -1834,6 +1852,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               sensorValue={sensorValues[node.id]}
               colorSensorValues={colorSensorValues}
               isPulsing={pulsingId === node.id}
+              pulseDurationMs={pulseDurationMs}
               beginNodeDrag={beginNodeDrag}
               beginLinkDrag={beginLinkDrag}
               completeLink={completeLink}
