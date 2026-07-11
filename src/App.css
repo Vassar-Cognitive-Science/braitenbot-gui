@@ -1121,18 +1121,37 @@ select,
 .canvas-toolbar {
   display: flex;
   align-items: end;
-  gap: 0.5rem 0.65rem;
-  padding: 0.45rem 0.65rem;
+  gap: 0.4rem 0.3rem;
+  padding: 0.45rem 0.5rem;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 3px;
-  flex-wrap: wrap;
+  /* Never wrap to a second row. Everything stays intact except the board
+     picker, which shrinks (see below) to absorb a tight width. No overflow
+     is set here on purpose — it would clip the split-button/share dropdowns. */
+  flex-wrap: nowrap;
+}
+
+/* Keep every toolbar item at its natural width... */
+.canvas-toolbar > * {
+  flex-shrink: 0;
+}
+
+/* ...except the Device group, whose board <select> is the one element that
+   can give up width gracefully (long board names just truncate). */
+.canvas-toolbar > .toolbar-serial {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.toolbar-serial .toolbar-board-select {
+  min-width: 0;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   flex-wrap: wrap;
 }
 
@@ -1159,8 +1178,8 @@ select,
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.32rem 0.6rem;
+  gap: 0.3rem;
+  padding: 0.32rem 0.5rem;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
@@ -1732,7 +1751,13 @@ select,
   color: #d4bc78;
 }
 
-@media (max-width: 1200px) {
+/* The uppercase group labels (GROUP, SIMULATE, …) stretch each group wider
+   than its buttons, so once the toolbar gets tight they, not the buttons, are
+   what forces a second row. Below this width, drop the labels and lay the
+   groups out compactly in a single row — the buttons alone are self-evident.
+   Set generously (not at the true overflow point) so it also covers browser
+   page-zoom, which shrinks the effective viewport. */
+@media (max-width: 1400px) {
   .canvas-toolbar {
     align-items: center;
   }
