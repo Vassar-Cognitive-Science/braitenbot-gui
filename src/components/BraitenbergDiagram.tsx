@@ -1085,10 +1085,19 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         event.preventDefault();
         undo();
       }
+      // Reset view: Cmd/Ctrl+0 (mirrors View → Go to Main View). Handled here
+      // rather than relying only on the native menu accelerator, which the
+      // WebView2 swallows for its own zoom-reset on Windows.
+      if (mod && key === '0') {
+        if (isBlocked()) return;
+        event.preventDefault();
+        breakFollow();
+        resetView();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store, breakFollow, resetView]);
 
   const beginNodeDrag = useCallback((event: MouseEvent, nodeId: string) => {
     if (event.button !== 0) return;
