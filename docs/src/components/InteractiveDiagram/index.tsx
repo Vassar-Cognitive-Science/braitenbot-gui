@@ -6,17 +6,10 @@ import type {
   DiagramConnection,
   DiagramNode,
 } from '@app/types/diagram';
-import {
-  TYPE_BY_ID,
-  getInputPorts,
-  getOutputPorts,
-} from '@app/types/diagram';
-import { canOutput } from '@app/components/diagramShared';
 import { useScopeSimulation } from '@app/hooks/useScopeSimulation';
-import { formatTraceValue } from '@app/hooks/useTraceSimulation';
-import { DiagramNodeView } from '@app/components/DiagramNodeView';
-import { ConnectionLayer } from '@app/components/ConnectionLayer';
-import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
+import type { ConfigTarget } from '@app/components/diagramShared';
+import { DiagramCanvas } from '@app/components/DiagramCanvas';
+import { NODE_H, NODE_W } from '@app/components/connectionGeometry';
 // The app's diagram presentation layer (nodes, connections, trace UI). Scoped
 // under `.bb-diagram`, so it renders as a self-contained dark panel and leaks
 // nothing into the Docusaurus theme. Aliased CSS import resolves through the
@@ -27,11 +20,11 @@ import './styles.css';
 /**
  * An always-on, embeddable trace-mode diagram for the docs site. It reuses BOTH
  * the desktop app's simulation core (`useScopeSimulation` — see `@app/hooks/*`)
- * AND the app's rendering layer (`DiagramNodeView` / `ConnectionLayer` / the
- * `.bb-diagram` stylesheet), so an embedded diagram looks and behaves exactly
- * like the app's trace mode and can never drift from it. Nothing here is
- * re-implemented; only layout/embed chrome (panel frame, scaling, caption) is
- * docs-local.
+ * AND the app's rendering layer (the shared `DiagramCanvas`, which composes
+ * `DiagramNodeView` / `ConnectionLayer` and the `.bb-diagram` stylesheet), so an
+ * embedded diagram looks and behaves exactly like the app's trace mode and can
+ * never drift from it. Nothing here is re-implemented; only layout/embed chrome
+ * (panel frame, scaling, caption) is docs-local.
  *
  * The `diagram` prop is the app's EXPORT format, so a diagram built in the app
  * can be pasted straight into MDX.
@@ -86,17 +79,18 @@ function computeLayout(nodes: DiagramNode[]): Layout {
   };
 }
 
-// No-op editing callbacks: the docs embed is view-only w.r.t. graph structure
-// (no dragging nodes, drawing links, opening config panels), but its trace
-// inputs (sliders / toggles / pulse) stay live. `readOnly={false}` on the node
-// view keeps those inputs enabled; the structural callbacks below simply do
-// nothing.
+// View-only embed: the graph structure is not editable (the shared canvas
+// disables node/link/badge dragging because the editing callbacks are omitted),
+// and selection is pinned to an inert empty state. Trace inputs (sliders /
+// toggles / pulse) stay live via the trace passthrough props.
 const NOOP = () => {};
 const NOOP_SET_SELECTED: Dispatch<SetStateAction<Set<string>>> = () => {};
+const NOOP_SET_CONFIG: Dispatch<SetStateAction<ConfigTarget | null>> = () => {};
+const EMPTY_SELECTION = new Set<string>();
 
 // ── Rendering core, shared by the live and static (SSR) variants ───────────
 
-function DiagramCanvas({
+function DiagramPanel({
   nodes,
   connections,
   compoundTypes,
@@ -127,26 +121,17 @@ function DiagramCanvas({
   };
 }) {
   const layout = useMemo(() => computeLayout(nodes), [nodes]);
-  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   const scale = Math.min(1, height / layout.contentH);
   const worldW = layout.contentW * scale;
 
-  // Reuse the app's connection geometry. Node world position = raw node
-  // coordinate + layout offset (docs have no zoom / block-scale).
-  const paths = useMemo(
-    () =>
-      computeConnectionPaths(
-        connections,
-        (id) => nodeMap.get(id),
-        (node) => ({ x: node.x + layout.offsetX, y: node.y + layout.offsetY }),
-        compoundTypes,
-        1,
-      ),
-    [connections, nodeMap, compoundTypes, layout],
+  // Node world position = raw node coordinate + layout offset (docs have no
+  // zoom / block-scale; the fit-to-width scale is a CSS transform on the
+  // wrapper, outside the canvas's coordinate space).
+  const nodeWorldPos = useMemo(
+    () => (node: DiagramNode) => ({ x: node.x + layout.offsetX, y: node.y + layout.offsetY }),
+    [layout],
   );
-
-  const nodeValues = traceResult?.nodeValues ?? {};
 
   return (
     <div className="id-canvas" style={{ height, width: worldW || undefined }}>
@@ -159,78 +144,25 @@ function DiagramCanvas({
           height: layout.contentH,
         }}
       >
-        <ConnectionLayer
-          paths={paths}
-          edgeSignals={traceResult?.edgeSignals}
-          selectedConnectionId={null}
+        <DiagramCanvas
+          nodes={nodes}
+          connections={connections}
+          compoundTypes={compoundTypes}
+          nodeWorldPos={nodeWorldPos}
+          traceMode
+          traceResult={traceResult}
+          sensorValues={sensorValues}
+          setSensorValue={setSensor}
+          setConstantValue={setConstant}
+          pulseSensor={pulse}
+          pulsingId={pulsingId}
+          pulseDurationMs={pulseDurationMs}
+          readOnly={traceResult === undefined}
+          selectedNodeIds={EMPTY_SELECTION}
+          setSelectedNodeIds={NOOP_SET_SELECTED}
+          configTarget={null}
+          setConfigTarget={NOOP_SET_CONFIG}
         />
-
-        {nodes.map((node) => {
-          const nodeType = TYPE_BY_ID[node.type];
-          const isCompound = node.type === 'compound';
-          const rawTraceValue = traceResult ? nodeValues[node.id] : undefined;
-
-          const outputPorts = traceResult && canOutput(nodeType)
-            ? getOutputPorts(nodeType.id, node, compoundTypes)
-            : undefined;
-          const outputPortValues = outputPorts && outputPorts.length > 0
-            ? outputPorts
-                .map((port) => {
-                  const v = nodeValues[
-                    isCompound ? `${node.id}/${port}` : `${node.id}:${port}`
-                  ];
-                  return v === undefined ? '' : formatTraceValue(v);
-                })
-                .join(',')
-            : undefined;
-          const inputPorts = traceResult && isCompound
-            ? getInputPorts(nodeType.id, node, compoundTypes)
-            : undefined;
-          const inputPortValues = inputPorts && inputPorts.length > 0
-            ? inputPorts
-                .map((port) => {
-                  const v = nodeValues[`${node.id}/${port}`];
-                  return v === undefined ? '' : formatTraceValue(v);
-                })
-                .join(',')
-            : undefined;
-          const colorSensorValues = node.type === 'sensor-color'
-            ? getOutputPorts('sensor-color')!
-                .map((ch) => sensorValues[`${node.id}:${ch}`] ?? 0)
-                .join(',')
-            : undefined;
-
-          return (
-            <DiagramNodeView
-              key={node.id}
-              node={node}
-              worldX={node.x + layout.offsetX}
-              worldY={node.y + layout.offsetY}
-              isSelected={false}
-              isMultiSelected={false}
-              traceMode
-              traceValue={rawTraceValue !== undefined ? formatTraceValue(rawTraceValue) : undefined}
-              isDisconnected={traceResult?.disconnected.has(node.id) ?? false}
-              outputPortValues={outputPortValues}
-              inputPortValues={inputPortValues}
-              compoundTypes={compoundTypes}
-              sensorValue={sensorValues[node.id]}
-              colorSensorValues={colorSensorValues}
-              isPulsing={pulsingId === node.id}
-              pulseDurationMs={pulseDurationMs}
-              beginNodeDrag={NOOP}
-              beginLinkDrag={NOOP}
-              completeLink={NOOP}
-              enterCompound={NOOP}
-              pulseSensor={pulse}
-              setSelectedNodeIds={NOOP_SET_SELECTED}
-              setConfigTarget={NOOP}
-              setSensorValue={setSensor}
-              setConstantValue={setConstant}
-              readOnly={traceResult === undefined}
-            />
-          );
-        })}
       </div>
     </div>
   );
@@ -292,7 +224,7 @@ function LiveDiagram({
   };
 
   return (
-    <DiagramCanvas
+    <DiagramPanel
       nodes={nodes}
       connections={connections}
       compoundTypes={compoundTypes}
@@ -320,7 +252,7 @@ function StaticDiagram({
   pulseDurationMs: number;
 }) {
   return (
-    <DiagramCanvas
+    <DiagramPanel
       nodes={diagram.nodes}
       connections={diagram.connections}
       compoundTypes={diagram.compoundTypes ?? []}
