@@ -1,0 +1,39 @@
+/* ── InteractiveDiagram: embed chrome for the always-on trace-mode diagram ──
+ *
+ * The node/connection rendering itself comes from the app's `.bb-diagram`
+ * stylesheet (imported in index.tsx), so this file only styles the surrounding
+ * panel: the figure frame, the scrollable/scaled canvas, and the caption. The
+ * inner `.bb-diagram` world is a self-contained dark app-style panel regardless
+ * of the docs light/dark toggle — expected and desired. */
+
+.id-figure {
+  margin: 1.5rem 0;
+  padding: 0;
+}
+
+.id-canvas {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  /* Match the app canvas surface (App.css `.diagram-canvas`) — same 16px
+     graph-paper grid over the same dark surface — so the embedded panel
+     reads as the app. */
+  background:
+    linear-gradient(to right, rgba(58, 56, 46, 0.25) 1px, transparent 1px) 0 0 / 16px 16px,
+    linear-gradient(to bottom, rgba(58, 56, 46, 0.25) 1px, transparent 1px) 0 0 / 16px 16px,
+    #1a1b16;
+  border: 1px solid #33342b;
+  border-radius: 3px;
+}
+
+.id-world {
+  position: relative;
+}
+
+.id-caption {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ifm-color-content-secondary, #888);
+  margin-top: 0.5rem;
+  font-style: italic;
+}

@@ -18,23 +18,26 @@ This is the moment Braitenberg's vehicles start to feel uncanny. The same two se
 
 Mount the robot's two **light-sensor boards** on the front, angled slightly outward — one pointing left, one pointing right. Wire each board's analog output to pins A0 and A1; the board already carries the photocell and its voltage divider, so there's nothing else to add. When a light source is to the left of the robot, the left board gets more light and reads higher. When it's to the right, the right board reads higher.
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-<DiagramView
-  width={500}
-  height={310}
-  robot={{ x: 250, y: 220, radius: 80 }}
-  nodes={[
-    { id: 'left-sensor', type: 'sensor-analog', label: 'Left Photocell', x: 80, y: 30, meta: 'A0' },
-    { id: 'right-sensor', type: 'sensor-analog', label: 'Right Photocell', x: 280, y: 30, meta: 'A1' },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 210 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 210 },
-  ]}
-  connections={[
-    { from: 'left-sensor', to: 'right-motor', weight: 0.7 },
-    { from: 'right-sensor', to: 'left-motor', weight: 0.7 },
-  ]}
-  caption="Each sensor drives the opposite motor (cross-wired)"
+Try the cross-wired vehicle right now — drag the **Left Photocell** slider up while leaving the right one low, and watch the right motor race ahead of the left, turning the vehicle toward the stronger light. Then center both sliders at 50 and notice both motors equalize: the vehicle drives straight when the light is balanced.
+
+<InteractiveDiagram
+  height={340}
+  initialInputs={{ 'left-sensor': 70, 'right-sensor': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'left-sensor', type: 'sensor-analog', label: 'Left Photocell', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'right-sensor', type: 'sensor-analog', label: 'Right Photocell', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-sensor', to: 'right-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-sensor', to: 'left-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2b (cross-wired): left sensor drives the right motor and vice versa, so a stronger signal on either side turns the vehicle toward that side."
 />
 
 ## Why cross-wiring creates steering
@@ -99,6 +102,26 @@ Now the robot always drives forward at 30% speed. When it detects light to one s
 ## The "fearful" variant (Vehicle 2a)
 
 Swap the cross-wiring for same-side wiring (left sensor → left motor, right sensor → right motor) and the robot does the opposite: it turns **away** from light. Strong light on the left speeds up the left wheel, pushing the robot's nose to the right.
+
+Compare the diagram below with the cross-wired version above — the nodes and weights are identical, only the wire destinations have swapped. Drag the left sensor up and watch the **left** motor accelerate this time, pushing the nose away from the light.
+
+<InteractiveDiagram
+  height={340}
+  initialInputs={{ 'ls-fear': 70, 'rs-fear': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'ls-fear', type: 'sensor-analog', label: 'Left Photocell', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'rs-fear', type: 'sensor-analog', label: 'Right Photocell', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'lm-fear', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'rm-fear', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'f1', from: 'ls-fear', to: 'lm-fear', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'f2', from: 'rs-fear', to: 'rm-fear', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2a (same-side wiring): left sensor drives the left motor, so strong light on one side pushes the vehicle nose away — avoidance from identical hardware."
+/>
 
 This is useful for light-avoidance behaviors — for example, a robot that stays in the shadows or hides under furniture when a room light turns on.
 

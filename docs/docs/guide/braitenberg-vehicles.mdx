@@ -21,27 +21,29 @@ A Braitenberg vehicle has:
 
 No microcontroller logic, no if-statements, no planning. The vehicle's behavior emerges entirely from how the wires are arranged and weighted.
 
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 import DiagramView from '@site/src/components/DiagramView';
 
 ## Vehicle 2a: "Fear"
 
 Wire each sensor to the motor on the **same** side (ipsilateral):
 
-<DiagramView
-  width={440}
-  height={260}
-  robot={{ x: 220, y: 180, radius: 70 }}
-  nodes={[
-    { id: 'ls', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20 },
-    { id: 'rs', type: 'sensor-analog', label: 'Right Sensor', x: 240, y: 20 },
-    { id: 'lm', type: 'servo-cr', label: 'Left Motor', x: 76, y: 170 },
-    { id: 'rm', type: 'servo-cr', label: 'Right Motor', x: 220, y: 170 },
-  ]}
-  connections={[
-    { from: 'ls', to: 'lm', weight: 1.0 },
-    { from: 'rs', to: 'rm', weight: 1.0 },
-  ]}
-  caption="Vehicle 2a — same-side wiring"
+<InteractiveDiagram
+  height={300}
+  initialInputs={{ 'ls-2a': 70, 'rs-2a': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'ls-2a', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'rs-2a', type: 'sensor-analog', label: 'Right Sensor', x: 300, y: 20, arduinoPort: 'A1' },
+      { id: 'lm-2a', type: 'servo-cr', label: 'Left Motor', x: 60, y: 210, servoPin: '5' },
+      { id: 'rm-2a', type: 'servo-cr', label: 'Right Motor', x: 300, y: 210, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'a1', from: 'ls-2a', to: 'lm-2a', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'a2', from: 'rs-2a', to: 'rm-2a', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2a — same-side wiring. Drag the left slider up: the left motor speeds up, the nose swings right — away from the light."
 />
 
 Place a flashlight to the left of this vehicle. The left sensor reads high, the left motor speeds up, and the vehicle veers **away** from the light. The stronger the stimulus, the faster it flees. If you didn't know it was two wires and two motors, you'd say it was afraid.
@@ -52,21 +54,22 @@ On a real robot, this is useful for light-avoidance behaviors — a robot that s
 
 Wire each sensor to the motor on the **opposite** side (contralateral):
 
-<DiagramView
-  width={440}
-  height={260}
-  robot={{ x: 220, y: 180, radius: 70 }}
-  nodes={[
-    { id: 'ls', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20 },
-    { id: 'rs', type: 'sensor-analog', label: 'Right Sensor', x: 240, y: 20 },
-    { id: 'lm', type: 'servo-cr', label: 'Left Motor', x: 76, y: 170 },
-    { id: 'rm', type: 'servo-cr', label: 'Right Motor', x: 220, y: 170 },
-  ]}
-  connections={[
-    { from: 'ls', to: 'rm', weight: 1.0 },
-    { from: 'rs', to: 'lm', weight: 1.0 },
-  ]}
-  caption="Vehicle 2b — cross-wired"
+<InteractiveDiagram
+  height={300}
+  initialInputs={{ 'ls-2b': 70, 'rs-2b': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'ls-2b', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'rs-2b', type: 'sensor-analog', label: 'Right Sensor', x: 300, y: 20, arduinoPort: 'A1' },
+      { id: 'lm-2b', type: 'servo-cr', label: 'Left Motor', x: 60, y: 210, servoPin: '5' },
+      { id: 'rm-2b', type: 'servo-cr', label: 'Right Motor', x: 300, y: 210, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'b1', from: 'ls-2b', to: 'rm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'b2', from: 'rs-2b', to: 'lm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2b — cross-wired. Same left-slider drag, but now the right motor accelerates: the nose swings left, toward the light."
 />
 
 Same hardware, different wiring. Now light on the left speeds up the **right** motor, turning the vehicle **toward** the light. It accelerates as it approaches — charging at the source. Braitenberg called this "aggression."

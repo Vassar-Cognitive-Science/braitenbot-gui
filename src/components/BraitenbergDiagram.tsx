@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, MouseEvent, PointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, OutputPortId } from '../types/diagram';
+import type { DiagramNode, DiagramConnection, OutputPortId } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts, DEFAULT_TOF_MAX_MM } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
@@ -38,9 +38,17 @@ import {
 } from './icons';
 import type { PrimaryAction } from '../lib/primaryAction';
 import { loadPrimaryAction, savePrimaryAction } from '../lib/primaryAction';
+import {
+  NODE_H,
+  NODE_W,
+  computeConnectionPaths,
+  makePath,
+  nearestTOnCurve,
+  portOffsetX,
+} from './connectionGeometry';
+import { ConnectionLayer } from './ConnectionLayer';
+import './diagram.css';
 
-const NODE_W = 148;
-const NODE_H = 64;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 const TM1637_DEFAULT_BRIGHTNESS = 3;
 
@@ -67,137 +75,6 @@ interface RobotOverlayLayout {
 }
 
 const START_CONNECTIONS: DiagramConnection[] = [];
-
-function makePath(x1: number, y1: number, x2: number, y2: number): string {
-  const c1 = y1 + 60;
-  const c2 = y2 - 60;
-  return `M ${x1} ${y1} C ${x1} ${c1}, ${x2} ${c2}, ${x2} ${y2}`;
-}
-
-/**
- * Evaluate the connection cubic bézier at parameter t ∈ [0, 1]. Control points
- * mirror makePath: P0=(x1,y1), P1=(x1,y1+60), P2=(x2,y2−60), P3=(x2,y2).
- */
-function bezierPointAt(
-  x1: number, y1: number, x2: number, y2: number, t: number,
-): { x: number; y: number } {
-  const c1y = y1 + 60;
-  const c2y = y2 - 60;
-  const mt = 1 - t;
-  const a = mt * mt * mt;
-  const b = 3 * mt * mt * t;
-  const c = 3 * mt * t * t;
-  const d = t * t * t;
-  return {
-    x: a * x1 + b * x1 + c * x2 + d * x2,
-    y: a * y1 + b * c1y + c * c2y + d * y2,
-  };
-}
-
-/**
- * Project a point onto the connection curve by sampling and returning the
- * nearest parameter t, clamped to [0.1, 0.9] so the badge stays off the
- * endpoints. Sampling ~64 points is plenty for a smooth cubic.
- */
-function nearestTOnCurve(
-  x1: number, y1: number, x2: number, y2: number, px: number, py: number,
-): number {
-  const SAMPLES = 64;
-  let bestT = 0.5;
-  let bestDist = Infinity;
-  for (let i = 0; i <= SAMPLES; i++) {
-    const t = i / SAMPLES;
-    const p = bezierPointAt(x1, y1, x2, y2, t);
-    const dist = (p.x - px) * (p.x - px) + (p.y - py) * (p.y - py);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestT = t;
-    }
-  }
-  return Math.max(0.1, Math.min(0.9, bestT));
-}
-
-/**
- * Default badge parameter t for a connection given its position `index` among
- * `count` parallel edges between the same node pair. A lone edge sits at 0.5;
- * parallel edges spread apart (2 → 0.35/0.65, 3 → 0.3/0.5/0.7) so their badges
- * don't overlap. Clamped to [0.3, 0.7] for larger groups.
- */
-function staggeredLabelT(index: number, count: number): number {
-  if (count <= 1) return 0.5;
-  const step = 0.6 / count;
-  const t = 0.5 + (index - (count - 1) / 2) * step;
-  return Math.max(0.3, Math.min(0.7, t));
-}
-
-/**
- * Horizontal offset (px, in canvas space) of the output anchor for a given
- * port. `scale` is the current block scale so the endpoint lands on the
- * handle, which CSS positions at a percentage of the (scaled) node width.
- */
-function portOffsetX(
-  node: DiagramNode,
-  fromPort?: OutputPortId,
-  compoundTypes?: CompoundTypeDefinition[],
-  scale = 1,
-): number {
-  const ports = getOutputPorts(node.type, node, compoundTypes);
-  if (!ports || ports.length === 0) return (NODE_W / 2) * scale;
-  const idx = fromPort ? ports.indexOf(fromPort) : -1;
-  const i = idx >= 0 ? idx : 0;
-  return ((i + 0.5) / ports.length) * NODE_W * scale;
-}
-
-/**
- * Horizontal offset (px, in canvas space) of the input anchor for a given
- * port. See `portOffsetX` for the `scale` argument.
- */
-function inputPortOffsetX(
-  node: DiagramNode,
-  toPort?: string,
-  compoundTypes?: CompoundTypeDefinition[],
-  scale = 1,
-): number {
-  const ports = getInputPorts(node.type, node, compoundTypes);
-  if (!ports || ports.length === 0) return (NODE_W / 2) * scale;
-  const idx = toPort ? ports.indexOf(toPort) : -1;
-  const i = idx >= 0 ? idx : 0;
-  return ((i + 0.5) / ports.length) * NODE_W * scale;
-}
-
-function weightToColor(weight: number): string {
-  // Warm ink-like tones: positive → muted green, negative → muted rust
-  if (weight >= 0) {
-    const t = weight;
-    const r = Math.round(70 + 10 * (1 - t));
-    const g = Math.round(80 + 90 * t);
-    const b = Math.round(50 + 20 * (1 - t));
-    return `rgb(${r},${g},${b})`;
-  } else {
-    const t = -weight;
-    const r = Math.round(90 + 110 * t);
-    const g = Math.round(80 * (1 - t));
-    const b = Math.round(50 * (1 - t));
-    return `rgb(${r},${g},${b})`;
-  }
-}
-
-function signalToStroke(signal: number): { color: string; width: number; opacity: number } {
-  const abs = Math.min(Math.abs(signal), 1);
-  const width = 1.2 + abs * 2.5;
-  const opacity = 0.4 + abs * 0.6;
-  if (signal >= 0) {
-    const r = Math.round(70 + 10 * (1 - abs));
-    const g = Math.round(100 + 70 * abs);
-    const b = Math.round(50 + 20 * (1 - abs));
-    return { color: `rgb(${r},${g},${b})`, width, opacity };
-  } else {
-    const r = Math.round(130 + 70 * abs);
-    const g = Math.round(90 * (1 - abs));
-    const b = Math.round(50 * (1 - abs));
-    return { color: `rgb(${r},${g},${b})`, width, opacity };
-  }
-}
 
 function calculateRobotOverlay(canvasWidth: number, canvasHeight: number): RobotOverlayLayout {
   const bodyDiameter = Math.max(260, Math.min(420, Math.min(canvasHeight * 0.74, canvasWidth * 0.46)));
@@ -891,47 +768,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     [store],
   );
 
-  const connectionPaths = useMemo(() => {
-    // Group edges by unordered node pair {from, to} so parallel edges (e.g. an
-    // A→B / B→A latch) can be staggered. Membership order is stable (sorted by
-    // connection id) so each edge's default badge position is deterministic.
-    const groups = new Map<string, string[]>();
-    for (const connection of connections) {
-      const key = [connection.from, connection.to].sort().join('::');
-      const list = groups.get(key);
-      if (list) list.push(connection.id);
-      else groups.set(key, [connection.id]);
-    }
-    for (const list of groups.values()) list.sort();
-
-    return connections
-      .map((connection) => {
-        const from = nodeMap[connection.from];
-        const to = nodeMap[connection.to];
-        if (!from || !to) return null;
-        const fromWorld = nodeWorldPos(from);
-        const toWorld = nodeWorldPos(to);
-        const x1 = fromWorld.x + portOffsetX(from, connection.fromPort, compoundTypes, blockScale);
-        const y1 = fromWorld.y + NODE_H * blockScale;
-        const x2 = toWorld.x + inputPortOffsetX(to, connection.toPort, compoundTypes, blockScale);
-        const y2 = toWorld.y;
-
-        const key = [connection.from, connection.to].sort().join('::');
-        const group = groups.get(key)!;
-        const t = connection.labelT ?? staggeredLabelT(group.indexOf(connection.id), group.length);
-        const badge = bezierPointAt(x1, y1, x2, y2, t);
-
-        return {
-          id: connection.id,
-          d: makePath(x1, y1, x2, y2),
-          weight: connection.weight,
-          x1, y1, x2, y2,
-          midX: badge.x,
-          midY: badge.y,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-  }, [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale]);
+  const connectionPaths = useMemo(
+    () => computeConnectionPaths(
+      connections,
+      (id) => nodeMap[id],
+      nodeWorldPos,
+      compoundTypes,
+      blockScale,
+    ),
+    [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1636,7 +1482,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
       <div
         ref={canvasRef}
-        className={`diagram-canvas ${traceMode ? 'trace-active' : ''} ${linkDraftSource ? 'linking' : ''} ${isPanning ? 'panning' : ''}`.trim()}
+        className={`bb-diagram diagram-canvas ${traceMode ? 'trace-active' : ''} ${linkDraftSource ? 'linking' : ''} ${isPanning ? 'panning' : ''}`.trim()}
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDropNode}
         onMouseDown={handleCanvasMouseDown}
@@ -1723,32 +1569,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           aria-hidden="true"
         />
 
-        <svg className="diagram-links" aria-hidden="true">
-          {connectionPaths.map((connection) => {
-            const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
-            const stroke = edgeSignal !== undefined ? signalToStroke(edgeSignal) : null;
-            const remote = remoteHighlight.get(connection.id);
-            return (
-              <g key={connection.id}>
-                {remote && (
-                  <path
-                    className="connection-remote-select"
-                    d={connection.d}
-                    style={{ stroke: remote.color }}
-                  />
-                )}
-                <path
-                  className={`connection-link ${selectedConnection?.id === connection.id ? 'selected' : ''}`}
-                  d={connection.d}
-                  style={stroke
-                    ? { stroke: stroke.color, strokeWidth: stroke.width, opacity: stroke.opacity }
-                    : { stroke: weightToColor(connection.weight) }
-                  }
-                />
-              </g>
-            );
-          })}
-          {linkDraftSource && nodeMap[linkDraftSource.id] && (() => {
+        <ConnectionLayer
+          paths={connectionPaths}
+          edgeSignals={traceMode ? traceResult.edgeSignals : undefined}
+          selectedConnectionId={selectedConnection?.id ?? null}
+          remoteHighlight={remoteHighlight}
+          draggingBadgeId={draggingBadgeId}
+          onBadgePointerDown={beginBadgeDrag}
+          onBadgeClick={(connectionId) => {
+            // A drag just ended: swallow the trailing click so it doesn't
+            // also open the config panel.
+            if (badgeClickSuppressRef.current) {
+              badgeClickSuppressRef.current = false;
+              return;
+            }
+            setConfigTarget({ kind: 'connection', id: connectionId });
+          }}
+          svgChildren={linkDraftSource && nodeMap[linkDraftSource.id] && (() => {
             const src = nodeMap[linkDraftSource.id];
             const srcWorld = nodeWorldPos(src);
             return (
@@ -1763,33 +1600,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
               />
             );
           })()}
-        </svg>
-
-        {connectionPaths.map((connection) => {
-          const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
-          return (
-            <button
-              key={`${connection.id}-config`}
-              className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''}`}
-              style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
-              onMouseDown={(event) => event.stopPropagation()}
-              onPointerDown={(event) => beginBadgeDrag(event, connection)}
-              onClick={() => {
-                // A drag just ended: swallow the trailing click so it doesn't
-                // also open the config panel.
-                if (badgeClickSuppressRef.current) {
-                  badgeClickSuppressRef.current = false;
-                  return;
-                }
-                setConfigTarget({ kind: 'connection', id: connection.id });
-              }}
-            >
-              {edgeSignal !== undefined
-                ? formatTraceValue(edgeSignal)
-                : `w ${connection.weight.toFixed(2)}`}
-            </button>
-          );
-        })}
+        />
 
         {nodes.map((node) => {
           const worldPos = nodeWorldPos(node);

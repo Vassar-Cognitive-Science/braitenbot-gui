@@ -18,22 +18,25 @@ This is essentially Braitenberg's **Vehicle 1**, the first machine in his 1984 b
 
 A photoresistor (or any analog light sensor) on pin A0, wired directly to both wheel motors. The brighter the light, the faster the robot drives — both wheels at equal speed, so it travels in a straight line.
 
-import DiagramView from '@site/src/components/DiagramView';
+Try it now: drag the light slider below and watch both motor values climb in lockstep. At any light level both motors always match, which is why this vehicle can only drive straight — there's no imbalance to steer with.
 
-<DiagramView
-  width={500}
-  height={280}
-  robot={{ x: 250, y: 200, radius: 80 }}
-  nodes={[
-    { id: 'sensor', type: 'sensor-analog', label: 'Left Photocell', x: 176, y: 30, meta: 'A0' },
-    { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 190 },
-    { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 190 },
-  ]}
-  connections={[
-    { from: 'sensor', to: 'left', weight: 1.0 },
-    { from: 'sensor', to: 'right', weight: 1.0 },
-  ]}
-  caption="A single sensor driving both motors with weight 1.0"
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+<InteractiveDiagram
+  height={320}
+  initialInputs={{ 'sensor': 60 }}
+  diagram={{
+    nodes: [
+      { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 160, y: 30, arduinoPort: 'A0' },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 220, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 260, y: 220, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor', to: 'left', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sensor', to: 'right', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 1 live: drag the light slider up and both motors rise together — equal speed, straight-line motion. The sensor is the entire brain."
 />
 
 ## Step 1: Observe the default canvas

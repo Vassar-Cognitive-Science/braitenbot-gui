@@ -1,0 +1,553 @@
+/*
+ * Presentational stylesheet for the diagram rendering layer (nodes +
+ * connections). Single-source: imported by the desktop app (via
+ * BraitenbergDiagram) AND by the docs site's InteractiveDiagram embed, so a
+ * diagram looks pixel-identical in both places.
+ *
+ * SCOPING: every rule is scoped under `.bb-diagram`, and the CSS variables the
+ * rules consume are (re)defined here on `.bb-diagram` — NOT on `:root`. That
+ * lets the sheet be imported into the Docusaurus theme (light OR dark) without
+ * leaking any variable or rule into the surrounding page. The app puts
+ * `.bb-diagram` on its `.diagram-canvas`; the docs embed wraps its panel in it.
+ *
+ * The palette values below are duplicated from `:root` in `src/App.css`
+ * (see the matching note there). Keep the two in sync — this copy exists so the
+ * diagram is self-contained when embedded outside the app shell.
+ */
+
+.bb-diagram {
+  /* Self-contained typography/appearance base so an embed matches the app,
+     where these come from :root / body. color-scheme keeps native controls
+     (range sliders) dark even when the host page is in light mode. */
+  font-family: 'Source Serif 4', Georgia, serif;
+  color-scheme: dark;
+  color: var(--text);
+  /* Warm dark palette — blackboard/aged paper (mirror of App.css :root) */
+  --bg: #12130f;
+  --surface: #1a1b16;
+  --surface-soft: #22231e;
+  --line: #33342b;
+  --text: #e8e4d8;
+  --muted: #908c7e;
+  --accent: #6aab7a;
+  /* Node type colors — slightly desaturated, ink-like */
+  --sensor-color: #c4905a;
+  --compute-color: #7888b8;
+  --output-color: #6aab7a;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* Type scale — 1.25 ratio (subset used by the diagram) */
+  --text-xs: 0.64rem;
+  --text-sm: 0.8rem;
+}
+
+/* ── Connections (SVG link layer + badges) ─────────────────────────────── */
+
+.bb-diagram .diagram-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.bb-diagram .diagram-links path {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.95;
+}
+
+.bb-diagram .diagram-links .draft-link {
+  stroke: var(--muted);
+  stroke-dasharray: 4 4;
+}
+
+.bb-diagram .diagram-links .connection-link {
+  opacity: 0.85;
+}
+
+.bb-diagram .diagram-links .connection-link.selected {
+  stroke: #d4bc78;
+  stroke-width: 2.2;
+  opacity: 1;
+}
+
+.bb-diagram .connection-config-trigger {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  border: 1px solid var(--line);
+  background: rgba(18, 19, 15, 0.92);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.2rem 0.35rem;
+  border-radius: 2px;
+  cursor: grab;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.bb-diagram .connection-config-trigger.dragging {
+  cursor: grabbing;
+}
+
+.bb-diagram .connection-config-trigger.selected {
+  border-color: #d4bc78;
+  color: #d4bc78;
+}
+
+/* Connection midpoint label in trace mode */
+.bb-diagram .connection-config-trigger.trace-signal {
+  border-color: rgba(196, 168, 98, 0.5);
+  color: #d4bc78;
+}
+
+/* Remote-selection halo under a connection path. */
+.bb-diagram .connection-remote-select {
+  fill: none;
+  stroke-width: 6;
+  opacity: 0.4;
+  stroke-linecap: round;
+}
+
+/* ── Nodes ─────────────────────────────────────────────────────────────── */
+
+.bb-diagram .diagram-node {
+  position: absolute;
+  width: 148px;
+  height: 64px;
+  border: 1px solid var(--line);
+  background: rgba(18, 19, 15, 0.92);
+  border-radius: 3px;
+  padding: 0.55rem;
+  cursor: move;
+  z-index: 2;
+  pointer-events: auto;
+  /* Global block-size scale. transform-origin top-left keeps left/top in
+     unscaled node coordinates so the JS connection math only has to scale
+     width/height, not re-anchor the corner. */
+  transform: scale(var(--block-scale, 1));
+  transform-origin: top left;
+}
+
+.bb-diagram .diagram-node.selected {
+  box-shadow: 0 0 0 1px #d4bc78;
+}
+
+/* Multi-selection highlight — distinct from `selected` (single config target)
+   so the user can see which nodes will be consumed by Group. */
+.bb-diagram .diagram-node.multi-selected {
+  outline: 1px dashed rgba(138, 168, 216, 0.85);
+  outline-offset: 2px;
+}
+
+.bb-diagram .diagram-node .node-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-right: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bb-diagram .diagram-node .node-meta {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bb-diagram .node-sensor {
+  border-color: var(--sensor-color);
+}
+
+.bb-diagram .node-sensor .node-label {
+  color: var(--sensor-color);
+}
+
+.bb-diagram .node-compute {
+  border-color: var(--compute-color);
+}
+
+.bb-diagram .node-compute .node-label {
+  color: var(--compute-color);
+}
+
+.bb-diagram .node-constant {
+  border-color: var(--compute-color);
+}
+
+.bb-diagram .node-constant .node-label {
+  color: var(--compute-color);
+}
+
+.bb-diagram .node-output {
+  border-color: var(--output-color);
+}
+
+.bb-diagram .node-output .node-label {
+  color: var(--output-color);
+}
+
+/* ── Connection handles ────────────────────────────────────────────────── */
+
+.bb-diagram .node-handle {
+  position: absolute;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  background: var(--bg);
+  color: var(--muted);
+  transform: translateX(-50%);
+  padding: 0;
+  cursor: crosshair;
+  z-index: 3;
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+}
+
+.bb-diagram .node-handle:hover {
+  transform: translateX(-50%) scale(1.18);
+  box-shadow: 0 0 0 4px rgba(212, 188, 120, 0.16);
+}
+
+.bb-diagram .node-handle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(212, 188, 120, 0.45);
+}
+
+/* Output: solid disc — emits signal (plug) */
+.bb-diagram .output-handle {
+  bottom: -9px;
+}
+
+.bb-diagram .output-handle::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Input: hollow ring with center dot — receives signal (socket) */
+.bb-diagram .input-handle {
+  top: -9px;
+}
+
+.bb-diagram .input-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+/* Per-kind handle coloring: inherit the node's accent */
+.bb-diagram .node-sensor .node-handle {
+  color: var(--sensor-color);
+  border-color: var(--sensor-color);
+}
+
+.bb-diagram .node-compute .node-handle,
+.bb-diagram .node-constant .node-handle {
+  color: var(--compute-color);
+  border-color: var(--compute-color);
+}
+
+.bb-diagram .node-output .node-handle {
+  color: var(--output-color);
+  border-color: var(--output-color);
+}
+
+/* Multi-output port anchors: positioned along the bottom edge via inline `left`. */
+.bb-diagram .output-handle-port {
+  width: 12px;
+  height: 12px;
+  bottom: -7px;
+}
+
+.bb-diagram .output-handle-clear {
+  color: #d8d4c4;
+  border-color: #d8d4c4;
+}
+
+.bb-diagram .output-handle-red {
+  color: #d26a5e;
+  border-color: #d26a5e;
+}
+
+.bb-diagram .output-handle-green {
+  color: #6eb87a;
+  border-color: #6eb87a;
+}
+
+.bb-diagram .output-handle-blue {
+  color: #5e90d2;
+  border-color: #5e90d2;
+}
+
+/* Abbreviated channel label (C/R/G/B) shown under each port handle.
+   Decorative — the button still carries the full name via `title` and `aria-label`. */
+.bb-diagram .output-port-label {
+  position: absolute;
+  bottom: -22px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+  color: var(--muted);
+}
+
+.bb-diagram .output-port-label-clear { color: #d8d4c4; }
+.bb-diagram .output-port-label-red   { color: #d26a5e; }
+.bb-diagram .output-port-label-green { color: #6eb87a; }
+.bb-diagram .output-port-label-blue  { color: #5e90d2; }
+.bb-diagram .output-port-label-compound {
+  color: rgba(160, 185, 215, 0.85);
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  text-transform: none;
+}
+
+/* Multi-input port anchors on compound instances (one per declared input).
+   Mirror of .output-handle-port but on the top edge. */
+.bb-diagram .input-handle-port {
+  width: 12px;
+  height: 12px;
+  top: -7px;
+}
+
+.bb-diagram .input-port-label {
+  position: absolute;
+  top: -22px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+  color: rgba(160, 185, 215, 0.85);
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+/* Trace-mode readouts attached to compound port handles. Inputs read
+   above the handle (which is itself above the node top); outputs read
+   below the handle (which is below the node bottom). */
+.bb-diagram .input-port-value {
+  position: absolute;
+  top: -36px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+  color: #d4bc78;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.bb-diagram .output-port-value {
+  position: absolute;
+  bottom: -36px;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  user-select: none;
+  color: #d4bc78;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Compound instance — same dimensions as a regular node, distinctive
+   double border + muted blue accent so it reads as a subdiagram. */
+.bb-diagram .diagram-node.node-compound {
+  border: 1px solid #8aa8d8;
+  box-shadow: inset 0 0 0 1px rgba(138, 168, 216, 0.25);
+}
+
+.bb-diagram .diagram-node.node-compound .node-label {
+  color: #c4d5ee;
+}
+
+.bb-diagram .node-compound .node-handle {
+  color: #8aa8d8;
+  border-color: #8aa8d8;
+}
+
+/* Compound port anchors (compound-input / compound-output) — used inside a
+   body to mark where external signals enter and leave. */
+.bb-diagram .diagram-node.node-port {
+  border: 1px dashed #b09cd0;
+  background: rgba(176, 156, 208, 0.06);
+}
+
+.bb-diagram .diagram-node.node-port .node-label {
+  color: #d2c2e8;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.bb-diagram .node-port .node-handle {
+  color: #b09cd0;
+  border-color: #b09cd0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-diagram .node-handle {
+    transition: none;
+  }
+  .bb-diagram .node-handle:hover {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── Trace-mode node UI (sliders, toggles, pulse, per-port readouts) ────── */
+
+/* Trace values shown inline in meta text */
+.bb-diagram .node-meta-trace {
+  color: #d4bc78;
+  font-weight: 700;
+}
+
+/* Expanded node height for sensor/constant slider */
+.bb-diagram .diagram-node.trace-expanded {
+  height: 86px;
+}
+
+/* Color sensor exposes four per-channel sliders — needs extra room. */
+.bb-diagram .diagram-node.trace-color-expanded {
+  height: auto;
+  min-height: 86px;
+  padding-bottom: 6px;
+}
+
+.bb-diagram .trace-color-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Disconnected nodes in trace mode */
+.bb-diagram .diagram-node.trace-disconnected {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+/* Slider row inside node */
+.bb-diagram .trace-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.bb-diagram .trace-slider-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  flex-shrink: 0;
+  width: 8px;
+  text-align: center;
+}
+
+.bb-diagram .trace-slider {
+  flex: 1;
+  min-width: 0;
+  height: 14px;
+  accent-color: #c4a862;
+  cursor: pointer;
+}
+
+.bb-diagram .trace-digital-toggle {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0 0.4rem;
+}
+
+.bb-diagram .trace-digital-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.bb-diagram .trace-digital-toggle.high {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.bb-diagram .trace-pulse-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 3px;
+  font-size: var(--text-xs);
+  padding: 0.05rem 0.4rem;
+  cursor: pointer;
+  margin-left: 0.3rem;
+  font-family: inherit;
+}
+
+.bb-diagram .trace-pulse-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.bb-diagram .trace-pulse-btn.pulsing {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+/* ── Remote (collab) node highlights ───────────────────────────────────── */
+
+.bb-diagram .diagram-node.remote-selected {
+  box-shadow: 0 0 0 2px var(--remote-color, var(--accent));
+}
+
+/* Small owner tag above a remotely-held node. */
+.bb-diagram .remote-owner-tag {
+  position: absolute;
+  top: -0.85rem;
+  left: -2px;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: #12130f;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.3;
+}

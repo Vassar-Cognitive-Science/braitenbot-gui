@@ -178,7 +178,7 @@ export default function DiagramView({
         midX: (x1 + x2) / 2,
         midY: (y1 + y2) / 2,
       };
-    }).filter(Boolean);
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
   }, [connections, nodeMap]);
 
   return (
