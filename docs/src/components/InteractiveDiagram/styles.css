@@ -1,14 +1,22 @@
-/* ── InteractiveDiagram: embed chrome for the always-on trace-mode diagram ──
+/* ── InteractiveDiagram: embed chrome for the trace-mode diagram ────────────
  *
  * The node/connection rendering itself comes from the app's `.bb-diagram`
  * stylesheet (imported in index.tsx), so this file only styles the surrounding
- * panel: the figure frame, the scrollable/scaled canvas, and the caption. The
- * inner `.bb-diagram` world is a self-contained dark app-style panel regardless
- * of the docs light/dark toggle — expected and desired. */
+ * embed: the figure frame, the scrollable/scaled canvas, the editing palette /
+ * toolbar / weight popover, and the caption. The inner `.bb-diagram` world is a
+ * self-contained dark app-style panel regardless of the docs light/dark toggle
+ * — expected and desired. */
 
 .id-figure {
-  margin: 1.5rem 0;
+  /* Let the embed use the full content column width; editable diagrams need
+     the room. */
+  margin: 1.75rem 0;
   padding: 0;
+  width: 100%;
+}
+
+.id-frame {
+  width: 100%;
 }
 
 .id-canvas {
@@ -26,6 +34,11 @@
   border-radius: 3px;
 }
 
+.id-canvas:focus-visible {
+  outline: 2px solid #6aab7a;
+  outline-offset: -2px;
+}
+
 .id-world {
   position: relative;
 }
@@ -36,4 +49,196 @@
   color: var(--ifm-color-content-secondary, #888);
   margin-top: 0.5rem;
   font-style: italic;
+}
+
+/* ── Palette strip ─────────────────────────────────────────────────────── */
+
+.id-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  background: #22231e;
+  border: 1px solid #33342b;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+}
+
+.id-palette + .id-canvas {
+  border-radius: 0 0 3px 3px;
+}
+
+.id-palette-label {
+  font-size: 0.8rem;
+  color: #908c7e;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.id-palette-chip {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  cursor: pointer;
+  background: rgba(18, 19, 15, 0.92);
+  border: 1px solid #33342b;
+  color: #cfc9ba;
+  transition: filter 120ms ease, border-color 120ms ease;
+}
+
+.id-palette-chip:hover {
+  filter: brightness(1.15);
+}
+
+/* Kind-tinted chips mirror the `.bb-diagram` node border/label colors. */
+.id-kind-sensor {
+  border-color: #c4905a;
+  color: #c4905a;
+}
+.id-kind-compute,
+.id-kind-constant {
+  border-color: #7888b8;
+  color: #7888b8;
+}
+.id-kind-output {
+  border-color: #6aab7a;
+  color: #6aab7a;
+}
+
+/* ── Toolbar (hint + reset) ────────────────────────────────────────────── */
+
+.id-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.4rem;
+}
+
+.id-hint {
+  font-size: 0.78rem;
+  color: var(--ifm-color-content-secondary, #888);
+}
+
+.id-reset {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: auto;
+  padding: 0.25rem 0.7rem;
+  border-radius: 3px;
+  cursor: pointer;
+  background: #22231e;
+  border: 1px solid #33342b;
+  color: #cfc9ba;
+}
+
+.id-reset:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.id-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Node delete affordance ────────────────────────────────────────────── */
+
+.id-node-delete {
+  position: absolute;
+  z-index: 6;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  border: 1px solid #33342b;
+  background: #2a1c1a;
+  color: #e0a99a;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.id-node-delete:hover {
+  background: #c05a4a;
+  color: #fff;
+}
+
+/* ── Weight popover ────────────────────────────────────────────────────── */
+
+.id-weight-popover {
+  position: absolute;
+  z-index: 7;
+  transform: translate(-50%, 12px);
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem;
+  background: #1a1b16;
+  border: 1px solid #4a4b3f;
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.id-weight-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.id-weight-label {
+  font-size: 0.75rem;
+  color: #908c7e;
+  letter-spacing: 0.03em;
+}
+
+.id-weight-value {
+  font-family: var(--ifm-font-family-monospace, monospace);
+  font-size: 0.85rem;
+  color: #cfc9ba;
+}
+
+.id-weight-popover input[type='range'] {
+  width: 100%;
+  accent-color: #6aab7a;
+}
+
+.id-weight-delete {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  cursor: pointer;
+  background: #2a1c1a;
+  border: 1px solid #4a3330;
+  color: #e0a99a;
+}
+
+.id-weight-delete:hover {
+  background: #c05a4a;
+  color: #fff;
+}
+
+/* ── Inline rejection notice ───────────────────────────────────────────── */
+
+.id-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 8;
+  max-width: 90%;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  color: #f0d9a0;
+  background: rgba(42, 34, 20, 0.96);
+  border: 1px solid #6a5a2a;
+  border-radius: 4px;
+  pointer-events: none;
 }

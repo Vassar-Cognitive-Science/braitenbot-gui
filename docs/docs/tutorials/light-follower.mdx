@@ -142,6 +142,38 @@ By changing only the wiring pattern — same-side vs. cross-wired — the same h
 - The cross-wired robot only "seeks" light because of the world it's in; in a uniformly lit room the behavior vanishes. How much of what looks like a goal is really a property of the environment?
 - Would you be comfortable saying the moth "wants" to reach the flame? If not, where is the line between the moth and the robot — and is there one?
 
+## Experiment: rewire fear with your own hands
+
+Reading that a single crossed wire separates love from fear is one thing; feeling it under your fingers is another. The diagram below starts as the cross-wired **follower** you built above — left eye to right wheel, right eye to left wheel. Your task: turn it into the **fearful** Vehicle 2a by rewiring it yourself, without adding or removing a single node.
+
+<InteractiveDiagram
+  palette={['sensor-analog']}
+  initialInputs={{ 'ex-left': 70, 'ex-right': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'ex-left', type: 'sensor-analog', label: 'Left Eye', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'ex-right', type: 'sensor-analog', label: 'Right Eye', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'ex-lm', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'e1', from: 'ex-left', to: 'ex-rm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'e2', from: 'ex-right', to: 'ex-lm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Start cross-wired (love). Your job: rewire it into the fearful same-side vehicle."
+/>
+
+To make the switch:
+
+1. **Delete both crossed wires.** Click a connection's weight badge and use **Delete connection** in the popover.
+2. **Draw the same-side wires.** Drag from the **Left Eye**'s bottom dot to the **Left Wheel**, and from the **Right Eye** to the **Right Wheel**.
+3. **Set the weights.** Click each new badge and set both weights back to around **0.7**, matching the original.
+
+Now drag the Left Eye's slider up. In the follower, the *right* wheel raced ahead; in your rewired version, the *left* wheel should accelerate, pushing the vehicle's nose *away* from the light. Nothing about the eyes or wheels changed — only which wire meets which wheel. If you get stuck, press **Reset** and start over, or compare your result against the finished 2a diagram earlier on this page.
+
+Notice what you *didn't* have to do: there was no rule to write, no "if light then flee" to encode. Fear here is a fact about wiring and a world with a light in it — exactly Braitenberg's point, now sitting in your own edited diagram.
+
 ## What's next
 
 Here the robot responds smoothly and proportionally to light. But sometimes you don't want a proportional response — you want a crisp decision: is an obstacle close enough to turn away from? [Obstacle Avoidance](./obstacle-avoidance) introduces the Threshold node, which turns a continuous distance reading into a clean yes/no.

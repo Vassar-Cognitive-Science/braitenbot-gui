@@ -1,15 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import type {
   CompoundTypeDefinition,
   DiagramConnection,
   DiagramNode,
+  NodeTypeId,
+  OutputPortId,
 } from '@app/types/diagram';
+import { TYPE_BY_ID } from '@app/types/diagram';
 import { useScopeSimulation } from '@app/hooks/useScopeSimulation';
 import type { ConfigTarget } from '@app/components/diagramShared';
 import { DiagramCanvas } from '@app/components/DiagramCanvas';
-import { NODE_H, NODE_W } from '@app/components/connectionGeometry';
+import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
 // The app's diagram presentation layer (nodes, connections, trace UI). Scoped
 // under `.bb-diagram`, so it renders as a self-contained dark panel and leaks
 // nothing into the Docusaurus theme. Aliased CSS import resolves through the
@@ -18,16 +21,25 @@ import '@app/components/diagram.css';
 import './styles.css';
 
 /**
- * An always-on, embeddable trace-mode diagram for the docs site. It reuses BOTH
- * the desktop app's simulation core (`useScopeSimulation` — see `@app/hooks/*`)
- * AND the app's rendering layer (the shared `DiagramCanvas`, which composes
- * `DiagramNodeView` / `ConnectionLayer` and the `.bb-diagram` stylesheet), so an
- * embedded diagram looks and behaves exactly like the app's trace mode and can
- * never drift from it. Nothing here is re-implemented; only layout/embed chrome
- * (panel frame, scaling, caption) is docs-local.
+ * An embeddable trace-mode diagram for the docs site. It reuses BOTH the desktop
+ * app's simulation core (`useScopeSimulation` — see `@app/hooks/*`) AND the app's
+ * rendering layer (the shared `DiagramCanvas`, which composes `DiagramNodeView` /
+ * `ConnectionLayer` and the `.bb-diagram` stylesheet), so an embedded diagram
+ * looks and behaves exactly like the app's trace mode and can never drift from
+ * it. Only layout/embed chrome (panel frame, scaling, palette, popover, caption)
+ * is docs-local.
  *
  * The `diagram` prop is the app's EXPORT format, so a diagram built in the app
  * can be pasted straight into MDX.
+ *
+ * ## Editing (`editable` / `palette`)
+ *
+ * With `editable` (or `palette`, which implies it) the diagram becomes a small
+ * hands-on sandbox: the reader can drag nodes, draw links, edit connection
+ * weights, add nodes from a palette strip, and delete. Diagram structure moves
+ * into component state (deep-cloned from the prop so Reset restores the original)
+ * while the live simulation keeps running through every edit — `useScopeSimulation`
+ * rebuilds its plan whenever the nodes/connections array identity changes.
  */
 export interface InteractiveDiagramProps {
   diagram: {
@@ -47,9 +59,27 @@ export interface InteractiveDiagramProps {
   initialInputs?: Record<string, number>;
   /** Default pulse length (ms) for the per-sensor pulse buttons. */
   pulseDurationMs?: number;
+  /**
+   * Let the reader rewire the diagram: node dragging, link drawing, weight
+   * editing (badge → popover), and deletion (Delete/Backspace when focused, or
+   * the × affordance on a selected node). Structure lives in component state and
+   * Reset restores the initial props.
+   */
+  editable?: boolean;
+  /**
+   * Node types the reader may add via a palette strip above the canvas. Implies
+   * `editable`. Clicking a chip drops a node of that type at a free spot; the
+   * reader can then drag it into place and wire it up.
+   */
+  palette?: NodeTypeId[];
 }
 
 const PAD = 48;
+const DEFAULT_HEIGHT = 480;
+/** Floor on the fit-to-width shrink so nodes stay close to app-native size;
+ *  wider diagrams scroll horizontally rather than shrink past this. */
+const MIN_SCALE = 0.72;
+const DEFAULT_CONNECTION_WEIGHT = 1;
 
 // ── Static layout shared by SSR fallback and live component ────────────────
 
@@ -86,23 +116,57 @@ function computeLayout(nodes: DiagramNode[]): Layout {
 const NOOP = () => {};
 const NOOP_SET_SELECTED: Dispatch<SetStateAction<Set<string>>> = () => {};
 const NOOP_SET_CONFIG: Dispatch<SetStateAction<ConfigTarget | null>> = () => {};
-const EMPTY_SELECTION = new Set<string>();
+const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
+
+/** Deep clone of the diagram's structural arrays so editing never mutates the
+ *  caller's prop object and Reset can restore the exact original. */
+function cloneNodes(nodes: DiagramNode[]): DiagramNode[] {
+  return nodes.map((n) => ({ ...n }));
+}
+function cloneConnections(connections: DiagramConnection[]): DiagramConnection[] {
+  return connections.map((c) => ({
+    ...c,
+    transferPoints: c.transferPoints.map((p) => ({ ...p })),
+  }));
+}
+
+function uuid(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
+
+/** New node ids follow the app convention `{type}-{uuid}`. */
+function makeNodeId(type: NodeTypeId): string {
+  return `${type}-${uuid()}`;
+}
+
+/**
+ * Default per-type params for a freshly added node — mirrors the app's
+ * palette-drop handler in BraitenbergDiagram so the simulation gets sane values
+ * (thresholds, delays, oscillator freq/amplitude, constant value, ToF range).
+ */
+function defaultNode(type: NodeTypeId, x: number, y: number, label: string): DiagramNode {
+  const nodeType = TYPE_BY_ID[type];
+  return {
+    id: makeNodeId(type),
+    type,
+    label,
+    x,
+    y,
+    threshold: nodeType.mode === 'threshold' || type === 'digital-out' ? 50 : undefined,
+    delayMs: nodeType.mode === 'delay' ? 100 : undefined,
+    frequencyHz: nodeType.mode === 'oscillator' ? 1.0 : undefined,
+    amplitude:
+      nodeType.mode === 'oscillator' ? 100 : nodeType.mode === 'noise' ? 50 : undefined,
+    constantValue: nodeType.kind === 'constant' ? 0 : undefined,
+    maxDistanceMm: type === 'sensor-tof' ? 500 : undefined,
+  };
+}
 
 // ── Rendering core, shared by the live and static (SSR) variants ───────────
 
-function DiagramPanel({
-  nodes,
-  connections,
-  compoundTypes,
-  height,
-  sensorValues,
-  setSensor,
-  setConstant,
-  pulse,
-  pulsingId,
-  pulseDurationMs,
-  traceResult,
-}: {
+interface DiagramPanelProps {
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
@@ -119,11 +183,63 @@ function DiagramPanel({
     edgeSignals: Record<string, number>;
     disconnected: Set<string>;
   };
-}) {
+  // ── editing (all optional; omit → view-only) ─────────────────────────────
+  editable?: boolean;
+  palette?: NodeTypeId[];
+  selectedNodeIds?: Set<string>;
+  setSelectedNodeIds?: Dispatch<SetStateAction<Set<string>>>;
+  configTarget?: ConfigTarget | null;
+  setConfigTarget?: Dispatch<SetStateAction<ConfigTarget | null>>;
+  onNodeMove?: (id: string, x: number, y: number) => void;
+  onConnectionCreate?: (edge: { from: string; fromPort?: OutputPortId; to: string; toPort?: string }) => void;
+  onConnectionLabelT?: (id: string, labelT: number) => void;
+  onAddNode?: (type: NodeTypeId) => void;
+  onDeleteSelection?: () => void;
+  onSetWeight?: (id: string, weight: number) => void;
+  onDeleteConnection?: (id: string) => void;
+  onReset?: () => void;
+  /** True when reset would change something (an edit or non-default input). */
+  canReset?: boolean;
+}
+
+function DiagramPanel({
+  nodes,
+  connections,
+  compoundTypes,
+  height,
+  sensorValues,
+  setSensor,
+  setConstant,
+  pulse,
+  pulsingId,
+  pulseDurationMs,
+  traceResult,
+  editable = false,
+  palette,
+  selectedNodeIds,
+  setSelectedNodeIds,
+  configTarget = null,
+  setConfigTarget,
+  onNodeMove,
+  onConnectionCreate,
+  onConnectionLabelT,
+  onAddNode,
+  onDeleteSelection,
+  onSetWeight,
+  onDeleteConnection,
+  onReset,
+  canReset = false,
+}: DiagramPanelProps) {
   const layout = useMemo(() => computeLayout(nodes), [nodes]);
 
-  const scale = Math.min(1, height / layout.contentH);
+  // Fit-to-width, but never shrink past MIN_SCALE (readability); a wider diagram
+  // scrolls horizontally inside `.id-canvas` instead.
+  const scale = Math.max(MIN_SCALE, Math.min(1, height / layout.contentH));
   const worldW = layout.contentW * scale;
+
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [rejectedNotice, setRejectedNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   // Node world position = raw node coordinate + layout offset (docs have no
   // zoom / block-scale; the fit-to-width scale is a CSS transform on the
@@ -133,37 +249,247 @@ function DiagramPanel({
     [layout],
   );
 
+  // clientToLayer: client px → world-div (unscaled layer) px. The world div is
+  // CSS-scaled by `scale`, so undo it. clientToWorld: same, minus the layout
+  // offset, so it matches node.x/y.
+  const clientToLayer = useCallback(
+    (clientX: number, clientY: number) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const left = rect?.left ?? 0;
+      const top = rect?.top ?? 0;
+      return { x: (clientX - left) / scale, y: (clientY - top) / scale };
+    },
+    [scale],
+  );
+  const clientToWorld = useCallback(
+    (clientX: number, clientY: number) => {
+      const layer = clientToLayer(clientX, clientY);
+      return { x: layer.x - layout.offsetX, y: layer.y - layout.offsetY };
+    },
+    [clientToLayer, layout],
+  );
+
+  const showRejected = useCallback((message: string) => {
+    setRejectedNotice(message);
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setRejectedNotice(null), 3200);
+  }, []);
+
+  const handleConnectionRejected = useCallback(
+    ({ toId }: { toId: string }) => {
+      const to = nodes.find((n) => n.id === toId);
+      if (!to) return;
+      const toType = TYPE_BY_ID[to.type];
+      if (toType.maxInputs !== undefined) {
+        showRejected(
+          `${toType.displayName} accepts only ${toType.maxInputs} incoming connection${toType.maxInputs === 1 ? '' : 's'}.`,
+        );
+      }
+    },
+    [nodes, showRejected],
+  );
+
+  // ── deletion affordance / keyboard (editable only) ───────────────────────
+  const hasSelection = editable && !!selectedNodeIds && selectedNodeIds.size > 0;
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!editable) return;
+      if (e.key === 'Escape') {
+        setConfigTarget?.(null);
+        setSelectedNodeIds?.(new Set());
+        return;
+      }
+      // Only act on Delete/Backspace when the canvas itself (not a slider or
+      // input inside it) has focus, so page typing/scrolling is unaffected.
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (e.target !== e.currentTarget) return;
+        if (hasSelection) {
+          e.preventDefault();
+          onDeleteSelection?.();
+        }
+      }
+    },
+    [editable, hasSelection, onDeleteSelection, setConfigTarget, setSelectedNodeIds],
+  );
+
+  // ── weight popover position (for the selected connection's badge) ─────────
+  const popover = useMemo(() => {
+    if (!editable || configTarget?.kind !== 'connection') return null;
+    const conn = connections.find((c) => c.id === configTarget.id);
+    if (!conn) return null;
+    const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1);
+    const path = paths.find((p) => p.id === conn.id);
+    if (!path) return null;
+    // Badge is at (midX, midY) in layer px; the world div is scaled, so the
+    // screen offset inside the (unscaled) `.id-canvas` is midX/Y * scale.
+    return { conn, left: path.midX * scale, top: path.midY * scale };
+  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale]);
+
+  // Dismiss the popover on outside click (Escape is handled by the canvas keydown).
+  useEffect(() => {
+    if (!popover) return;
+    const onDown = (e: globalThis.MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('.id-weight-popover')) return;
+      if (target?.closest('.connection-config-trigger')) return;
+      setConfigTarget?.(null);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [popover, setConfigTarget]);
+
+  const selectedNodeId =
+    editable && selectedNodeIds && selectedNodeIds.size === 1 ? [...selectedNodeIds][0] : null;
+  const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
+
   return (
-    <div className="id-canvas" style={{ height, width: worldW || undefined }}>
+    <div className="id-frame">
+      {editable && palette && palette.length > 0 && (
+        <div className="id-palette" role="toolbar" aria-label="Add node">
+          <span className="id-palette-label">Add:</span>
+          {palette.map((type) => {
+            const def = TYPE_BY_ID[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                className={`id-palette-chip id-kind-${def.kind}`}
+                onClick={() => onAddNode?.(type)}
+                title={`Add a ${def.displayName}`}
+              >
+                + {def.displayName}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div
-        className="id-world bb-diagram"
-        style={{
-          transform: `scale(${scale})`,
-          transformOrigin: '0 0',
-          width: layout.contentW,
-          height: layout.contentH,
-        }}
+        className="id-canvas"
+        style={{ height, width: worldW || undefined }}
+        ref={canvasRef}
+        tabIndex={editable ? 0 : undefined}
+        onKeyDown={handleKeyDown}
+        onMouseDown={
+          editable
+            ? (e) => {
+                // Clicking empty canvas clears selection + closes the popover.
+                if (e.target === e.currentTarget) {
+                  setSelectedNodeIds?.(new Set());
+                  setConfigTarget?.(null);
+                }
+              }
+            : undefined
+        }
       >
-        <DiagramCanvas
-          nodes={nodes}
-          connections={connections}
-          compoundTypes={compoundTypes}
-          nodeWorldPos={nodeWorldPos}
-          traceMode
-          traceResult={traceResult}
-          sensorValues={sensorValues}
-          setSensorValue={setSensor}
-          setConstantValue={setConstant}
-          pulseSensor={pulse}
-          pulsingId={pulsingId}
-          pulseDurationMs={pulseDurationMs}
-          readOnly={traceResult === undefined}
-          selectedNodeIds={EMPTY_SELECTION}
-          setSelectedNodeIds={NOOP_SET_SELECTED}
-          configTarget={null}
-          setConfigTarget={NOOP_SET_CONFIG}
-        />
+        <div
+          className="id-world bb-diagram"
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: '0 0',
+            width: layout.contentW,
+            height: layout.contentH,
+          }}
+        >
+          <DiagramCanvas
+            nodes={nodes}
+            connections={connections}
+            compoundTypes={compoundTypes}
+            nodeWorldPos={nodeWorldPos}
+            clientToWorld={editable ? clientToWorld : undefined}
+            clientToLayer={editable ? clientToLayer : undefined}
+            traceMode
+            traceResult={traceResult}
+            sensorValues={sensorValues}
+            setSensorValue={setSensor}
+            setConstantValue={setConstant}
+            pulseSensor={pulse}
+            pulsingId={pulsingId}
+            pulseDurationMs={pulseDurationMs}
+            readOnly={traceResult === undefined}
+            selectedNodeIds={selectedNodeIds ?? (EMPTY_SELECTION as Set<string>)}
+            setSelectedNodeIds={setSelectedNodeIds ?? NOOP_SET_SELECTED}
+            configTarget={configTarget}
+            setConfigTarget={setConfigTarget ?? NOOP_SET_CONFIG}
+            onNodeMove={editable ? onNodeMove : undefined}
+            onConnectionCreate={editable ? onConnectionCreate : undefined}
+            onConnectionRejected={editable ? handleConnectionRejected : undefined}
+            onConnectionLabelT={editable ? onConnectionLabelT : undefined}
+          />
+        </div>
+
+        {/* Delete affordance on the singly-selected node (keyboard-free path). */}
+        {selectedNode && (
+          <button
+            type="button"
+            className="id-node-delete"
+            title="Delete node"
+            aria-label={`Delete ${selectedNode.label}`}
+            style={{
+              left: nodeWorldPos(selectedNode).x * scale + NODE_W * scale - 10,
+              top: nodeWorldPos(selectedNode).y * scale - 10,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteSelection?.();
+            }}
+          >
+            ×
+          </button>
+        )}
+
+        {/* Lightweight weight editor near the connection badge (badge click). */}
+        {popover && (
+          <div
+            className="id-weight-popover"
+            style={{ left: popover.left, top: popover.top }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="id-weight-row">
+              <span className="id-weight-label">weight</span>
+              <span className="id-weight-value">{popover.conn.weight.toFixed(2)}</span>
+            </div>
+            <input
+              type="range"
+              min={-1}
+              max={1}
+              step={0.05}
+              value={popover.conn.weight}
+              onChange={(e) => onSetWeight?.(popover.conn.id, Number(e.target.value))}
+            />
+            <button
+              type="button"
+              className="id-weight-delete"
+              onClick={() => onDeleteConnection?.(popover.conn.id)}
+            >
+              Delete connection
+            </button>
+          </div>
+        )}
+
+        {rejectedNotice && <div className="id-notice">{rejectedNotice}</div>}
       </div>
+
+      {(editable || onReset) && (
+        <div className="id-toolbar">
+          {editable && (
+            <span className="id-hint">
+              Drag nodes • drag from a node's bottom dot to wire • click a weight badge to edit
+            </span>
+          )}
+          <button
+            type="button"
+            className="id-reset"
+            onClick={onReset}
+            disabled={!canReset}
+            title="Restore the original diagram"
+          >
+            Reset
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -175,14 +501,25 @@ function LiveDiagram({
   height,
   initialInputs,
   pulseDurationMs,
+  editable,
+  palette,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height: number;
   initialInputs: Record<string, number>;
   pulseDurationMs: number;
+  editable: boolean;
+  palette?: NodeTypeId[];
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
+
+  // Editable structure lives in state, deep-cloned from the prop so Reset can
+  // restore the pristine original and edits never mutate the caller's object.
+  const [editNodes, setEditNodes] = useState<DiagramNode[]>(() => cloneNodes(diagram.nodes));
+  const [editConnections, setEditConnections] = useState<DiagramConnection[]>(() =>
+    cloneConnections(diagram.connections),
+  );
 
   const [sensorValues, setSensorValues] = useState<Record<string, number>>(initialInputs);
   // Trace-mode constant edits (constant nodes' slider) apply as an override on
@@ -190,20 +527,30 @@ function LiveDiagram({
   const [constantOverrides, setConstantOverrides] = useState<Record<string, number>>({});
   const [pulsingId, setPulsingId] = useState<string | null>(null);
 
-  const setSensor = (key: string, value: number) =>
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
+  const [configTarget, setConfigTarget] = useState<ConfigTarget | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  const setSensor = (key: string, value: number) => {
     setSensorValues((prev) => ({ ...prev, [key]: value }));
-  const setConstant = (id: string, value: number) =>
+    setDirty(true);
+  };
+  const setConstant = (id: string, value: number) => {
     setConstantOverrides((prev) => ({ ...prev, [id]: value }));
+    setDirty(true);
+  };
+
+  // Structural source: the edited arrays when editable, else the prop directly.
+  const baseNodes = editable ? editNodes : diagram.nodes;
+  const baseConnections = editable ? editConnections : diagram.connections;
 
   const nodes = useMemo(() => {
-    if (Object.keys(constantOverrides).length === 0) return diagram.nodes;
-    return diagram.nodes.map((n) =>
-      constantOverrides[n.id] !== undefined
-        ? { ...n, constantValue: constantOverrides[n.id] }
-        : n,
+    if (Object.keys(constantOverrides).length === 0) return baseNodes;
+    return baseNodes.map((n) =>
+      constantOverrides[n.id] !== undefined ? { ...n, constantValue: constantOverrides[n.id] } : n,
     );
-  }, [diagram.nodes, constantOverrides]);
-  const connections = diagram.connections;
+  }, [baseNodes, constantOverrides]);
+  const connections = baseConnections;
 
   const { traceResult, pulse } = useScopeSimulation(
     nodes,
@@ -223,6 +570,98 @@ function LiveDiagram({
     }, pulseDurationMs);
   };
 
+  // ── editing mutations (structure lives in state) ─────────────────────────
+  const onNodeMove = useCallback((id: string, x: number, y: number) => {
+    setEditNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
+    setDirty(true);
+  }, []);
+
+  const onConnectionCreate = useCallback(
+    (edge: { from: string; fromPort?: OutputPortId; to: string; toPort?: string }) => {
+      setEditConnections((prev) => [
+        ...prev,
+        {
+          id: `link-${uuid()}`,
+          from: edge.from,
+          ...(edge.fromPort ? { fromPort: edge.fromPort } : {}),
+          to: edge.to,
+          ...(edge.toPort ? { toPort: edge.toPort } : {}),
+          weight: DEFAULT_CONNECTION_WEIGHT,
+          transferMode: 'linear' as const,
+          transferPoints: [
+            { x: -100, y: -100 },
+            { x: 100, y: 100 },
+          ],
+        },
+      ]);
+      setDirty(true);
+    },
+    [],
+  );
+
+  const onConnectionLabelT = useCallback((id: string, labelT: number) => {
+    setEditConnections((prev) => prev.map((c) => (c.id === id ? { ...c, labelT } : c)));
+    setDirty(true);
+  }, []);
+
+  const onSetWeight = useCallback((id: string, weight: number) => {
+    setEditConnections((prev) => prev.map((c) => (c.id === id ? { ...c, weight } : c)));
+    setDirty(true);
+  }, []);
+
+  const onDeleteConnection = useCallback((id: string) => {
+    setEditConnections((prev) => prev.filter((c) => c.id !== id));
+    setConfigTarget((cur) => (cur?.kind === 'connection' && cur.id === id ? null : cur));
+    setDirty(true);
+  }, []);
+
+  const onDeleteSelection = useCallback(() => {
+    setSelectedNodeIds((selected) => {
+      if (selected.size === 0) return selected;
+      setEditNodes((prev) => prev.filter((n) => !selected.has(n.id)));
+      setEditConnections((prev) =>
+        prev.filter((c) => !selected.has(c.from) && !selected.has(c.to)),
+      );
+      setDirty(true);
+      return new Set();
+    });
+    setConfigTarget(null);
+  }, []);
+
+  const onAddNode = useCallback(
+    (type: NodeTypeId) => {
+      setEditNodes((prev) => {
+        // Placement heuristic: drop below the current node stack, left-aligned to
+        // the leftmost node, nudging right to avoid overlapping an existing node.
+        const minX = prev.length ? Math.min(...prev.map((n) => n.x)) : 40;
+        const maxY = prev.length ? Math.max(...prev.map((n) => n.y + NODE_H)) : 40;
+        let x = minX;
+        const y = maxY + 32;
+        const collides = (px: number) =>
+          prev.some((n) => Math.abs(n.y - y) < NODE_H && Math.abs(n.x - px) < NODE_W + 12);
+        while (collides(x)) x += NODE_W + 24;
+        const count = prev.filter((n) => n.type === type).length + 1;
+        const node = defaultNode(type, x, y, `${TYPE_BY_ID[type].displayName} ${count}`);
+        setSelectedNodeIds(new Set([node.id]));
+        setConfigTarget({ kind: 'node', id: node.id });
+        return [...prev, node];
+      });
+      setDirty(true);
+    },
+    [],
+  );
+
+  const onReset = useCallback(() => {
+    setEditNodes(cloneNodes(diagram.nodes));
+    setEditConnections(cloneConnections(diagram.connections));
+    setSensorValues(initialInputs);
+    setConstantOverrides({});
+    setSelectedNodeIds(new Set());
+    setConfigTarget(null);
+    setPulsingId(null);
+    setDirty(false);
+  }, [diagram.nodes, diagram.connections, initialInputs]);
+
   return (
     <DiagramPanel
       nodes={nodes}
@@ -236,6 +675,21 @@ function LiveDiagram({
       pulsingId={pulsingId}
       pulseDurationMs={pulseDurationMs}
       traceResult={traceResult}
+      editable={editable}
+      palette={palette}
+      selectedNodeIds={selectedNodeIds}
+      setSelectedNodeIds={setSelectedNodeIds}
+      configTarget={configTarget}
+      setConfigTarget={setConfigTarget}
+      onNodeMove={onNodeMove}
+      onConnectionCreate={onConnectionCreate}
+      onConnectionLabelT={onConnectionLabelT}
+      onAddNode={onAddNode}
+      onDeleteSelection={onDeleteSelection}
+      onSetWeight={onSetWeight}
+      onDeleteConnection={onDeleteConnection}
+      onReset={onReset}
+      canReset={dirty}
     />
   );
 }
@@ -271,10 +725,14 @@ function StaticDiagram({
 export default function InteractiveDiagram({
   diagram,
   caption,
-  height = 360,
+  height = DEFAULT_HEIGHT,
   initialInputs = {},
   pulseDurationMs = 200,
+  editable = false,
+  palette,
 }: InteractiveDiagramProps) {
+  // A palette implies editing.
+  const isEditable = editable || (palette !== undefined && palette.length > 0);
   return (
     <figure className="id-figure">
       <BrowserOnly
@@ -288,6 +746,8 @@ export default function InteractiveDiagram({
             height={height}
             initialInputs={initialInputs}
             pulseDurationMs={pulseDurationMs}
+            editable={isEditable}
+            palette={palette}
           />
         )}
       </BrowserOnly>
