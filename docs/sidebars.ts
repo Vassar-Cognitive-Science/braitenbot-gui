@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'tutorials/latches-with-delay',
         'tutorials/subsumption-architecture',
         'tutorials/compound-reuse',
+        'tutorials/capstone-challenge',
       ],
     },
     'under-the-hood',

@@ -1,0 +1,82 @@
+---
+sidebar_position: 9
+title: "Capstone: Design Your Own Vehicle"
+---
+
+# Capstone: Design Your Own Vehicle
+
+Every tutorial so far handed you a circuit and walked you through building it. This one doesn't. You now have the whole toolbox — sensors, compute blocks, feedback, arbitration, and reusable modules — and the only way to find out whether you *understand* it is to design something no one gave you the wiring for.
+
+The point isn't to reach a "correct" diagram. There isn't one. The point is the move Braitenberg's whole book is about: start from a *behavior* you want to see in the world, and invent a mechanism simple enough to produce it. Downhill invention. You'll be surprised how little circuit a convincing behavior takes — and, if you watch someone else meet your robot, how much more they'll read into it than you put there.
+
+**Time:** open-ended
+**Prerequisites:** Completed the tutorial series through [Compound Reuse](./compound-reuse)
+
+## Your toolbox, in one place
+
+Before you start, take stock of what you can now reach for. A couple of these blocks never got a tutorial of their own — this is your cue to try them.
+
+| Block | What it gives you | Seen in |
+|---|---|---|
+| Analog / Digital / Color / ToF sensors | Ways to feel the world | throughout |
+| **Summation** | Add behaviors together (with signs) | [light follower](./light-follower), [obstacle avoidance](./obstacle-avoidance) |
+| **Threshold** | Turn a smooth reading into a crisp decision | [obstacle avoidance](./obstacle-avoidance) |
+| **Transfer curves** | Shape a connection's whole response | [transfer curves](./transfer-curves) |
+| **Delay + feedback** | Short-term memory / state | [latches](./latches-with-delay) |
+| **Constant** | A baseline drive to subtract from or add to | [obstacle avoidance](./obstacle-avoidance) |
+| **Multiply** | A *gate* — one signal switches another on or off | [nodes reference](../guide/nodes#multiply) |
+| **Minimum / Maximum** | "Respond to the weakest / strongest," or a floor / ceiling | [nodes reference](../guide/nodes#minimum) |
+| **Oscillator** | A built-in rhythm — scanning, weaving, pattern generation | [transfer curves, problem 4](./transfer-curves#problem-4-oscillator-scanning-with-pauses) |
+| **Noise** | Randomness — exploration, breaking out of stalemates | [nodes reference](../guide/nodes#noise) |
+| **Compounds** | Package a behavior and reuse it | [compound reuse](./compound-reuse) |
+
+## Document as you build
+
+As your diagram grows past a handful of nodes, use the **Comment** button in the toolbar to drop gray note boxes behind clusters of nodes — "light-seeking layer," "escape latch," "why this weight is negative." Comments are saved with your diagram and ignored when generating code, so they cost nothing on the robot and make your design legible to the next person (often future-you). A good habit: name each behavior with a comment box before you wire it, so the diagram reads like an outline of your intent.
+
+## Challenges
+
+Pick one that appeals, or climb the ladder. Each is stated as a *behavior* — the wiring is yours to invent. Build it in **trace mode** first (drag the sensor sliders and watch the wheels) before you upload to hardware.
+
+### 1. Wall follower
+
+Make the robot drive **alongside** a wall at a roughly constant distance, rather than fleeing it. Hint: a single side ToF sensor, a Constant baseline, and a connection whose weight or transfer curve turns "too close" into "steer out" and "too far" into "steer in." This is a proportional controller hiding in three nodes.
+
+### 2. Cautious explorer
+
+Combine **wander** and **avoid**: a robot that weaves gently across open floor (Oscillator or Noise into the motor mix at a small weight) but still turns away from obstacles when the ToF sensors fire. Which layer should win when they conflict, and how do you make that happen without an if-statement? (Look back at [subsumption](./subsumption-architecture).)
+
+### 3. Colour-gated behavior
+
+Use a **Multiply** node as a gate: the robot only chases light **while it's over a green patch**, and ignores light everywhere else. The color sensor's green channel, thresholded, becomes the gate; the light-seeking signal is what passes through it. What does the robot do the instant it rolls off the patch — and is that what you intended?
+
+### 4. The sulk
+
+Give the robot a **mood with memory**: when it bumps something, it doesn't just reverse — it goes *timid* for a while, cruising at half speed, before returning to normal. Hint: a decay latch (from [latches](./latches-with-delay)) whose slowly-fading output is *subtracted* from the cruise Constant. Tune the feedback weight so the sulk lasts about five seconds.
+
+### 5. Winner-take-all
+
+Wire two light sensors into a **Maximum** node so the robot always responds to the *brighter* side and ignores the dimmer one entirely — a sharper, more decisive phototaxis than the smooth averaging of the classic light follower. Then try **Minimum** instead and describe, in words, how the behavior changes.
+
+## A design process that works
+
+1. **Name the behavior first.** One sentence: "drives along a wall on its right." Drop it in a comment box.
+2. **Find the shortest path from a sensor to a wheel** that could plausibly produce it. Start with two or three nodes, not ten.
+3. **Trace before you upload.** Slide the sensors to the extremes and the middle; predict each wheel value *before* you look. When your prediction is wrong, you've found either a wiring bug or a gap in your understanding — both worth having.
+4. **Add one layer at a time.** Get cruise working, then add avoid, then add the twist. If two behaviors fight, the fix is almost always a weight or the wiring topology, not a new kind of node.
+5. **Only then, upload.** The real robot will disagree with your trace in small ways — sensor mismatch, servo trim, floor friction. That gap is the last thing to tune, and it's [where the hardware notes help](../hardware/testing).
+
+:::note[Thinking like Braitenberg]
+
+You are now doing the thing the whole series was quietly training you for: *uphill analysis, downhill invention*. Inventing a behavior is easy — you just built five. Deducing the mechanism behind a behavior you *didn't* build is hard, maybe impossible, which is why an observer will always over-explain your robot. Hand your finished vehicle to a friend without showing them the diagram. Listen to the story they tell about what it "wants." Then show them the three wires. The distance between their story and your wiring is the most important thing in this course — and it is exactly the distance we can never quite measure when the wiring in question is our own.
+:::
+
+### Questions to sit with
+
+- You designed a behavior by picking a mechanism, not by describing a goal. When you catch yourself explaining a *person* by their goals, are you describing their wiring, or writing the observer's story?
+- Every challenge here has many wirings that produce "the same" behavior. If two very different circuits look identical from the outside, in what sense are they doing the same thing — and does that question have an answer for brains?
+- Which of your vehicles felt most "alive" to build — and was it the most complex one, or the one whose behavior most surprised you relative to how little was inside it?
+
+## What's next
+
+Take your design to the bench: the [hardware guide](../hardware/overview) covers the reference build, and [Testing](../hardware/testing) helps you confirm each device before you trust your circuit. When something behaves unexpectedly on the robot but not in trace, that mismatch is usually the most interesting bug you'll chase — and the one that teaches you the most about the gap between a diagram and a body.
