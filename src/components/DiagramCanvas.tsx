@@ -13,10 +13,10 @@ import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { DiagramNodeView } from './DiagramNodeView';
 import { ConnectionLayer } from './ConnectionLayer';
 import {
-  NODE_H,
   computeConnectionPaths,
   makePath,
   nearestTOnCurve,
+  nodeRenderHeight,
   portOffsetX,
 } from './connectionGeometry';
 
@@ -381,8 +381,8 @@ export function DiagramCanvas({
   const selectedConnectionId = configTarget?.kind === 'connection' ? configTarget.id : null;
 
   const connectionPaths = useMemo(
-    () => computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, blockScale),
-    [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale],
+    () => computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, blockScale, traceMode),
+    [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale, traceMode],
   );
 
   const draftSrc = linkDraft ? nodeMap[linkDraft.id] : undefined;
@@ -414,7 +414,7 @@ export function DiagramCanvas({
                 className="draft-link"
                 d={makePath(
                   srcWorld.x + portOffsetX(draftSrc, linkDraft!.port, compoundTypes, blockScale),
-                  srcWorld.y + NODE_H * blockScale,
+                  srcWorld.y + nodeRenderHeight(draftSrc, traceMode) * blockScale,
                   draftPoint.x,
                   draftPoint.y,
                 )}

@@ -399,13 +399,13 @@ function DiagramPanel({
     const conn = connections.find((c) => c.id === configTarget.id);
     if (!conn) return null;
     const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
-    const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1);
+    const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1, traceMode);
     const path = paths.find((p) => p.id === conn.id);
     if (!path) return null;
     // Badge is at (midX, midY) in layer px; the world div is scaled, so the
     // screen offset inside the (unscaled) `.id-canvas` is midX/Y * scale.
     return { conn, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
-  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX]);
+  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
 
   // Dismiss the popover on outside click (Escape is handled by the canvas keydown).
   useEffect(() => {
