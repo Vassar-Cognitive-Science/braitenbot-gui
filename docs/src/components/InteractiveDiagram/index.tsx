@@ -49,7 +49,11 @@ export interface InteractiveDiagramProps {
     compoundTypes?: CompoundTypeDefinition[];
   };
   caption?: string;
-  /** Canvas height in px; content is scaled to fit the available width. */
+  /**
+   * Explicit canvas height override (px). By default the panel derives its
+   * height from the scaled content (clamped ~260–560), so most embeds omit it.
+   * Content is always scaled to fit the available width.
+   */
   height?: number;
   /**
    * Initial sensor values keyed exactly as the simulation keys them: the node
@@ -72,13 +76,30 @@ export interface InteractiveDiagramProps {
    * reader can then drag it into place and wire it up.
    */
   palette?: NodeTypeId[];
+  /**
+   * Whether the embed starts in trace mode (live simulation — sliders, value
+   * readouts, expanded sensor nodes). Defaults to `true` so existing embeds
+   * keep simulating on load. A "Trace Signal Flow" / "Exit Trace" button in the
+   * footer flips it; set `initialTrace={false}` for wire-first exercises.
+   */
+  initialTrace?: boolean;
 }
 
+/** Symmetric world padding around the node bounds (world px, pre-scale). */
 const PAD = 48;
-const DEFAULT_HEIGHT = 480;
+/** Extra working room below the content in editable embeds, so there's space to
+ *  drop and drag palette nodes without an immediate rescale (world px). */
+const EDIT_MARGIN = 120;
+/** Extra bottom room in trace mode: trace-expanded sensor nodes render taller
+ *  than their NODE_H box (86 vs 64 px), so allow for that plus the value
+ *  readout below the output handle, keeping the toggle from clipping/jumping. */
+const TRACE_MARGIN = 40;
 /** Floor on the fit-to-width shrink so nodes stay close to app-native size;
  *  wider diagrams scroll horizontally rather than shrink past this. */
 const MIN_SCALE = 0.72;
+/** Clamp on the auto-derived viewport height (screen px). */
+const MIN_HEIGHT = 260;
+const MAX_HEIGHT = 560;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 
 // ── Static layout shared by SSR fallback and live component ────────────────
@@ -90,9 +111,15 @@ interface Layout {
   contentH: number;
 }
 
-function computeLayout(nodes: DiagramNode[]): Layout {
+/**
+ * World-space content box: the node bounds (min/max x,y grown by NODE_W/NODE_H)
+ * expanded by symmetric `PAD`, plus an optional extra `bottomMargin` of working
+ * room below the content (editable embeds). `offsetX/Y` shift raw node
+ * coordinates so the padded content sits at the world origin.
+ */
+function computeLayout(nodes: DiagramNode[], bottomMargin = 0): Layout {
   if (nodes.length === 0) {
-    return { offsetX: PAD, offsetY: PAD, contentW: 400, contentH: 300 };
+    return { offsetX: PAD, offsetY: PAD, contentW: 400, contentH: 300 + bottomMargin };
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of nodes) {
@@ -105,7 +132,7 @@ function computeLayout(nodes: DiagramNode[]): Layout {
     offsetX: -minX + PAD,
     offsetY: -minY + PAD,
     contentW: maxX - minX + PAD * 2,
-    contentH: maxY - minY + PAD * 2,
+    contentH: maxY - minY + PAD * 2 + bottomMargin,
   };
 }
 
@@ -170,14 +197,20 @@ interface DiagramPanelProps {
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
-  height: number;
+  /** Explicit viewport height override (px). When omitted the panel derives its
+   *  height from the scaled content. */
+  height?: number;
   sensorValues: Record<string, number>;
   setSensor: (key: string, value: number) => void;
   setConstant: (id: string, value: number) => void;
   pulse: (id: string) => void;
   pulsingId: string | null;
   pulseDurationMs: number;
-  /** Live trace values; undefined slots in the static SSR fallback. */
+  /** Whether trace mode is active (sliders, value readouts, expanded nodes). */
+  traceMode: boolean;
+  /** Toggle trace on/off. Omitted → no toggle button (SSR fallback). */
+  onToggleTrace?: () => void;
+  /** Live trace values; undefined when trace is off or in the SSR fallback. */
   traceResult?: {
     nodeValues: Record<string, number>;
     edgeSignals: Record<string, number>;
@@ -213,6 +246,8 @@ function DiagramPanel({
   pulse,
   pulsingId,
   pulseDurationMs,
+  traceMode,
+  onToggleTrace,
   traceResult,
   editable = false,
   palette,
@@ -230,14 +265,59 @@ function DiagramPanel({
   onReset,
   canReset = false,
 }: DiagramPanelProps) {
-  const layout = useMemo(() => computeLayout(nodes), [nodes]);
-
-  // Fit-to-width, but never shrink past MIN_SCALE (readability); a wider diagram
-  // scrolls horizontally inside `.id-canvas` instead.
-  const scale = Math.max(MIN_SCALE, Math.min(1, height / layout.contentH));
-  const worldW = layout.contentW * scale;
+  // Bottom working room: editable embeds get room to drop palette nodes; trace
+  // mode adds a small allowance because trace-expanded sensor nodes render
+  // ~22px taller than their NODE_H box, so a bottom-most sensor won't clip and
+  // toggling trace doesn't jump the derived height much.
+  const bottomMargin = (editable ? EDIT_MARGIN : 0) + (traceMode ? TRACE_MARGIN : 0);
+  const layout = useMemo(
+    () => computeLayout(nodes, bottomMargin),
+    [nodes, bottomMargin],
+  );
 
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Measure the viewport's available width (the figure content column). The
+  // world is CSS-scaled to fit this; recompute on mount, on resize, and when the
+  // content bounds change (readers add/drag nodes). Seed with the content width
+  // so SSR / first paint isn't scaled to 0.
+  const [availW, setAvailW] = useState(layout.contentW);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setAvailW(w);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Fit-to-width, but never shrink past MIN_SCALE (readability). Because
+  // CSS `transform: scale()` does not shrink the element's layout box, the
+  // world div carries its unscaled `contentW/contentH` as its box size and the
+  // scale is applied purely visually — so we size the viewport ourselves rather
+  // than let the scaled world dictate it.
+  const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
+  const scaledW = layout.contentW * scale;
+  const scaledH = layout.contentH * scale;
+
+  // Height: caller override, else derived from the scaled content, clamped to a
+  // sane band so short diagrams aren't a giant void and tall ones stay bounded.
+  const viewportH =
+    height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(scaledH)));
+
+  // Center the content horizontally when it's narrower than the viewport; only
+  // scroll when the MIN_SCALE floor actually forces the world wider than the
+  // viewport.
+  const overflowsX = scaledW > availW + 0.5;
+  const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
   const [rejectedNotice, setRejectedNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
 
@@ -255,11 +335,11 @@ function DiagramPanel({
   const clientToLayer = useCallback(
     (clientX: number, clientY: number) => {
       const rect = canvasRef.current?.getBoundingClientRect();
-      const left = rect?.left ?? 0;
+      const left = (rect?.left ?? 0) + worldOffsetX;
       const top = rect?.top ?? 0;
       return { x: (clientX - left) / scale, y: (clientY - top) / scale };
     },
-    [scale],
+    [scale, worldOffsetX],
   );
   const clientToWorld = useCallback(
     (clientX: number, clientY: number) => {
@@ -324,8 +404,8 @@ function DiagramPanel({
     if (!path) return null;
     // Badge is at (midX, midY) in layer px; the world div is scaled, so the
     // screen offset inside the (unscaled) `.id-canvas` is midX/Y * scale.
-    return { conn, left: path.midX * scale, top: path.midY * scale };
-  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale]);
+    return { conn, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
+  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX]);
 
   // Dismiss the popover on outside click (Escape is handled by the canvas keydown).
   useEffect(() => {
@@ -367,8 +447,8 @@ function DiagramPanel({
       )}
 
       <div
-        className="id-canvas"
-        style={{ height, width: worldW || undefined }}
+        className={`id-canvas${overflowsX ? ' id-canvas-scroll' : ''}`}
+        style={{ height: viewportH }}
         ref={canvasRef}
         tabIndex={editable ? 0 : undefined}
         onKeyDown={handleKeyDown}
@@ -391,6 +471,7 @@ function DiagramPanel({
             transformOrigin: '0 0',
             width: layout.contentW,
             height: layout.contentH,
+            left: worldOffsetX,
           }}
         >
           <DiagramCanvas
@@ -400,8 +481,8 @@ function DiagramPanel({
             nodeWorldPos={nodeWorldPos}
             clientToWorld={editable ? clientToWorld : undefined}
             clientToLayer={editable ? clientToLayer : undefined}
-            traceMode
-            traceResult={traceResult}
+            traceMode={traceMode}
+            traceResult={traceMode ? traceResult : undefined}
             sensorValues={sensorValues}
             setSensorValue={setSensor}
             setConstantValue={setConstant}
@@ -428,7 +509,7 @@ function DiagramPanel({
             title="Delete node"
             aria-label={`Delete ${selectedNode.label}`}
             style={{
-              left: nodeWorldPos(selectedNode).x * scale + NODE_W * scale - 10,
+              left: worldOffsetX + nodeWorldPos(selectedNode).x * scale + NODE_W * scale - 10,
               top: nodeWorldPos(selectedNode).y * scale - 10,
             }}
             onClick={(e) => {
@@ -472,22 +553,41 @@ function DiagramPanel({
         {rejectedNotice && <div className="id-notice">{rejectedNotice}</div>}
       </div>
 
-      {(editable || onReset) && (
-        <div className="id-toolbar">
+      {(editable || onReset || onToggleTrace) && (
+        <div className="id-footer">
           {editable && (
             <span className="id-hint">
               Drag nodes • drag from a node's bottom dot to wire • click a weight badge to edit
             </span>
           )}
-          <button
-            type="button"
-            className="id-reset"
-            onClick={onReset}
-            disabled={!canReset}
-            title="Restore the original diagram"
-          >
-            Reset
-          </button>
+          <div className="id-footer-actions">
+            {onToggleTrace && (
+              <button
+                type="button"
+                className={`id-trace-toggle${traceMode ? ' active' : ''}`}
+                onClick={onToggleTrace}
+                aria-pressed={traceMode}
+                title={
+                  traceMode
+                    ? 'Stop simulating and return to the static wiring view'
+                    : 'Simulate signal flow through the wiring'
+                }
+              >
+                {traceMode ? 'Exit Trace' : 'Trace Signal Flow'}
+              </button>
+            )}
+            {onReset && (
+              <button
+                type="button"
+                className="id-reset"
+                onClick={onReset}
+                disabled={!canReset}
+                title="Restore the original diagram"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -503,13 +603,15 @@ function LiveDiagram({
   pulseDurationMs,
   editable,
   palette,
+  initialTrace,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
-  height: number;
+  height?: number;
   initialInputs: Record<string, number>;
   pulseDurationMs: number;
   editable: boolean;
   palette?: NodeTypeId[];
+  initialTrace: boolean;
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
@@ -530,6 +632,10 @@ function LiveDiagram({
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
   const [configTarget, setConfigTarget] = useState<ConfigTarget | null>(null);
   const [dirty, setDirty] = useState(false);
+  // Trace mode mirrors the app's toggle: edit the wiring, then flip on tracing
+  // to simulate. Defaults to `initialTrace` (true, so existing embeds keep
+  // their always-simulating behavior).
+  const [traceOn, setTraceOn] = useState(initialTrace);
 
   const setSensor = (key: string, value: number) => {
     setSensorValues((prev) => ({ ...prev, [key]: value }));
@@ -552,11 +658,12 @@ function LiveDiagram({
   }, [baseNodes, constantOverrides]);
   const connections = baseConnections;
 
+  // The simulation loop only runs while tracing is on — no timers when off.
   const { traceResult, pulse } = useScopeSimulation(
     nodes,
     connections,
     sensorValues,
-    /* enabled */ true,
+    /* enabled */ traceOn,
     loopPeriodMs,
     compoundTypes,
   );
@@ -651,6 +758,8 @@ function LiveDiagram({
     [],
   );
 
+  // Reset restores the pristine initial state, including the trace toggle, so
+  // the embed looks exactly as first loaded — least surprising for the reader.
   const onReset = useCallback(() => {
     setEditNodes(cloneNodes(diagram.nodes));
     setEditConnections(cloneConnections(diagram.connections));
@@ -659,8 +768,9 @@ function LiveDiagram({
     setSelectedNodeIds(new Set());
     setConfigTarget(null);
     setPulsingId(null);
+    setTraceOn(initialTrace);
     setDirty(false);
-  }, [diagram.nodes, diagram.connections, initialInputs]);
+  }, [diagram.nodes, diagram.connections, initialInputs, initialTrace]);
 
   return (
     <DiagramPanel
@@ -674,6 +784,8 @@ function LiveDiagram({
       pulse={pulseSensor}
       pulsingId={pulsingId}
       pulseDurationMs={pulseDurationMs}
+      traceMode={traceOn}
+      onToggleTrace={() => setTraceOn((on) => !on)}
       traceResult={traceResult}
       editable={editable}
       palette={palette}
@@ -689,7 +801,7 @@ function LiveDiagram({
       onSetWeight={onSetWeight}
       onDeleteConnection={onDeleteConnection}
       onReset={onReset}
-      canReset={dirty}
+      canReset={dirty || traceOn !== initialTrace}
     />
   );
 }
@@ -700,10 +812,12 @@ function StaticDiagram({
   diagram,
   height,
   pulseDurationMs,
+  initialTrace,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
-  height: number;
+  height?: number;
   pulseDurationMs: number;
+  initialTrace: boolean;
 }) {
   return (
     <DiagramPanel
@@ -717,6 +831,9 @@ function StaticDiagram({
       pulse={NOOP}
       pulsingId={null}
       pulseDurationMs={pulseDurationMs}
+      // Reserve the same layout as the hydrated view so the height doesn't jump
+      // on hydration; there are no live values, so nodes render read-only.
+      traceMode={initialTrace}
       traceResult={undefined}
     />
   );
@@ -725,11 +842,12 @@ function StaticDiagram({
 export default function InteractiveDiagram({
   diagram,
   caption,
-  height = DEFAULT_HEIGHT,
+  height,
   initialInputs = {},
   pulseDurationMs = 200,
   editable = false,
   palette,
+  initialTrace = true,
 }: InteractiveDiagramProps) {
   // A palette implies editing.
   const isEditable = editable || (palette !== undefined && palette.length > 0);
@@ -737,7 +855,12 @@ export default function InteractiveDiagram({
     <figure className="id-figure">
       <BrowserOnly
         fallback={
-          <StaticDiagram diagram={diagram} height={height} pulseDurationMs={pulseDurationMs} />
+          <StaticDiagram
+            diagram={diagram}
+            height={height}
+            pulseDurationMs={pulseDurationMs}
+            initialTrace={initialTrace}
+          />
         }
       >
         {() => (
@@ -748,6 +871,7 @@ export default function InteractiveDiagram({
             pulseDurationMs={pulseDurationMs}
             editable={isEditable}
             palette={palette}
+            initialTrace={initialTrace}
           />
         )}
       </BrowserOnly>

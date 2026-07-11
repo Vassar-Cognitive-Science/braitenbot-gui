@@ -15,14 +15,25 @@
   width: 100%;
 }
 
+/* The frame is the single cohesive dark panel: palette bar, canvas, and footer
+   are stacked seamlessly inside one border so nothing shows the page behind it.
+   The frame owns the outer border + radius; the inner sections use divider
+   borders only, never their own outer edge. */
 .id-frame {
   width: 100%;
+  border: 1px solid #33342b;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #1a1b16;
 }
 
 .id-canvas {
   position: relative;
-  max-width: 100%;
-  overflow: auto;
+  width: 100%;
+  /* Height is set inline (auto-derived or overridden). No horizontal scroll by
+     default — the world is scaled to fit; only the `-scroll` variant (MIN_SCALE
+     floor forced overflow) allows it. */
+  overflow: hidden;
   /* Match the app canvas surface (App.css `.diagram-canvas`) — same 16px
      graph-paper grid over the same dark surface — so the embedded panel
      reads as the app. */
@@ -30,17 +41,28 @@
     linear-gradient(to right, rgba(58, 56, 46, 0.25) 1px, transparent 1px) 0 0 / 16px 16px,
     linear-gradient(to bottom, rgba(58, 56, 46, 0.25) 1px, transparent 1px) 0 0 / 16px 16px,
     #1a1b16;
-  border: 1px solid #33342b;
-  border-radius: 3px;
+  outline: none;
 }
 
+.id-canvas-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Keyboard focus stays discoverable without a big bright frame: a restrained
+   1px accent outline, inset so it doesn't clip against the panel edge. Mouse
+   clicks (no :focus-visible) show nothing. */
 .id-canvas:focus-visible {
-  outline: 2px solid #6aab7a;
-  outline-offset: -2px;
+  outline: 1px solid #6aab7a;
+  outline-offset: -3px;
+  border-radius: 2px;
 }
 
+/* Absolutely positioned so its `left` offset (horizontal centering of the
+   scaled content within the wider viewport) takes effect. */
 .id-world {
-  position: relative;
+  position: absolute;
+  top: 0;
 }
 
 .id-caption {
@@ -60,13 +82,8 @@
   gap: 0.4rem;
   padding: 0.5rem 0.6rem;
   background: #22231e;
-  border: 1px solid #33342b;
-  border-bottom: none;
-  border-radius: 3px 3px 0 0;
-}
-
-.id-palette + .id-canvas {
-  border-radius: 0 0 3px 3px;
+  /* Divider only — the frame owns the outer border. */
+  border-bottom: 1px solid #33342b;
 }
 
 .id-palette-label {
@@ -108,36 +125,57 @@
   color: #6aab7a;
 }
 
-/* ── Toolbar (hint + reset) ────────────────────────────────────────────── */
+/* ── Footer bar (hint + reset) — inside the frame, mirrors the palette bar ── */
 
-.id-toolbar {
+.id-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  background: #22231e;
+  /* Divider only — the frame owns the outer border. */
+  border-top: 1px solid #33342b;
 }
 
 .id-hint {
   font-size: 0.78rem;
-  color: var(--ifm-color-content-secondary, #888);
+  color: #908c7e;
 }
 
-.id-reset {
+/* Right-aligned action cluster (trace toggle + reset). Sits at the end whether
+   or not the hint is present. */
+.id-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.id-reset,
+.id-trace-toggle {
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
-  margin-left: auto;
-  padding: 0.25rem 0.7rem;
+  padding: 0.2rem 0.6rem;
   border-radius: 3px;
   cursor: pointer;
-  background: #22231e;
+  background: rgba(18, 19, 15, 0.92);
   border: 1px solid #33342b;
   color: #cfc9ba;
+  transition: filter 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.id-reset:hover:not(:disabled) {
+.id-reset:hover:not(:disabled),
+.id-trace-toggle:hover {
   filter: brightness(1.2);
+}
+
+/* Active trace toggle picks up the app's accent so the simulating state reads
+   at a glance, mirroring the app toolbar's `.toolbar-trace.active`. */
+.id-trace-toggle.active {
+  border-color: #6aab7a;
+  color: #a9d6b4;
 }
 
 .id-reset:disabled {

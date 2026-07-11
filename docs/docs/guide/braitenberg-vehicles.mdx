@@ -29,7 +29,6 @@ import DiagramView from '@site/src/components/DiagramView';
 Wire each sensor to the motor on the **same** side (ipsilateral):
 
 <InteractiveDiagram
-  height={300}
   initialInputs={{ 'ls-2a': 70, 'rs-2a': 20 }}
   diagram={{
     nodes: [
@@ -55,7 +54,6 @@ On a real robot, this is useful for light-avoidance behaviors — a robot that s
 Wire each sensor to the motor on the **opposite** side (contralateral):
 
 <InteractiveDiagram
-  height={300}
   initialInputs={{ 'ls-2b': 70, 'rs-2b': 20 }}
   diagram={{
     nodes: [
@@ -82,7 +80,6 @@ Take Vehicle 2b's cross-wiring, but use **negative** (inhibitory) weights:
 
 <DiagramView
   width={440}
-  height={260}
   robot={{ x: 220, y: 180, radius: 70 }}
   nodes={[
     { id: 'ls', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20 },

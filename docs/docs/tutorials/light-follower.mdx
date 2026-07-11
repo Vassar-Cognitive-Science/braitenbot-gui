@@ -23,7 +23,6 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 Try the cross-wired vehicle right now — drag the **Left Photocell** slider up while leaving the right one low, and watch the right motor race ahead of the left, turning the vehicle toward the stronger light. Then center both sliders at 50 and notice both motors equalize: the vehicle drives straight when the light is balanced.
 
 <InteractiveDiagram
-  height={340}
   initialInputs={{ 'left-sensor': 70, 'right-sensor': 20 }}
   diagram={{
     nodes: [
@@ -106,7 +105,6 @@ Swap the cross-wiring for same-side wiring (left sensor → left motor, right se
 Compare the diagram below with the cross-wired version above — the nodes and weights are identical, only the wire destinations have swapped. Drag the left sensor up and watch the **left** motor accelerate this time, pushing the nose away from the light.
 
 <InteractiveDiagram
-  height={340}
   initialInputs={{ 'ls-fear': 70, 'rs-fear': 20 }}
   diagram={{
     nodes: [
