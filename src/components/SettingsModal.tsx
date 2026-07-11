@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { AppSettings, UpdateAppSettings } from '../settings/appSettings';
+import { NumberInput } from './NumberInput';
 
 /**
  * Drive a native <dialog>'s modal state from a React `open` boolean, opening
@@ -25,14 +26,25 @@ interface SettingsModalProps {
   onClose: () => void;
   settings: AppSettings;
   onChange: UpdateAppSettings;
+  /** Loop period of the current diagram (ms). A per-diagram document value,
+   *  surfaced here rather than in AppSettings. */
+  loopPeriodMs: number;
+  onLoopPeriodChange: (value: number) => void;
 }
 
 /**
- * App preferences dialog, opened from the native "Settings…" menu item. Holds
- * cross-diagram settings (see AppSettings) rather than anything tied to the
- * current diagram document.
+ * App preferences dialog, opened from the in-app gear button (or the native
+ * "Settings…" menu item on macOS). Holds cross-diagram app settings (see
+ * AppSettings) plus the current diagram's sketch loop period.
  */
-export function SettingsModal({ open, onClose, settings, onChange }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onClose,
+  settings,
+  onChange,
+  loopPeriodMs,
+  onLoopPeriodChange,
+}: SettingsModalProps) {
   const dialogRef = useDialogOpen(open);
   return (
     <dialog
@@ -64,6 +76,30 @@ export function SettingsModal({ open, onClose, settings, onChange }: SettingsMod
                 The conventional Braitenberg range. Turn this off to set any
                 weight value on a connection. Existing weights are left as-is.
               </span>
+            </span>
+          </label>
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-field">
+            <span className="settings-toggle-text">
+              <span className="settings-toggle-label">Sketch loop period</span>
+              <span className="settings-toggle-hint">
+                Delay between sensor reads in the generated Arduino loop. Shorter
+                periods react faster; longer periods are steadier. Saved with the
+                diagram.
+              </span>
+            </span>
+            <span className="settings-field-control">
+              <NumberInput
+                min={1}
+                max={1000}
+                step={1}
+                integer
+                value={loopPeriodMs}
+                onChange={onLoopPeriodChange}
+              />
+              <span className="settings-field-unit">ms</span>
             </span>
           </label>
         </div>

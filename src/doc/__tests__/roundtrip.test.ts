@@ -5,6 +5,9 @@ import type { DiagramState } from '../../lib/diagramFile';
 
 const sample: DiagramState = {
   loopPeriodMs: 25,
+  comments: [
+    { id: 'comment-1', x: 10, y: 20, width: 220, height: 120, text: 'Light-seeking layer' },
+  ],
   nodes: [
     { id: 'motor-left', type: 'servo-cr', label: 'Left Wheel', x: 0, y: 0, servoPin: '5' },
     { id: 'motor-right', type: 'servo-cr', label: 'Right Wheel', x: 100, y: 0, servoPin: '6' },
@@ -56,12 +59,14 @@ describe('serialize round-trip through the store', () => {
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
       compoundTypes: snap.compoundTypes,
+      comments: snap.comments,
     };
     const json = serialize(state);
     const reparsed = parse(json);
     const byId = <T extends { id: string }>(items: T[]) =>
       [...items].sort((a, b) => a.id.localeCompare(b.id));
     expect(reparsed.loopPeriodMs).toBe(sample.loopPeriodMs);
+    expect(reparsed.comments).toEqual(sample.comments);
     // Store reads come back sorted by id (deterministic cross-peer order), so
     // compare contents modulo array order.
     expect(reparsed.nodes).toEqual(byId(sample.nodes));
@@ -98,6 +103,7 @@ describe('group / ungroup through the store', () => {
       ],
       loopPeriodMs: 20,
       compoundTypes: [],
+      comments: [],
     });
     store.stopCapturing();
     const result = store.group(new Set(['s', 'sum']));

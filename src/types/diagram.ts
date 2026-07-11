@@ -129,6 +129,29 @@ export interface DiagramConnection {
 }
 
 /**
+ * A free-floating explanatory note drawn on the top-level canvas. Comments are
+ * purely didactic — they carry no ports, take part in no signal flow, and are
+ * ignored by the code emitter. They render behind the nodes so wiring stays
+ * legible on top. Position and size are in world coordinates (pre-zoom), like
+ * DiagramNode.x/y.
+ */
+export interface DiagramComment {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+}
+
+/** Default size (world units) for a freshly dropped comment box. */
+export const DEFAULT_COMMENT_WIDTH = 220;
+export const DEFAULT_COMMENT_HEIGHT = 120;
+/** Lower bounds so a comment can't be collapsed past usability while resizing. */
+export const MIN_COMMENT_WIDTH = 80;
+export const MIN_COMMENT_HEIGHT = 48;
+
+/**
  * A user-defined compound node — a named subdiagram with declared input and
  * output anchor nodes. Instances of this type appear as `type: 'compound'`
  * DiagramNodes whose `compoundTypeId` matches `id` below.

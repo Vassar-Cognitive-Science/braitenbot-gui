@@ -18,5 +18,6 @@ export function defaultDiagram(): DiagramState {
     connections: [],
     loopPeriodMs: 20,
     compoundTypes: [],
+    comments: [],
   };
 }

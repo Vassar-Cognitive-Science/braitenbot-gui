@@ -49,6 +49,7 @@ describe('invariant repair (via undo, which runs the repair pass)', () => {
       nodes: [node('motor-left', { type: 'servo-cr' })],
       connections: [],
       loopPeriodMs: 20,
+      comments: [],
       compoundTypes: [],
     });
     // A tracked edit + undo triggers the repair pass.

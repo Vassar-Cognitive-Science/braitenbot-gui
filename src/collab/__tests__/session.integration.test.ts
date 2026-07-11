@@ -38,6 +38,7 @@ function initialState(): DiagramState {
     ],
     loopPeriodMs: 20,
     compoundTypes: [],
+    comments: [],
   };
 }
 
@@ -270,9 +271,11 @@ describe('SessionManager end-to-end through the relay', () => {
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
       compoundTypes: snap.compoundTypes,
+      comments: snap.comments,
     });
     const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual([
+      'comments',
       'compoundTypes',
       'connections',
       'loopPeriodMs',

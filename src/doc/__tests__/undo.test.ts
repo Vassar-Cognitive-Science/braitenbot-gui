@@ -107,6 +107,7 @@ describe('undo scoping and gesture boundaries', () => {
       connections: [],
       loopPeriodMs: 20,
       compoundTypes: [],
+      comments: [],
     });
     store.undo(); // no-op: history cleared
     expect(store.getSnapshot().topNodes.some((n) => n.id === 'n')).toBe(false);

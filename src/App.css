@@ -2513,3 +2513,149 @@ select,
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Icon-only Settings (gear) button in the toolbar. */
+.toolbar-settings {
+  padding-inline: 0.4rem;
+}
+
+/* Trace-mode per-wheel drive arrow. Positioned over the wheel overlay; inert. */
+.wheel-drive-arrow {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.wheel-drive-arrow line {
+  stroke-linecap: round;
+}
+
+.wheel-drive-arrow.forward line,
+.wheel-drive-arrow.forward polygon {
+  stroke: var(--accent);
+  fill: var(--accent);
+}
+
+.wheel-drive-arrow.reverse line,
+.wheel-drive-arrow.reverse polygon {
+  stroke: var(--sensor-color);
+  fill: var(--sensor-color);
+}
+
+/* Settings dialog: a labeled field with an inline control (loop period). */
+.settings-field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.settings-field-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.settings-field-unit {
+  color: var(--muted);
+}
+
+/* --- Comment (annotation) boxes -------------------------------------------
+   Inert explanatory notes drawn behind the nodes. Gray on purpose so they
+   read as marginalia rather than as part of the signal-flow graph. */
+.diagram-comment {
+  position: absolute;
+  z-index: 0;
+  /* .diagram-world is pointer-events:none; opt back in like nodes/badges do,
+     or clicks fall through to the canvas (pan) and the textarea can't focus. */
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  background: rgba(144, 140, 126, 0.1);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.diagram-comment-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.15em 0.35em;
+  background: rgba(144, 140, 126, 0.16);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.diagram-comment-grip {
+  color: var(--muted);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.diagram-comment-delete {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.15em;
+  border-radius: 4px;
+}
+
+.diagram-comment-delete:hover {
+  color: var(--text);
+  background: rgba(144, 140, 126, 0.25);
+}
+
+.diagram-comment-text {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.35;
+  padding: 0.35em 0.5em;
+}
+
+.diagram-comment-text::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.diagram-comment-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 50%,
+    var(--muted) 50% 60%,
+    transparent 60% 75%,
+    var(--muted) 75% 85%,
+    transparent 85%
+  );
+  opacity: 0.6;
+}
+
+.diagram-comment-resize:hover {
+  opacity: 1;
+}

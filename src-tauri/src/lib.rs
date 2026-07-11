@@ -36,6 +36,10 @@ pub fn run() {
                 Some("CmdOrCtrl+O"),
             )?;
 
+            // On macOS "Settings…" stays in the app menu (below) per platform
+            // convention. Windows/Linux reach settings through the in-app gear
+            // button instead, so it's no longer added to the File menu here.
+            #[cfg(target_os = "macos")]
             let settings_item = MenuItem::with_id(
                 app_handle,
                 "app_settings",
@@ -44,19 +48,12 @@ pub fn run() {
                 Some("CmdOrCtrl+,"),
             )?;
 
-            // On macOS "Settings…" lives in the app menu (below); everywhere
-            // else there's no app menu, so it goes under File.
-            #[allow(unused_mut)]
-            let mut file_builder = SubmenuBuilder::new(app_handle, "File")
+            let file_menu = SubmenuBuilder::new(app_handle, "File")
                 .item(&new_item)
                 .separator()
                 .item(&save_item)
-                .item(&load_item);
-            #[cfg(not(target_os = "macos"))]
-            {
-                file_builder = file_builder.separator().item(&settings_item);
-            }
-            let file_menu = file_builder.build()?;
+                .item(&load_item)
+                .build()?;
 
             let test_sketch_item = MenuItem::with_id(
                 app_handle,

@@ -1,10 +1,16 @@
-import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
+import type {
+  CompoundTypeDefinition,
+  DiagramComment,
+  DiagramConnection,
+  DiagramNode,
+} from '../types/diagram';
 
 export interface DiagramFile {
   loopPeriodMs: number;
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
+  comments: DiagramComment[];
 }
 
 export interface DiagramState {
@@ -12,6 +18,7 @@ export interface DiagramState {
   connections: DiagramConnection[];
   loopPeriodMs: number;
   compoundTypes: CompoundTypeDefinition[];
+  comments: DiagramComment[];
 }
 
 export function serialize(state: DiagramState): string {
@@ -20,6 +27,7 @@ export function serialize(state: DiagramState): string {
     nodes: state.nodes,
     connections: state.connections,
     compoundTypes: state.compoundTypes,
+    comments: state.comments,
   };
   return JSON.stringify(file, null, 2);
 }
@@ -84,6 +92,28 @@ function validateCompoundType(raw: unknown, index: number): CompoundTypeDefiniti
   return raw as unknown as CompoundTypeDefinition;
 }
 
+function validateComment(raw: unknown, index: number): DiagramComment {
+  if (!isObject(raw)) {
+    throw new Error(`comments[${index}] is not an object`);
+  }
+  const { id, x, y, width, height, text } = raw;
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error(`comments[${index}].id must be a non-empty string`);
+  }
+  if (
+    typeof x !== 'number' ||
+    typeof y !== 'number' ||
+    typeof width !== 'number' ||
+    typeof height !== 'number'
+  ) {
+    throw new Error(`comments[${index}].x/.y/.width/.height must be numbers`);
+  }
+  if (typeof text !== 'string') {
+    throw new Error(`comments[${index}].text must be a string`);
+  }
+  return raw as unknown as DiagramComment;
+}
+
 export function parse(text: string): DiagramFile {
   let raw: unknown;
   try {
@@ -110,10 +140,16 @@ export function parse(text: string): DiagramFile {
   const compoundTypes = Array.isArray(raw.compoundTypes)
     ? raw.compoundTypes.map(validateCompoundType)
     : [];
+  // comments is optional — files saved before this field was introduced load
+  // as an empty list. Alpha policy: no migration, just a default.
+  const comments = Array.isArray(raw.comments)
+    ? raw.comments.map(validateComment)
+    : [];
   return {
     loopPeriodMs: raw.loopPeriodMs,
     nodes,
     connections,
     compoundTypes,
+    comments,
   };
 }

@@ -93,6 +93,7 @@ function buildDocFrom(state: DiagramState): Y.Doc {
       doc.getMap('nodes'),
       doc.getMap('connections'),
       doc.getMap('compoundTypes'),
+      doc.getMap('comments'),
       doc.getMap('meta'),
       state,
     );

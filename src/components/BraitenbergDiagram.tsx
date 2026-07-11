@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, MouseEvent, PointerEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, OutputPortId } from '../types/diagram';
-import { TYPE_BY_ID, getInputPorts, getOutputPorts, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import {
+  TYPE_BY_ID,
+  getInputPorts,
+  getOutputPorts,
+  DEFAULT_TOF_MAX_MM,
+  DEFAULT_COMMENT_WIDTH,
+  DEFAULT_COMMENT_HEIGHT,
+} from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { NodePalette, NODE_DRAG_MIME } from './NodePalette';
@@ -17,6 +24,7 @@ import { useCompoundEditing } from '../hooks/useCompoundEditing';
 import { useDiagramSnapshot, useDiagramStore, useTraceSnapshot } from '../doc/useDiagramStore';
 import type { DiagramState } from '../lib/diagramFile';
 import { DiagramNodeView } from './DiagramNodeView';
+import { CommentView } from './CommentView';
 import { ConfigPanel } from './ConfigPanel';
 import { CodeDialog, UploadErrorDialog } from './dialogs';
 import { SettingsModal } from './SettingsModal';
@@ -31,8 +39,10 @@ import type { useArduino } from '../hooks/useArduino';
 import { useSerialMonitor } from '../hooks/useSerialMonitor';
 import {
   ChevronDownIcon,
+  CommentIcon,
   GroupIcon,
   SearchIcon,
+  SettingsIcon,
   UngroupIcon,
   WaypointsIcon,
 } from './icons';
@@ -277,7 +287,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // loopPeriodMs) lives in a Yjs-backed store. React reads a referentially
   // stable snapshot; every mutation goes through the store's methods.
   const store = useDiagramStore();
-  const { topNodes, topConnections, compoundTypes, loopPeriodMs } = useDiagramSnapshot(store);
+  const { topNodes, topConnections, compoundTypes, comments, loopPeriodMs } =
+    useDiagramSnapshot(store);
   // Multi-selection for group operations. Click/shift-click on nodes maintain
   // this set; the "Group selection" toolbar action consumes it.
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
@@ -524,6 +535,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       connections: START_CONNECTIONS,
       loopPeriodMs: 20,
       compoundTypes: [],
+      comments: [],
     });
   }, [robotLayout, applyDiagram]);
 
@@ -618,6 +630,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
       compoundTypes: snap.compoundTypes,
+      comments: snap.comments,
     };
   }, [store]);
 
@@ -634,7 +647,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // compound body currently in view — so reload/autosave round-trips
   // independent of which compound the user happens to be editing.
   useDiagramPersistence({
-    state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes },
+    state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes, comments },
     applyDiagram,
     isPristine: isDiagramPristine,
     resetToDefault,
@@ -1256,8 +1269,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       constantValue: nodeType.kind === 'constant' ? 0 : undefined,
       servoPin:
         nodeType.kind === 'output' && nodeType.id !== 'display-tm1637' ? '' : undefined,
-      clkPin: nodeType.id === 'display-tm1637' ? '' : undefined,
-      gpioPin: nodeType.id === 'display-tm1637' ? '' : undefined,
+      // The TM1637's CLK/DIO are fixed kit wiring, so a raw (Advanced-tab)
+      // drop pre-fills the same pins the Basic kit preset does. A preset drop
+      // still overrides these via ...payload.params below.
+      clkPin: nodeType.id === 'display-tm1637' ? '9' : undefined,
+      gpioPin: nodeType.id === 'display-tm1637' ? '10' : undefined,
       xshutPin: nodeType.id === 'sensor-tof' ? '' : undefined,
       maxDistanceMm: nodeType.id === 'sensor-tof' ? DEFAULT_TOF_MAX_MM : undefined,
       brightness:
@@ -1267,6 +1283,26 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       ...payload.params,
     });
   };
+
+  // Drop a fresh comment box at the center of the current viewport. Comments
+  // are top-level only, so this is disabled while a compound body is open.
+  const handleAddComment = useCallback(() => {
+    if (isViewOnly) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const screenCx = rect ? rect.width / 2 : 320;
+    const screenCy = rect ? rect.height / 2 : 220;
+    const x = (screenCx - pan.x) / zoom - DEFAULT_COMMENT_WIDTH / 2;
+    const y = (screenCy - pan.y) / zoom - DEFAULT_COMMENT_HEIGHT / 2;
+    store.stopCapturing();
+    store.addComment({
+      id: makeId('comment'),
+      x,
+      y,
+      width: DEFAULT_COMMENT_WIDTH,
+      height: DEFAULT_COMMENT_HEIGHT,
+      text: '',
+    });
+  }, [store, pan, zoom, isViewOnly, makeId]);
 
   const canConnect = useCallback((fromId: string, toId: string, fromPort?: OutputPortId): boolean => {
     if (fromId === toId) return false;
@@ -1396,6 +1432,26 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div className="toolbar-separator" />
 
         <div className="toolbar-group">
+          <span className="toolbar-group-label">Annotate</span>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={handleAddComment}
+            disabled={isViewOnly || editingPath.length > 0}
+            title={
+              editingPath.length > 0
+                ? 'Comments can only be added on the top-level diagram.'
+                : 'Add a gray explanatory note to the canvas.'
+            }
+          >
+            <CommentIcon />
+            <span>Comment</span>
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group">
           <span className="toolbar-group-label">Simulate</span>
           <button
             className={`toolbar-btn toolbar-secondary toolbar-trace ${traceMode ? 'active' : ''}`}
@@ -1427,18 +1483,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
         <div className="toolbar-group">
           <span className="toolbar-group-label">Sketch</span>
-          <label className="toolbar-setting" title="Delay between sensor reads in the generated Arduino loop">
-            <span className="toolbar-setting-label">Loop</span>
-            <NumberInput
-              min={1}
-              max={1000}
-              step={1}
-              integer
-              value={loopPeriodMs}
-              onChange={(value) => store.setLoopPeriodMs(value)}
-            />
-            <span className="toolbar-setting-unit">ms</span>
-          </label>
           <div className="toolbar-split" ref={splitMenuRef}>
             <button
               type="button"
@@ -1632,6 +1676,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           followingHost={followingHost}
           onToggleFollowHost={toggleFollowHost}
         />
+
+        <button
+          type="button"
+          className="toolbar-btn toolbar-secondary toolbar-settings"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+          aria-label="Settings"
+        >
+          <SettingsIcon />
+        </button>
       </div>
 
       <div
@@ -1722,6 +1776,65 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           }}
           aria-hidden="true"
         />
+
+        {/* Per-wheel drive indicator: in trace mode an arrow grows from each
+            wheel's center, forward (up) for a positive motor signal and reverse
+            (down) for a negative one, scaled by magnitude. Purely a readout of
+            the motor's trace value — real motion still needs the robot. */}
+        {traceMode &&
+          ([
+            ['motor-left', robotLayout.leftWheelCx, robotLayout.leftWheelCy] as const,
+            ['motor-right', robotLayout.rightWheelCx, robotLayout.rightWheelCy] as const,
+          ]).map(([motorId, wheelCx, wheelCy]) => {
+            const raw = traceResult.nodeValues[motorId];
+            if (raw === undefined) return null;
+            const n = Math.max(-1, Math.min(1, raw / 100));
+            if (Math.abs(n) < 0.02) return null;
+            const w = robotLayout.wheelWidth * zoom;
+            const h = robotLayout.wheelHeight * zoom;
+            const cx = w / 2;
+            const cy = h / 2;
+            const tipY = cy - n * (h / 2) * 0.82;
+            const dir = n > 0 ? 1 : -1; // +1 up (forward), -1 down (reverse)
+            const headLen = Math.min(w, h) * 0.22;
+            const headHalf = w * 0.2;
+            const shaftEndY = tipY + dir * headLen;
+            return (
+              <svg
+                key={`${motorId}-drive`}
+                className={`wheel-drive-arrow ${n > 0 ? 'forward' : 'reverse'}`}
+                style={{
+                  left: `${wheelCx * zoom}px`,
+                  top: `${wheelCy * zoom}px`,
+                  width: `${w}px`,
+                  height: `${h}px`,
+                }}
+                aria-hidden="true"
+              >
+                <line x1={cx} y1={cy} x2={cx} y2={shaftEndY} strokeWidth={Math.max(2, w * 0.12)} />
+                <polygon
+                  points={`${cx},${tipY} ${cx - headHalf},${shaftEndY} ${cx + headHalf},${shaftEndY}`}
+                />
+              </svg>
+            );
+          })}
+
+        {/* Comments render first so they sit behind the links and nodes.
+            Top-level only — hidden while a compound body is open. */}
+        {editingPath.length === 0 &&
+          comments.map((comment) => (
+            <CommentView
+              key={comment.id}
+              comment={comment}
+              zoom={zoom}
+              readOnly={isViewOnly}
+              onMove={(id, x, y) => store.moveComment(id, x, y)}
+              onResize={(id, width, height) => store.patchComment(id, { width, height })}
+              onChangeText={(id, text) => store.patchComment(id, { text })}
+              onDelete={(id) => store.removeComment(id)}
+              onInteractStart={() => store.stopCapturing()}
+            />
+          ))}
 
         <svg className="diagram-links" aria-hidden="true">
           {connectionPaths.map((connection) => {
@@ -2022,6 +2135,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         onClose={() => setShowSettings(false)}
         settings={appSettings}
         onChange={updateAppSettings}
+        loopPeriodMs={loopPeriodMs}
+        onLoopPeriodChange={(value) => store.setLoopPeriodMs(value)}
       />
 
       {showSerialMonitor && selectedBoard && (
