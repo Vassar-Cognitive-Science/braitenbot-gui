@@ -55,6 +55,25 @@ pub fn run() {
                 .item(&load_item)
                 .build()?;
 
+            let view_home_item = MenuItem::with_id(
+                app_handle,
+                "view_home",
+                "Go to Main View",
+                true,
+                Some("CmdOrCtrl+0"),
+            )?;
+            let view_check_item = MenuItem::with_id(
+                app_handle,
+                "view_check",
+                "Check for Errors / Warnings",
+                true,
+                None::<&str>,
+            )?;
+            let view_menu = SubmenuBuilder::new(app_handle, "View")
+                .item(&view_home_item)
+                .item(&view_check_item)
+                .build()?;
+
             let test_sketch_item = MenuItem::with_id(
                 app_handle,
                 "hardware_test",
@@ -87,7 +106,11 @@ pub fn run() {
             {
                 builder = builder.item(&app_menu);
             }
-            builder.item(&file_menu).item(&hardware_menu).build()
+            builder
+                .item(&file_menu)
+                .item(&view_menu)
+                .item(&hardware_menu)
+                .build()
         })
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "diagram_new" => {
@@ -98,6 +121,12 @@ pub fn run() {
             }
             "diagram_load" => {
                 let _ = app_handle.emit("menu://load", ());
+            }
+            "view_home" => {
+                let _ = app_handle.emit("menu://view-home", ());
+            }
+            "view_check" => {
+                let _ = app_handle.emit("menu://view-check", ());
             }
             "hardware_test" => {
                 let _ = app_handle.emit("menu://upload-test-sketch", ());

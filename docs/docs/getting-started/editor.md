@@ -108,10 +108,6 @@ The toolbar is divided into functional groups:
 
 (The ▶ pulse duration used in trace mode is set in **Settings** — see below.)
 
-### View
-- **Home** — recenter the canvas and reset the zoom to 100%
-- **Check** — open the diagram check: a list of everything worth fixing, split into problems that block upload and warnings worth a look (unnamed or unconnected nodes, pin conflicts, and so on). A badge on the button shows the current count, so you can spot issues without running codegen.
-
 ### Sketch
 - **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
 
@@ -127,6 +123,16 @@ The Arduino **loop period** is no longer in this group — it now lives in **Set
 
 ### Settings
 - **⚙ (gear)** — open the Settings dialog. It holds the **connection-weight cap** (keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights), the **sketch loop period** (1–1000 ms — how often the generated loop reads sensors and updates motors), and the **trace pulse duration** (10–5000 ms — how long the ▶ button holds a sensor at full value in trace mode). The loop period is saved with the diagram. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
+
+## Application menu (desktop app)
+
+The desktop build adds a native menu bar with the usual app-level actions:
+
+- **File** — New Diagram, Save…, Load…
+- **View**
+  - **Go to Main View** (`Ctrl/Cmd+0`) — recenter the canvas and reset the zoom to 100%
+  - **Check for Errors / Warnings** — open the diagram check: a list of everything worth fixing, split into problems that block upload (**errors**) and things worth a look (**warnings** — unnamed or unconnected nodes, pin conflicts, and so on). Nothing needs to be uploaded to see it.
+- **Hardware** — Upload Test Sketch
 
 ## Config panel (right sidebar)
 

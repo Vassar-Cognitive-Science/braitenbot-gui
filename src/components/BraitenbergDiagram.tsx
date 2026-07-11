@@ -40,11 +40,9 @@ import {
   ChevronDownIcon,
   CommentIcon,
   GroupIcon,
-  HomeIcon,
   SearchIcon,
   SettingsIcon,
   UngroupIcon,
-  WarningIcon,
   WaypointsIcon,
 } from './icons';
 import type { PrimaryAction } from '../lib/primaryAction';
@@ -869,6 +867,29 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     return () => unlisten?.();
   }, [tauriAvailable]);
 
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://view-home', () => {
+      breakFollow();
+      resetView();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable, breakFollow, resetView]);
+
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://view-check', () => {
+      setShowDiagnostics(true);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable]);
+
   const makeId = useCallback((prefix: string): string => {
     const uuid =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -1472,39 +1493,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
           {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
-        </div>
-
-        <div className="toolbar-separator" />
-
-        <div className="toolbar-group">
-          <span className="toolbar-group-label">View</span>
-          <button
-            type="button"
-            className="toolbar-btn toolbar-secondary"
-            onClick={() => { breakFollow(); resetView(); }}
-            title="Recenter the canvas and reset zoom to 100%."
-          >
-            <HomeIcon />
-            <span>Home</span>
-          </button>
-          <button
-            type="button"
-            className={`toolbar-btn toolbar-secondary toolbar-checkup ${
-              diagnostics.length > 0 ? 'has-issues' : ''
-            }`.trim()}
-            onClick={() => setShowDiagnostics(true)}
-            title={
-              diagnostics.length > 0
-                ? `${diagnostics.length} thing${diagnostics.length === 1 ? '' : 's'} to check (e.g. unnamed or unconnected nodes).`
-                : 'Check the diagram for problems.'
-            }
-          >
-            <WarningIcon />
-            <span>Check</span>
-            {diagnostics.length > 0 && (
-              <span className="toolbar-badge">{diagnostics.length}</span>
-            )}
-          </button>
         </div>
 
         <div className="toolbar-separator" />
