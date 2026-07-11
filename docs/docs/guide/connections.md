@@ -44,9 +44,10 @@ The editor refuses connections that wouldn't make sense:
 
 ## Weights
 
-Every connection has a **weight** between -1 and +1, set with a slider or numeric
-input in the config panel. In the default *linear* mode the signal is simply
-scaled:
+Every connection has a **weight**, set with a slider and numeric input in the
+config panel. By default weights are capped to the conventional Braitenberg
+range of **-1 to +1** (you can lift the cap in Settings to use any value). In the
+default *linear* mode the signal is simply scaled:
 
 ```
 output = source signal × weight
@@ -76,6 +77,8 @@ type:
 |-----------|-------------|
 | Summation | Adds all weighted inputs: `Σ(inputᵢ × weightᵢ)` |
 | Multiply | Multiplies all weighted inputs together |
+| Minimum | Smallest weighted input: `min(inputᵢ × weightᵢ)` |
+| Maximum | Largest weighted input: `max(inputᵢ × weightᵢ)` |
 | Threshold | Single input only |
 | Delay | Single input only |
 | Servos / Wheels | Single input only |
@@ -103,8 +106,8 @@ Here the order is:
 
 On the robot, this all happens in a tight loop: read every sensor, compute each
 node in order, write the wheel outputs, then wait until the loop period has
-elapsed (default **20 ms = 50 Hz**). The loop period is configurable in the
-toolbar (1–1000 ms); shorter periods respond faster but leave less time for
+elapsed (default **20 ms = 50 Hz**). The loop period is configurable in
+**Settings** (1–1000 ms); shorter periods respond faster but leave less time for
 computation.
 
 ## Cycles and the delay node

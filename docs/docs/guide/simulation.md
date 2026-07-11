@@ -33,7 +33,7 @@ When tracing is active, each sensor gets interactive controls:
 
 ### Pulse injection
 
-Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for 200 ms, then returns to the slider value. This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
+Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for the configured pulse duration, then returns to the slider value. The duration is set with the **Pulse** field that appears next to **Trace Signal Flow** in the toolbar while trace mode is on (default 200 ms). This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
 
 ## Signal visualization
 
@@ -48,6 +48,10 @@ Connection badges show the signal after weight/transfer application. The connect
 - **Color**: interpolates from green (positive) through neutral to red/rust (negative)
 - **Width**: thicker lines carry stronger signals
 - **Opacity**: active connections are more opaque
+
+### Wheel drive indicator
+
+Each wheel shows an arrow that grows from its center: forward (green) for a positive motor signal, reverse (tan) for a negative one, scaled by magnitude. It's a quick read on which way each wheel would turn and how fast — the same value shown on the motor node, made spatial. (It indicates drive only; to see the robot actually move, upload to hardware.)
 
 ### Oscilloscope
 

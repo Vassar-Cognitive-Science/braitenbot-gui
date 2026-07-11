@@ -229,6 +229,40 @@ Since signals range from -100 to 100, multiplying two raw signals produces value
 
 ---
 
+### Minimum
+
+| Property | Value |
+|----------|-------|
+| Type ID | `compute-min` |
+| Kind | compute |
+| Inputs | unlimited |
+| Outputs | 1 |
+
+Outputs the **smallest** of its weighted inputs. Useful for "respond to the nearest/weakest" behaviors, or as a ceiling when one input is a constant (the output can never rise above that constant). With no inputs the output is 0.
+
+**Formula:** `output = min(input_i × weight_i)`
+
+No configuration beyond connection weights.
+
+---
+
+### Maximum
+
+| Property | Value |
+|----------|-------|
+| Type ID | `compute-max` |
+| Kind | compute |
+| Inputs | unlimited |
+| Outputs | 1 |
+
+Outputs the **largest** of its weighted inputs. Useful for "respond to the strongest" behaviors, or as a floor when one input is a constant (the output can never fall below that constant). With no inputs the output is 0.
+
+**Formula:** `output = max(input_i × weight_i)`
+
+No configuration beyond connection weights.
+
+---
+
 ### Oscillator
 
 | Property | Value |

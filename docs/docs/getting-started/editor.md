@@ -24,19 +24,35 @@ The BraitenBot editor is a single-screen workspace with four main areas.
 
 ## Node palette (left sidebar)
 
-The palette lists every node type you can add to your diagram, organized into collapsible sections:
+The palette has two tabs, **Basic** and **Advanced**, so you can start simple and reach for the full toolbox only when you need it. Your choice is remembered between sessions.
+
+### Basic tab
+
+The Basic tab lists the reference kit's hardware by friendly name, with pins and options pre-filled to match the standard build:
+
+- **Kit sensors** — Left/Right Photocell, four Bump switches, Color Sensor, Left/Right ToF Distance
+- **Kit outputs** — 7-Segment Display
+- **Compute** — a starter set: Threshold, Summation, Multiply, Delay
+
+Dragging **Left Photocell**, for example, drops an analog sensor already set to pin A0 with its signal inverted — so you don't have to type pin numbers for standard kit parts.
+
+### Advanced tab
+
+The Advanced tab lists **every** node type, grouped into collapsible sections:
 
 - **Sensors** — Analog Sensor, Digital Sensor, Color Sensor, ToF Distance
-- **Compute** — Threshold, Delay, Summation, Multiply, Oscillator, Noise, Constant
+- **Compute** — Threshold, Delay, Summation, Multiply, Minimum, Maximum, Oscillator, Noise, Constant
 - **Outputs** — Continuous Servo, Positional Servo, Digital Output, 7-Segment Display
 - **Compounds** — your custom compound node types (appears when you've created at least one)
+
+Nodes dropped from the Advanced tab are generic: you assign their pins yourself in the config panel (the field shows a suggested pin as a placeholder). Fixed-wiring parts still pre-fill — the 7-Segment Display comes in with CLK 9 / DIO 10.
 
 Each section is color-coded to match the node kind:
 - Orange for sensors
 - Blue for compute
 - Green for outputs
 
-**To add a node:** drag it from the palette and drop it onto the canvas.
+**To add a node:** drag it from either tab and drop it onto the canvas.
 
 The palette is resizable: drag the handle on its right edge to make it wider or narrower. Double-clicking the handle resets it to the default width.
 
@@ -74,6 +90,8 @@ The editor prevents invalid connections: you can't connect a node to itself, exc
 
 The robot appears as a circle in the center of the canvas with two wheels (rounded rectangles) on the left and right edges. The two motor nodes (left wheel, right wheel) are always snapped to the wheel positions — you can't drag them away from the robot body. All other nodes can be positioned freely.
 
+In **trace mode**, each wheel also shows a drive arrow that grows from the wheel's center: it points forward (green) for a positive motor signal and reverses (tan) for a negative one, scaled by magnitude — a quick read on which way each wheel would turn. (It's an indicator only; to actually watch the robot move, upload to the real hardware.)
+
 ## Canvas toolbar (top)
 
 The toolbar is divided into functional groups:
@@ -82,16 +100,28 @@ The toolbar is divided into functional groups:
 - **Group** — select 2 or more nodes, then click to combine them into a compound node
 - **Ungroup** — select a compound instance to expand it back into its constituent nodes
 
+### Annotate
+- **Comment** — drop a gray note box on the canvas to explain what a cluster of nodes is doing. Comments sit behind the nodes, are editable, movable, and resizable, and are saved with the diagram — but they carry no signal and are ignored when generating code. (Comments live on the top-level diagram only, so the button is disabled while you're editing inside a compound.)
+
 ### Simulate
 - **Trace Signal Flow** — toggle the real-time signal simulation overlay
+- **Pulse** — while trace mode is on, sets how long (ms) the ▶ button holds a digital-sensor pulse high
 
 ### Sketch
-- **Loop period** — set the Arduino main loop timing (1–1000 ms)
 - **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
+
+The Arduino **loop period** is no longer in this group — it now lives in **Settings** (see below).
 
 ### Device
 - **Board selector** — dropdown showing detected Arduino boards
 - **Refresh** — re-scan serial ports
+- **Monitor** — open the serial monitor to watch live output from the board
+
+### Share
+- **Share** — start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
+
+### Settings
+- **⚙ (gear)** — open the Settings dialog. It holds the **connection-weight cap** (keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights) and the **sketch loop period** (1–1000 ms — how often the generated loop reads sensors and updates motors). The loop period is saved with the diagram. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
 
 ## Config panel (right sidebar)
 
@@ -109,7 +139,7 @@ Depending on the node type, you'll see:
 ### Connection config
 
 - **Transfer function** — choose between Linear (simple weight) or Non-linear (custom curve)
-- **Weight** — for linear mode, a slider and numeric input from -1 to +1
+- **Weight** — for linear mode, a numeric input plus (when the weight cap is on) a −1…+1 slider. Turn the cap off in Settings to enter any weight; the slider then hides and only the numeric field remains.
 - **Curve editor** — for non-linear mode, an interactive point editor
 - **Delete Connection** button
 
@@ -130,6 +160,7 @@ When signal tracing is active (toggled with **Trace Signal Flow**), a collapsibl
 | **Ctrl/Cmd + Scroll** | Zoom in/out (0.3× to 3×) |
 | **Delete** or **Backspace** | Delete the selected node or connection |
 | **Ctrl/Cmd + Z** | Undo |
+| **Ctrl/Cmd + Shift + Z** or **Ctrl/Cmd + Y** | Redo |
 | **Double-click** compound | Enter the compound body editor |
 
 There are no keyboard shortcuts for toolbar actions (Group, Trace, Upload to robot / Generate) — those are buttons, described above.

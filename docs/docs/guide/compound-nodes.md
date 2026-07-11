@@ -39,7 +39,7 @@ Inside the body, you'll see:
 
 You can add, remove, and rewire nodes inside the body just like the main canvas. Changes apply to all instances of this compound type.
 
-Click the breadcrumb or press the back arrow to return to the main diagram.
+Click the **Top** segment (or any earlier segment) in the breadcrumb trail to return to the main diagram.
 
 ## Using compound instances
 
