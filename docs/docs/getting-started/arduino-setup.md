@@ -67,6 +67,10 @@ Then restart the app.
   ```
   Then log out and back in.
 
+### Windows: "USB driver missing"
+
+On Windows, a board can be plugged in but stuck without a USB driver — Windows sees the device but can't open a serial port for it. When BraitenBot detects this, a **⚠ USB driver missing — install** button appears in the **Device** group. Click it to run the Arduino USB driver installer, then accept the Windows administrator prompt. Once the driver installs, the board shows up in the dropdown.
+
 ### Upload fails
 
 - Check that no other program (Arduino IDE, a serial monitor) has the port open — two programs can't use the same serial port at once
