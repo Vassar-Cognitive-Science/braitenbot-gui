@@ -86,6 +86,68 @@ export function CodeDialog({ open, onClose, errors, generatedCode, onCopy, onDow
   );
 }
 
+interface DiagnosticsDialogProps {
+  open: boolean;
+  onClose: () => void;
+  issues: ValidationError[];
+}
+
+/**
+ * Read-only list of the diagram's current validation issues, opened from the
+ * View → Check button. Errors (things that block upload) are shown first, then
+ * warnings (things worth a look but still buildable).
+ */
+export function DiagnosticsDialog({ open, onClose, issues }: DiagnosticsDialogProps) {
+  const dialogRef = useDialogOpen(open);
+  const errors = issues.filter((i) => i.severity === 'error');
+  const warnings = issues.filter((i) => i.severity === 'warning');
+  return (
+    <dialog
+      ref={dialogRef}
+      className="code-dialog"
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === dialogRef.current) onClose();
+      }}
+    >
+      <div className="code-dialog-inner">
+        <div className="code-dialog-header">
+          <h2>Diagram check</h2>
+          <button type="button" className="config-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        {issues.length === 0 && (
+          <p className="diagnostics-clean">No problems found — this diagram is ready to upload.</p>
+        )}
+
+        {errors.length > 0 && (
+          <>
+            <h3 className="diagnostics-section">Must fix before upload</h3>
+            <ul className="code-errors">
+              {errors.map((err, i) => (
+                <li key={`e-${i}`} className="code-error-error">{err.message}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {warnings.length > 0 && (
+          <>
+            <h3 className="diagnostics-section">Worth a look</h3>
+            <ul className="code-errors">
+              {warnings.map((err, i) => (
+                <li key={`w-${i}`} className="code-error-warning">{err.message}</li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </dialog>
+  );
+}
+
 interface UploadErrorDialogProps {
   open: boolean;
   onClose: () => void;

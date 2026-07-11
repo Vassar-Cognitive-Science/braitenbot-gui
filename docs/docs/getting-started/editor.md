@@ -105,7 +105,12 @@ The toolbar is divided into functional groups:
 
 ### Simulate
 - **Trace Signal Flow** — toggle the real-time signal simulation overlay
-- **Pulse** — while trace mode is on, sets how long (ms) the ▶ button holds a digital-sensor pulse high
+
+(The ▶ pulse duration used in trace mode is set in **Settings** — see below.)
+
+### View
+- **Home** — recenter the canvas and reset the zoom to 100%
+- **Check** — open the diagram check: a list of everything worth fixing, split into problems that block upload and warnings worth a look (unnamed or unconnected nodes, pin conflicts, and so on). A badge on the button shows the current count, so you can spot issues without running codegen.
 
 ### Sketch
 - **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
@@ -121,7 +126,7 @@ The Arduino **loop period** is no longer in this group — it now lives in **Set
 - **Share** — start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
 
 ### Settings
-- **⚙ (gear)** — open the Settings dialog. It holds the **connection-weight cap** (keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights) and the **sketch loop period** (1–1000 ms — how often the generated loop reads sensors and updates motors). The loop period is saved with the diagram. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
+- **⚙ (gear)** — open the Settings dialog. It holds the **connection-weight cap** (keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights), the **sketch loop period** (1–1000 ms — how often the generated loop reads sensors and updates motors), and the **trace pulse duration** (10–5000 ms — how long the ▶ button holds a sensor at full value in trace mode). The loop period is saved with the diagram. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
 
 ## Config panel (right sidebar)
 

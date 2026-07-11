@@ -1323,29 +1323,25 @@ select,
   gap: 0.35rem;
 }
 
-.toolbar-setting {
-  display: flex;
+/* View → Check button: a count badge and a warning tint when issues exist. */
+.toolbar-badge {
+  display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-
-.toolbar-setting input[type='number'] {
-  width: 52px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: #14150f;
-  padding: 0.25rem 0.35rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text);
-}
-
-.toolbar-setting-unit {
-  font-family: var(--font-mono);
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: rgba(241, 196, 15, 0.85);
+  color: #1a1a12;
   font-size: var(--text-xs);
-  color: var(--muted);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar-checkup.has-issues {
+  border-color: rgba(241, 196, 15, 0.45);
+  color: #f1c40f;
 }
 
 .toolbar-board-select {
@@ -1563,6 +1559,29 @@ select,
   color: var(--muted);
   font-size: var(--text-sm);
   text-align: center;
+}
+
+.diagnostics-section {
+  margin: 0.6rem 0 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diagnostics-section:first-of-type {
+  margin-top: 0;
+}
+
+.diagnostics-clean {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 3px;
+  background: rgba(46, 204, 113, 0.1);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+  font-size: var(--text-sm);
 }
 
 /* Trace mode */

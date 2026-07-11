@@ -13,10 +13,17 @@ export interface AppSettings {
    * stronger-than-unit coupling.
    */
   capWeights: boolean;
+  /**
+   * How long (ms) the ▶ pulse button holds a sensor at full value in trace
+   * mode. A local UI preference — the duration is baked into each shared pulse
+   * event as ticks, so peers don't need to agree on it.
+   */
+  pulseDurationMs: number;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   capWeights: true,
+  pulseDurationMs: 200,
 };
 
 const STORAGE_KEY = 'braitenbot-gui:settings:v1';
@@ -32,6 +39,10 @@ export function loadAppSettings(): AppSettings {
         typeof parsed.capWeights === 'boolean'
           ? parsed.capWeights
           : DEFAULT_APP_SETTINGS.capWeights,
+      pulseDurationMs:
+        typeof parsed.pulseDurationMs === 'number' && Number.isFinite(parsed.pulseDurationMs)
+          ? parsed.pulseDurationMs
+          : DEFAULT_APP_SETTINGS.pulseDurationMs,
     };
   } catch {
     return DEFAULT_APP_SETTINGS;

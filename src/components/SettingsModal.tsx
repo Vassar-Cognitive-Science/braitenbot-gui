@@ -103,6 +103,30 @@ export function SettingsModal({
             </span>
           </label>
         </div>
+
+        <div className="settings-section">
+          <label className="settings-field">
+            <span className="settings-toggle-text">
+              <span className="settings-toggle-label">Trace pulse duration</span>
+              <span className="settings-toggle-hint">
+                How long the ▶ pulse button holds a sensor at full value in trace
+                mode. Longer pulses are easier to watch propagate through the
+                diagram.
+              </span>
+            </span>
+            <span className="settings-field-control">
+              <NumberInput
+                min={10}
+                max={5000}
+                step={10}
+                integer
+                value={settings.pulseDurationMs}
+                onChange={(value) => onChange({ pulseDurationMs: value })}
+              />
+              <span className="settings-field-unit">ms</span>
+            </span>
+          </label>
+        </div>
       </div>
     </dialog>
   );

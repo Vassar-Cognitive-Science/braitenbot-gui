@@ -83,7 +83,7 @@ describe('validateGraph', () => {
     // An unconnected output is allowed (e.g. testing the display with the
     // wheels unsignaled) — surfaced as a warning so it never blocks the build.
     const unreachable = errors.find(
-      (e) => e.message.includes('Right Wheel') && e.message.includes('not connected'),
+      (e) => e.message.includes('Right Wheel') && e.message.includes('no signal reaching it'),
     );
     expect(unreachable).toBeDefined();
     expect(unreachable?.severity).toBe('warning');
@@ -540,7 +540,7 @@ describe('validateGraph', () => {
     ];
     const errors = validateGraph(nodes, connections, [oscSrc]);
     expect(errors.some((e) => e.message.includes('no source nodes'))).toBe(false);
-    expect(errors.some((e) => e.message.includes('not connected to any sensor'))).toBe(false);
+    expect(errors.some((e) => e.message.includes('no signal reaching it'))).toBe(false);
     expect(errors.filter((e) => e.severity === 'error')).toHaveLength(0);
   });
 
@@ -593,7 +593,7 @@ describe('validateGraph', () => {
     const connections = [makeConnection()]; // compute not connected
     const errors = validateGraph(nodes, connections);
     const orphanWarning = errors.find(
-      (e) => e.severity === 'warning' && e.message.includes('not connected'),
+      (e) => e.severity === 'warning' && e.message.includes('needs an'),
     );
     expect(orphanWarning).toBeDefined();
   });

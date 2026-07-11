@@ -35,8 +35,9 @@ describe('appSettings persistence', () => {
   });
 
   it('round-trips a saved setting', () => {
-    saveAppSettings({ capWeights: false });
+    saveAppSettings({ capWeights: false, pulseDurationMs: 350 });
     expect(loadAppSettings().capWeights).toBe(false);
+    expect(loadAppSettings().pulseDurationMs).toBe(350);
   });
 
   it('falls back to the default on malformed JSON', () => {

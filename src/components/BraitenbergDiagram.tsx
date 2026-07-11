@@ -14,7 +14,6 @@ import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { NodePalette, NODE_DRAG_MIME } from './NodePalette';
 import type { NodeDragPayload } from './NodePalette';
-import { NumberInput } from './NumberInput';
 import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { useScopeSimulation } from '../hooks/useScopeSimulation';
 import { Oscilloscope } from './Oscilloscope';
@@ -26,7 +25,7 @@ import type { DiagramState } from '../lib/diagramFile';
 import { DiagramNodeView } from './DiagramNodeView';
 import { CommentView } from './CommentView';
 import { ConfigPanel } from './ConfigPanel';
-import { CodeDialog, UploadErrorDialog } from './dialogs';
+import { CodeDialog, DiagnosticsDialog, UploadErrorDialog } from './dialogs';
 import { SettingsModal } from './SettingsModal';
 import { useAppSettings } from '../settings/appSettings';
 import { SerialMonitor } from './SerialMonitor';
@@ -41,9 +40,11 @@ import {
   ChevronDownIcon,
   CommentIcon,
   GroupIcon,
+  HomeIcon,
   SearchIcon,
   SettingsIcon,
   UngroupIcon,
+  WarningIcon,
   WaypointsIcon,
 } from './icons';
 import type { PrimaryAction } from '../lib/primaryAction';
@@ -326,6 +327,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [showUploadErrorDialog, setShowUploadErrorDialog] = useState(false);
   const [appSettings, updateAppSettings] = useAppSettings();
   const [showSettings, setShowSettings] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  // Live validation of the canonical top-level diagram, so the View → Check
+  // button can always show the current problem count without running codegen.
+  const diagnostics = useMemo(
+    () => validateGraph(topNodes, topConnections, compoundTypes),
+    [topNodes, topConnections, compoundTypes],
+  );
   // Split-button primary action ("upload" vs "generate"), persisted so the
   // toolbar's main button remembers the user's last choice across sessions.
   const [primaryAction, setPrimaryAction] = useState<PrimaryAction>(() => loadPrimaryAction());
@@ -432,10 +440,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const traceResult = scope.traceResult;
 
   const [pulsingId, setPulsingId] = useState<string | null>(null);
-  // Duration of the "▶" sensor pulse in trace mode. Local UI preference: the
-  // duration is baked into each shared pulse event as durationTicks, so peers
-  // don't need to agree on this setting.
-  const [pulseDurationMs, setPulseDurationMs] = useState(200);
+  // Duration of the "▶" sensor pulse in trace mode. A local UI preference held
+  // in app settings (edited from the Settings dialog): the duration is baked
+  // into each shared pulse event as durationTicks, so peers don't need to agree
+  // on it.
+  const pulseDurationMs = appSettings.pulseDurationMs;
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number>(0);
   const showToast = useCallback((msg: string) => {
@@ -1462,21 +1471,40 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             <WaypointsIcon />
             <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
-          {traceMode && (
-            <label className="toolbar-setting" title="How long the ▶ button holds a sensor pulse">
-              <span className="toolbar-setting-label">Pulse</span>
-              <NumberInput
-                min={10}
-                max={5000}
-                step={10}
-                integer
-                value={pulseDurationMs}
-                onChange={setPulseDurationMs}
-              />
-              <span className="toolbar-setting-unit">ms</span>
-            </label>
-          )}
           {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group">
+          <span className="toolbar-group-label">View</span>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={() => { breakFollow(); resetView(); }}
+            title="Recenter the canvas and reset zoom to 100%."
+          >
+            <HomeIcon />
+            <span>Home</span>
+          </button>
+          <button
+            type="button"
+            className={`toolbar-btn toolbar-secondary toolbar-checkup ${
+              diagnostics.length > 0 ? 'has-issues' : ''
+            }`.trim()}
+            onClick={() => setShowDiagnostics(true)}
+            title={
+              diagnostics.length > 0
+                ? `${diagnostics.length} thing${diagnostics.length === 1 ? '' : 's'} to check (e.g. unnamed or unconnected nodes).`
+                : 'Check the diagram for problems.'
+            }
+          >
+            <WarningIcon />
+            <span>Check</span>
+            {diagnostics.length > 0 && (
+              <span className="toolbar-badge">{diagnostics.length}</span>
+            )}
+          </button>
         </div>
 
         <div className="toolbar-separator" />
@@ -2128,6 +2156,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         open={showUploadErrorDialog}
         onClose={() => setShowUploadErrorDialog(false)}
         result={lastResult}
+      />
+
+      <DiagnosticsDialog
+        open={showDiagnostics}
+        onClose={() => setShowDiagnostics(false)}
+        issues={diagnostics}
       />
 
       <SettingsModal

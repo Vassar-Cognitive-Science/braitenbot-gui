@@ -33,7 +33,7 @@ When tracing is active, each sensor gets interactive controls:
 
 ### Pulse injection
 
-Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for the configured pulse duration, then returns to the slider value. The duration is set with the **Pulse** field that appears next to **Trace Signal Flow** in the toolbar while trace mode is on (default 200 ms). This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
+Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for the configured pulse duration, then returns to the slider value. The duration is the **trace pulse duration** set in **Settings** (the ⚙ gear in the toolbar; default 200 ms). This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
 
 ## Signal visualization
 
