@@ -1343,6 +1343,36 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     });
   }, [store, pan, zoom, isViewOnly, makeId]);
 
+  // Add an input/output port anchor to the compound body currently being
+  // edited. Contextual to a compound body — the buttons that call this live in
+  // the breadcrumb bar, which is only shown while a body is open. Inputs land on
+  // the left, outputs on the right (their natural signal sides), and repeated
+  // adds stagger downward so they don't stack exactly.
+  const addPort = useCallback(
+    (type: 'compound-input' | 'compound-output') => {
+      if (isViewOnly || editingPath.length === 0) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const screenCx = rect ? rect.width / 2 : 320;
+      const screenCy = rect ? rect.height / 2 : 220;
+      const sideOffset = type === 'compound-input' ? -180 : 180;
+      const count = nodes.filter((node) => node.type === type).length;
+      const x = (screenCx - pan.x) / zoom - (NODE_W / 2) * blockScale + sideOffset;
+      const y =
+        (screenCy - pan.y) / zoom -
+        (NODE_H / 2) * blockScale +
+        count * (NODE_H * blockScale + 16);
+      store.stopCapturing();
+      store.addNode({
+        id: makeId(type),
+        type,
+        label: type === 'compound-input' ? `Input ${count + 1}` : `Output ${count + 1}`,
+        x,
+        y,
+      });
+    },
+    [store, pan, zoom, blockScale, nodes, isViewOnly, editingPath.length, makeId],
+  );
+
   const canConnect = useCallback((fromId: string, toId: string, fromPort?: OutputPortId): boolean => {
     if (fromId === toId) return false;
     const { nodeMap, connections } = handlerStateRef.current;
@@ -1750,6 +1780,26 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </span>
               );
             })}
+            {!isViewOnly && (
+              <div className="diagram-breadcrumb-ports">
+                <button
+                  type="button"
+                  className="diagram-breadcrumb-port-btn"
+                  onClick={() => addPort('compound-input')}
+                  title="Add an input port to this compound — signals flow in from the outer diagram."
+                >
+                  + Input
+                </button>
+                <button
+                  type="button"
+                  className="diagram-breadcrumb-port-btn"
+                  onClick={() => addPort('compound-output')}
+                  title="Add an output port to this compound — its value is exposed to the outer diagram."
+                >
+                  + Output
+                </button>
+              </div>
+            )}
           </div>
         )}
         {traceMode && (
@@ -1802,10 +1852,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           aria-hidden="true"
         />
 
-        {/* Per-wheel drive indicator: in trace mode an arrow grows from each
-            wheel's center, forward (up) for a positive motor signal and reverse
-            (down) for a negative one, scaled by magnitude. Purely a readout of
-            the motor's trace value — real motion still needs the robot. */}
+        {/* Per-wheel drive indicator: in trace mode an arrow grows straight out
+            of each motor block — up from the block's top edge for a positive
+            (forward) signal, down from the bottom edge for a negative (reverse)
+            one, scaled by magnitude. Drawn clear of the block so its label stays
+            readable. Purely a readout of the motor's trace value — real motion
+            still needs the robot. */}
         {traceMode &&
           ([
             ['motor-left', robotLayout.leftWheelCx, robotLayout.leftWheelCy] as const,
@@ -1813,30 +1865,43 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           ]).map(([motorId, wheelCx, wheelCy]) => {
             const raw = traceResult.nodeValues[motorId];
             if (raw === undefined) return null;
-            const n = Math.max(-1, Math.min(1, raw / 100));
-            if (Math.abs(n) < 0.02) return null;
-            const w = robotLayout.wheelWidth * zoom;
-            const h = robotLayout.wheelHeight * zoom;
-            const cx = w / 2;
-            const cy = h / 2;
-            const tipY = cy - n * (h / 2) * 0.82;
-            const dir = n > 0 ? 1 : -1; // +1 up (forward), -1 down (reverse)
-            const headLen = Math.min(w, h) * 0.22;
-            const headHalf = w * 0.2;
-            const shaftEndY = tipY + dir * headLen;
+            // Magnitude 0–100. Below 1 the wheel is effectively stopped, so no
+            // arrow; at 1 the shortest arrow appears and the length grows
+            // linearly to its max at 100.
+            const mag = Math.min(100, Math.abs(raw));
+            if (mag < 1) return null;
+            // Geometry is anchored to the block (scaled node box), not the
+            // background wheel, so the arrow always leaves from the block edge.
+            const blockHalfH = (NODE_H / 2) * blockScale;
+            const maxLen = NODE_H * blockScale * 1.3;
+            const minLen = maxLen * 0.16; // shortest (visible) arrow at value 1
+            const len = minLen + ((mag - 1) / 99) * (maxLen - minLen);
+            // Arrowhead and shaft scale with length so it reads as an arrow at
+            // every size instead of a fixed head swamping a short shaft.
+            const headLen = len * 0.32;
+            const headHalf = Math.max(2, len * 0.22);
+            const strokeW = Math.max(1.5, len * 0.14);
+            const dir = raw > 0 ? -1 : 1; // screen-y: up (forward) is negative
+            const reach = blockHalfH + maxLen + 2;
+            const svgHalfW = maxLen * 0.22 + 4;
+            const cx = svgHalfW;
+            const centerY = reach; // block center within the SVG
+            const base = centerY + dir * blockHalfH; // start at the block edge
+            const tipY = base + dir * len;
+            const shaftEndY = tipY - dir * headLen;
             return (
               <svg
                 key={`${motorId}-drive`}
-                className={`wheel-drive-arrow ${n > 0 ? 'forward' : 'reverse'}`}
+                className={`wheel-drive-arrow ${raw > 0 ? 'forward' : 'reverse'}`}
                 style={{
-                  left: `${wheelCx * zoom}px`,
-                  top: `${wheelCy * zoom}px`,
-                  width: `${w}px`,
-                  height: `${h}px`,
+                  left: `${wheelCx * zoom - svgHalfW}px`,
+                  top: `${wheelCy * zoom - reach}px`,
+                  width: `${svgHalfW * 2}px`,
+                  height: `${reach * 2}px`,
                 }}
                 aria-hidden="true"
               >
-                <line x1={cx} y1={cy} x2={cx} y2={shaftEndY} strokeWidth={Math.max(2, w * 0.12)} />
+                <line x1={cx} y1={base} x2={cx} y2={shaftEndY} strokeWidth={strokeW} />
                 <polygon
                   points={`${cx},${tipY} ${cx - headHalf},${shaftEndY} ${cx + headHalf},${shaftEndY}`}
                 />

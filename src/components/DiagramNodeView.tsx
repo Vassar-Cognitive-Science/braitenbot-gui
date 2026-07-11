@@ -4,6 +4,55 @@ import type { CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types
 import { TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
+import type { NodeTypeId } from '../types/diagram';
+import type { IconProps } from './icons';
+import {
+  AsteriskIcon,
+  ChevronsDownIcon,
+  ChevronsUpIcon,
+  FilterIcon,
+  GaugeIcon,
+  HashIcon,
+  LayersIcon,
+  LogInIcon,
+  LogOutIcon,
+  MonitorIcon,
+  NoiseIcon,
+  PaletteIcon,
+  PowerIcon,
+  RotateIcon,
+  RulerIcon,
+  SigmaIcon,
+  SineWaveIcon,
+  SunIcon,
+  TimerIcon,
+  ToggleIcon,
+} from './icons';
+
+// A small glyph shown before each node's label, so its type is legible at a
+// glance without reading the text. Keyed by node type; every type has one.
+const NODE_TYPE_ICONS: Record<NodeTypeId, (props: IconProps) => React.ReactElement> = {
+  'sensor-analog': SunIcon,
+  'sensor-digital': ToggleIcon,
+  'sensor-color': PaletteIcon,
+  'sensor-tof': RulerIcon,
+  'compute-threshold': FilterIcon,
+  'compute-delay': TimerIcon,
+  'compute-summation': SigmaIcon,
+  'compute-multiply': AsteriskIcon,
+  'compute-min': ChevronsDownIcon,
+  'compute-max': ChevronsUpIcon,
+  'compute-oscillator': SineWaveIcon,
+  'compute-noise': NoiseIcon,
+  constant: HashIcon,
+  'servo-cr': RotateIcon,
+  'servo-positional': GaugeIcon,
+  'digital-out': PowerIcon,
+  'display-tm1637': MonitorIcon,
+  compound: LayersIcon,
+  'compound-input': LogInIcon,
+  'compound-output': LogOutIcon,
+};
 
 interface DiagramNodeViewProps {
   node: DiagramNode;
@@ -176,7 +225,17 @@ function DiagramNodeViewInner({
           {remoteLabel}
         </span>
       )}
-      <div className="node-label">{node.label}</div>
+      <div className="node-label">
+        {(() => {
+          const TypeIcon = NODE_TYPE_ICONS[node.type];
+          return TypeIcon ? (
+            <span className="node-type-icon" aria-hidden="true">
+              <TypeIcon size={13} />
+            </span>
+          ) : null;
+        })()}
+        {node.label}
+      </div>
       <div className={`node-meta ${traceValue !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
       {hasSlider && node.type === 'sensor-digital' && (
         <div className="trace-slider-row">
