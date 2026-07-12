@@ -479,12 +479,48 @@
   text-align: center;
 }
 
+/* Explicit cross-engine slider styling: the native control renders slim in
+   WKWebView (the app) but chunky in Chrome (docs embeds), so opt out of
+   native rendering entirely for a consistent look. */
 .bb-diagram .trace-slider {
   flex: 1;
   min-width: 0;
   height: 14px;
-  accent-color: #c4a862;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.bb-diagram .trace-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.bb-diagram .trace-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #c4a862;
+  border: none;
+  margin-top: -4px;
+}
+
+.bb-diagram .trace-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.bb-diagram .trace-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #c4a862;
+  border: none;
 }
 
 .bb-diagram .trace-digital-toggle {
