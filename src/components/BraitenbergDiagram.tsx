@@ -16,7 +16,7 @@ import { useCompoundEditing } from '../hooks/useCompoundEditing';
 import { useDiagramSnapshot, useDiagramStore, useTraceSnapshot } from '../doc/useDiagramStore';
 import type { DiagramState } from '../lib/diagramFile';
 import { ConfigPanel } from './ConfigPanel';
-import { CodeDialog, UploadErrorDialog } from './dialogs';
+import { CodeDialog, DiagnosticsDialog, UploadErrorDialog } from './dialogs';
 import { SettingsModal } from './SettingsModal';
 import { useAppSettings } from '../settings/appSettings';
 import { SerialMonitor } from './SerialMonitor';
@@ -172,6 +172,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     compoundTypes,
   });
   const [codeGenErrors, setCodeGenErrors] = useState<ValidationError[]>([]);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  // Live validation issues, so View → Check can show current problems without
+  // running codegen.
+  const diagnostics = useMemo(
+    () => validateGraph(topNodes, topConnections, compoundTypes),
+    [topNodes, topConnections, compoundTypes],
+  );
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [serialDebug, setSerialDebug] = useState<boolean>(() => {
@@ -710,6 +717,29 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     return () => unlisten?.();
   }, [tauriAvailable]);
 
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://view-home', () => {
+      breakFollow();
+      resetView();
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable, breakFollow, resetView]);
+
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let unlisten: (() => void) | undefined;
+    listen('menu://view-check', () => {
+      setShowDiagnostics(true);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [tauriAvailable]);
+
   const makeId = useCallback((prefix: string): string => {
     const uuid =
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -874,10 +904,17 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         event.preventDefault();
         undo();
       }
+      // Reset view: Cmd/Ctrl+0 (mirrors View → Go to Main View).
+      if (mod && key === '0') {
+        if (isBlocked()) return;
+        event.preventDefault();
+        breakFollow();
+        resetView();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store, breakFollow, resetView]);
 
   const handleCanvasMouseDown = (event: MouseEvent) => {
     const isBackground = event.target === event.currentTarget;
@@ -1735,6 +1772,12 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         open={showUploadErrorDialog}
         onClose={() => setShowUploadErrorDialog(false)}
         result={lastResult}
+      />
+
+      <DiagnosticsDialog
+        open={showDiagnostics}
+        onClose={() => setShowDiagnostics(false)}
+        issues={diagnostics}
       />
 
       <SettingsModal
