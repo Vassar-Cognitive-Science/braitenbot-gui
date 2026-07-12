@@ -22,6 +22,11 @@
   font-family: 'Source Serif 4', Georgia, serif;
   color-scheme: dark;
   color: var(--text);
+  /* Drag interactions (nodes, links, badges) must not highlight text. The app
+     already disables selection app-wide (.app in App.css); this covers
+     standalone embeds like the docs site. */
+  -webkit-user-select: none;
+  user-select: none;
   /* Warm dark palette — blackboard/aged paper (mirror of App.css :root) */
   --bg: #12130f;
   --surface: #1a1b16;

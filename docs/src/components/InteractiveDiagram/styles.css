@@ -25,6 +25,10 @@
   border-radius: 4px;
   overflow: hidden;
   background: #1a1b16;
+  /* Drags that leave the canvas shouldn't highlight the palette/footer text.
+     The caption below the frame stays selectable page text. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .id-canvas {
