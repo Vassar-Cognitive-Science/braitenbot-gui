@@ -1,28 +1,17 @@
 ---
 sidebar_position: 3
-title: "Tutorial: Obstacle Avoidance"
+title: "3. Don't"
 ---
 
-# Obstacle Avoidance
+# Don't
 
-The light follower is elegant, but it has a problem: it drives straight into things. Put a box between the robot and the light source and the robot plows right into it — it has no concept of "obstacle."
+The light chaser from the last lesson has a flaw you can see coming: it drives straight into things. Put a box between it and the light and it plows right in. Every wire you've drawn so far says *go* — louder or softer, left or right, but always go. The vehicle has no word for "no."
 
-In this tutorial, you'll add obstacle detection using the robot's two ToF distance sensors and a new building block: the **Threshold** node. The result is a robot that drives forward exploring its environment and turns away when it gets too close to a wall or object — the most common behavior in hobby robotics.
+This lesson adds that word. The mechanism is **inhibition**: a constant node supplies a standing urge to move forward, and negative weights let obstacles argue against it. In Lesson 1 you flipped a whole personality by making every wire negative; here the minus sign gets surgical. One wire pushes, another pushes back, and a summation node holds the argument. That small change — subtraction, in the right place — is the seed of something that looks a lot like an aversion, a preference, a "don't." Watch how quickly "avoids walls" starts to feel like "doesn't want to crash," when all you've really added is a negative number.
 
-With this vehicle a new ingredient enters: a *negative* connection. Until now every wire urged a wheel to spin faster; here, detecting an obstacle tells a wheel to back off. That small change — a minus sign — is the seed of something that looks a lot like an aversion, a preference, a "don't." Watch how quickly "avoids walls" starts to feel like "doesn't want to crash," when all you've really added is subtraction.
-
-**Time:** 15 minutes
-**Prerequisites:** Completed [Light Follower](./light-follower)
-
-## The physical setup
-
-Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled outward about 30° from center — one pointing front-left, one front-right. Each one measures the actual distance to whatever is in front of it with a tiny time-of-flight laser and reports it over the shared I2C bus. The **ToF Distance** node scales that reading to 0–100, with a *closer* object reading *higher* and an object at the maximum distance you set reading 0.
-
-Because both sensors sit on the same I2C bus and ship with the same default address, each needs its own **XSHUT** pin so BraitenBot can wake them one at a time at startup and give each a unique address (see [Supported Hardware](../hardware/supported-hardware)). Note that, unlike a raw analog proximity sensor, the ToF reading is clean and genuinely proportional to distance — so why introduce a Threshold at all? Because for *avoidance* you rarely want a proportional response; you want a crisp decision: is something close enough to worry about? The Threshold node turns the continuous distance into exactly that yes/no.
+The eyes are new too: **ToF distance sensors**, which read *higher* the closer something is — 0 with nothing in range, near 100 when almost touching. Here's the finished creature, live. Its left eye has just caught a wall.
 
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
-
-The finished circuit is below, running live. The left sensor starts high (an obstacle close on the left): watch Left Detect fire and drive the **right** wheel into reverse while the left wheel keeps cruising — the robot pivots away. Drag the sensor sliders to explore the other cases the prose walks through.
 
 <InteractiveDiagram
   initialInputs={{ 'left-sensor': 80, 'right-sensor': 10 }}
@@ -49,17 +38,130 @@ The finished circuit is below, running live. The left sensor starts high (an obs
       { id: 'c8', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="Obstacle avoidance: constant forward drive with cross-wired threshold inhibition. The left sensor is high, so the right wheel reverses and the robot turns away."
+  caption="Caught mid-swerve: a wall on its left, and its first 'no.' Drag the sensors — try to make it crash."
 />
 
-## How it works
+Two ideas are stacked here. A **Constant** node feeds both wheel summations at 50, so the robot always wants to cruise forward. And each **Threshold** node watches a distance sensor: when its input climbs past 60 it snaps from 0 to 100, and a **−1.0 weight** carries that 100 to the *opposite* wheel's summation as −100. The math at that wheel becomes 50 + (−100) = −50 — the wheel reverses, and the robot pivots away. Why a threshold rather than wiring the sensor in directly? Because for avoidance you rarely want a proportional response; you want a crisp decision — *is something close enough to worry about?* — and the threshold turns a smooth distance reading into exactly that yes/no.
 
-The design combines two ideas from previous tutorials:
+Now build the "no" yourself, one wire at a time.
 
-1. **Constant forward drive** — a Constant node feeds both motors equally, so the robot always wants to drive forward at 50% speed.
-2. **Cross-wired inhibition** — when a threshold detects an obstacle, it sends a *negative* signal to the opposite motor, subtracting from the constant drive. This creates differential steering away from the obstacle.
+## Puzzle 1 — Flip the no
 
-The Threshold node is the new piece. It watches its input and outputs either 0 (nothing detected) or 100 (obstacle detected). The negative weight on the cross-wire turns that 100 into -100 at the motor summation, which subtracts from the constant 50 and produces -50 — the motor reverses.
+Someone built this vehicle with the right parts and the wrong sign. The left eye and its threshold are wired up, but the wire into the right wheel's summation carries **+1.0** — so when a wall appears on the left, the right wheel gets 50 + 100 and *lunges at it*. One number stands between this machine and self-preservation.
+
+Click the weight badge on the Left Detect → Right Sum wire and drag it to **−1.0**.
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'left-tof': 80 }}
+  goal={{
+    title: "It speeds up toward walls. Make a wall on the left throw the right wheel into reverse — and leave open floor alone.",
+    tests: [
+      {
+        label: 'a wall on the left throws the right wheel into reverse',
+        phases: [{ inputs: { 'left-tof': 80 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'open floor means full cruise',
+        phases: [{ inputs: { 'left-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'left-tof', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, xshutPin: '8' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 140, threshold: 60 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 280, y: 60, constantValue: 50 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 250 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 250 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 130, y: 370, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 310, y: 370, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-tof', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'left-detect', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'lsum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'rsum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="One badge, one drag. The minus sign is the entire lesson."
+/>
+
+That's inhibition: the same wire, the same threshold, the same wall — but the signal now *argues against* the urge to go instead of amplifying it. At −1.0 the wall wins outright: 50 + (−100) = −50 and the wheel reverses hard. Try −0.5 on the way down and watch the wheel merely stall at 0 instead — a gentler, wide-turning "no." Note that the slider stops at −1.0; that is the sharpest single-wire inhibition there is. If you ever need a harder turn than −1.0 gives you, don't wish for −2 — lower the Constant instead, so there's less forward urge for the wall to overcome.
+
+## Puzzle 2 — Mirror the reflex
+
+Your vehicle now refuses walls on its left — and is completely blind on its right. Slide the right eye up in the puzzle below and watch it cruise serenely toward the crash. The parts are already on the canvas, unwired.
+
+Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0 is what you want), wire Right Detect → **Left** Sum, and set that second wire to **−1.0**. Remember the cross: the right eye must brake the *left* wheel, so the robot turns away from what it sees.
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'left-tof': 0, 'right-tof': 80 }}
+  goal={{
+    title: "Give the right side its own 'no.' Walls on either side, open floor straight ahead.",
+    tests: [
+      {
+        label: 'a wall on the right — pivot left',
+        phases: [{ inputs: { 'right-tof': 80, 'left-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'a wall on the left — still pivots right',
+        phases: [{ inputs: { 'left-tof': 80, 'right-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'open floor — cruise straight',
+        phases: [{ inputs: { 'left-tof': 0, 'right-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'left-tof', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, xshutPin: '8' },
+      { id: 'right-tof', type: 'sensor-tof', label: 'Right ToF Distance', x: 400, y: 20, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 140, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 140, threshold: 60 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 210, y: 90, constantValue: 50 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 250 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 250 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 130, y: 370, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 310, y: 370, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-tof', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'left-detect', to: 'rsum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'lsum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'rsum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="The right eye and its threshold are placed but disconnected. Wire the mirror image of what already works."
+/>
+
+With both sides wired you've rebuilt the cold open. Check the corner case the goal doesn't ask about: push *both* sensors high. Both thresholds fire, both wheels get 50 − 100 = −50, and the robot backs straight up until its eyes clear — a dead-ahead wall produces retreat with no special "back up" rule anywhere in the circuit.
 
 :::note[Where does "wanting to explore" come from?]
 
@@ -68,73 +170,108 @@ Watch this robot for a while and you'll narrate it generously: it *explores* the
 This is inhibition doing the work that, in our own heads, we file under motives and values. A negative number isn't a fear or a dislike — but wire enough of them together and you get a vehicle whose behavior is most easily *described* in the language of fears and dislikes. Braitenberg's wager is that this isn't a cheat or a coincidence: it's a hint about where our own preferences might bottom out.
 :::
 
-## Step 1: Set up the baseline drive
+## Puzzle 3 — Stop the twitch
 
-1. Drag a **Constant** node onto the canvas (it lives on the palette's **Advanced** tab), set its value to **50**
-2. Add two **Summation** nodes — one for each motor (in the **Basic** tab's Compute group)
-3. Wire Constant → both Summations (weight 1.0), then each Summation → its Motor (weight 1.0)
+A different kind of "don't" now — not *don't hit the wall*, but *don't react to nothing*.
 
-Test in trace mode: both motors should show 50. The robot drives straight forward.
+Real sensors never read a clean zero. Ambient light, electrical noise, and drift keep a photocell muttering small numbers even in a dark room, and with a plain wire to the motor, every mutter becomes a twitch of the wheel. The circuit below models that honestly: a noise node adds ±15 of jitter to the photocell's reading, and the wire carries all of it straight to the wheel. Watch the motor in the dark — it can't sit still.
 
-## Step 2: Add obstacle sensors
+A pre-placed threshold ("Really bright?", set to 25 — safely above the noise floor) is waiting, unwired. Three moves: **delete** the Reading → Right Wheel wire, then route the signal *through* the decision instead — Reading → Really bright?, and Really bright? → Right Wheel.
 
-1. From the **Kit sensors** group, drag **Left ToF Distance** and **Right ToF Distance** onto the canvas
-2. Their **XSHUT pins** are already set — Left ToF Distance on D8, Right ToF Distance on D12. Both sensors share the I2C bus (SDA/SCL); the XSHUT lines let BraitenBot bring them up one at a time at startup and assign each a unique address. A closer object reads higher, ramping to 0 at the sensor's max distance. (Rename them "Left Obstacle" and "Right Obstacle" if that reads better to you.)
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'photo': 0 }}
+  goal={{
+    title: 'In the dark it twitches. Make the wheel dead silent at light 0 — and driving hard at light 80.',
+    tests: [
+      {
+        label: 'dead silence in the dark',
+        phases: [{ inputs: { photo: 0 }, ticks: 8 }],
+        expect: [{ node: 'motor', op: 'eq', value: 0 }],
+      },
+      {
+        label: 'full commitment in bright light',
+        phases: [{ inputs: { photo: 80 }, ticks: 8 }],
+        expect: [{ node: 'motor', op: 'gte', value: 90 }],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Photocell', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'jitter', type: 'compute-noise', label: 'Sensor Noise', x: 280, y: 20, amplitude: 15 },
+      { id: 'reading', type: 'compute-summation', label: 'Reading', x: 170, y: 140 },
+      { id: 'decide', type: 'compute-threshold', label: 'Really bright?', x: 400, y: 200, threshold: 25 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 170, y: 350, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'jitter', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'reading', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Click the Reading → Right Wheel wire and delete it, then draw the detour through the threshold. The noise never stops — your wiring just stops listening to it."
+/>
 
-## Step 3: Add threshold nodes
+The noise didn't go anywhere — the threshold simply refuses to dignify it. Anything below 25 is treated as *nothing happened*; anything above is treated as *fully happened*. That's the threshold's whole character: it converts a wobbling continuous signal into a decision, and decisions don't twitch.
 
-1. Drag two **Threshold** nodes onto the canvas
-2. Wire each sensor to its threshold (weight 1.0)
-3. Set both thresholds to **60**
+But notice the price. At light 30 and light 100 the wheel now runs at exactly the same speed — the threshold threw away *how bright* along with the noise. All-or-nothing is perfect for "is there a wall?"; it's heavy-handed for "how fast should I chase this light?"
 
-The threshold value determines how close an obstacle must be before the robot reacts. Because the ToF reports distance, this is easy to reason about: with the **ToF Distance** node's max distance left at its default of 500 mm, a closer object reads higher, so a threshold of 60 fires at roughly 200 mm (about 20 cm). To calibrate on the real robot, hold an object at the distance you want it to start turning, read the value in trace mode, and set the threshold just below it.
+### The dead zone — a softer no
 
-## Step 4: Cross-wire with negative weights
+There's a middle path: say "no" to small signals without flattening the large ones. A connection's response doesn't have to be a straight line — it can be a **curve**, and a curve can have a *dead zone*: flat at zero across the noise floor, then rising proportionally above it. Compare these two vehicles, both sitting in the same noisy dark:
 
-1. Connect Left Detect → **Right** Summation (weight **-1.0**)
-2. Connect Right Detect → **Left** Summation (weight **-1.0**)
+<InteractiveDiagram
+  initialInputs={{ 'photo': 0 }}
+  diagram={{
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Photocell', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'jitter', type: 'compute-noise', label: 'Sensor Noise', x: 280, y: 20, amplitude: 15 },
+      { id: 'reading', type: 'compute-summation', label: 'Reading', x: 170, y: 140 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 170, y: 280, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'jitter', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'reading', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Linear wire: in the dark, every flicker of noise walks straight through to the wheel."
+/>
 
-The cross-wiring ensures the robot turns *away* from the obstacle — same principle as the light follower, but inverted (negative weight means inhibition instead of excitation).
+<InteractiveDiagram
+  initialInputs={{ 'photo': 0 }}
+  diagram={{
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Photocell', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'jitter', type: 'compute-noise', label: 'Sensor Noise', x: 280, y: 20, amplitude: 15 },
+      { id: 'reading', type: 'compute-summation', label: 'Reading', x: 170, y: 140 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 170, y: 280, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'jitter', to: 'reading', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'reading', to: 'motor', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 20, y: 0 }, { x: 100, y: 100 }] },
+    ],
+  }}
+  caption="Dead-zone curve on the same wire: silent below 20, proportional above it. Slide the light up and compare."
+/>
 
-## Step 5: Test the behavior
+A threshold is a *decision*: everything becomes 0 or 100, and the magnitude of the input is discarded. A dead zone is a *filter*: it discards only the bottom of the range and keeps proportionality above it, so the vehicle still runs faster toward brighter light — it just no longer flinches at static. Same refusal of noise, opposite treatment of information.
 
-Activate trace mode and walk through these scenarios:
+Curves like this are drawn per-connection in the desktop app's curve editor — see [transfer functions](../guide/transfer-functions) for the full palette of shapes. One shape worth knowing about now: a *step-shaped* curve puts an entire threshold-style decision on a single wire, no extra node required — that trick is in the same guide.
 
-**No obstacles** — both sensors at 0, thresholds output 0, both motors at 50. The robot cruises forward.
+## Building it in the app
 
-**Wall on the left** — left sensor at 80 (above threshold), Left Detect fires at 100. Right motor gets 50 + (-100) = -50. Left motor stays at 50. The right wheel reverses while the left drives forward — the robot spins right, away from the wall.
-
-**Wall on the right** — mirror image. The robot spins left.
-
-**Wall dead ahead** — both sensors fire, both motors get 50 + (-100) = -50. The robot backs straight up. In practice, it will back up until the sensors clear the obstacle, then resume driving forward.
-
-## Calibrating for your hardware
-
-### Threshold value
-
-The right threshold depends on your specific sensors and how they're mounted:
-
-- **Too low** (e.g., 20): the robot reacts to distant objects and never gets close to anything — overly cautious, may get stuck oscillating
-- **Too high** (e.g., 90): the robot doesn't react until it's almost touching the obstacle — may clip corners
-- **About right** (e.g., 50–70): the robot turns about 15–20 cm from obstacles
-
-To find your value: put the robot near a wall, activate trace mode, and watch the sensor readings. Note the value at the distance where you want the robot to start turning.
-
-### Inhibition weight
-
-The weight on the inhibitory connections controls how sharply the robot turns:
-
-- **-0.5**: the opposite motor slows to 0 but doesn't reverse — gentle, wide turns. Good for open spaces.
-- **-1.0**: the opposite motor reverses to -50 — sharp pivot turns. Good for tight spaces like corridors.
-
-Weights are limited to the range -1 to +1, so **-1.0 is the sharpest single-connection inhibition available**. If you need an even harder turn, lower the **Constant** node's value (so there's less forward drive to overcome) rather than reaching for a weight below -1.
+Everything on this page transfers directly to the desktop app: the ToF sensors live in the palette's **Kit sensors** group, Threshold and Summation in the **Basic** tab's Compute group, and Constant on the **Advanced** tab. Wire, set the two cross-weights to −1.0, and use **Trace Signal Flow** to walk the same scenarios you just tested here. The [editor guide](../getting-started/editor) covers the interface.
 
 ## What you've learned
 
-This tutorial introduced two important patterns:
+Three kinds of "no," all built from the same two parts:
 
-- **Threshold nodes** convert a continuous sensor reading into a binary decision — turning a smooth distance measurement into a crisp "too close?" that drives a clean avoidance response
-- **Negative weights** create inhibition — one part of the circuit suppressing another. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
+- **Threshold nodes** convert a continuous reading into a binary decision — a smooth distance becomes a crisp "too close?", and a noisy photocell becomes a silent-or-committed motor.
+- **Negative weights** create inhibition — one part of the circuit suppressing another. A constant supplies the urge; negative wires veto it. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
+- **Dead-zone curves** are the soft alternative: refuse the noise, keep the proportionality.
 
 ### Questions to sit with
 
@@ -144,4 +281,6 @@ This tutorial introduced two important patterns:
 
 ## What's next
 
-[Transfer Curves](./transfer-curves) — shape a connection's response with custom curves to filter noise, cap motor speed, and even make binary decisions right on the wire.
+[4. Taste](./color-discrimination) — from avoiding to preferring: a vehicle with opinions.
+
+Have the kit? [Rangefinders & Bumpers](../on-the-robot/tof-and-bumpers) mounts and calibrates the real ToF sensors.

@@ -10,6 +10,11 @@ import type {
 } from '@app/types/diagram';
 import { TYPE_BY_ID } from '@app/types/diagram';
 import { useScopeSimulation } from '@app/hooks/useScopeSimulation';
+import {
+  buildSimulationPlan,
+  createSimulationState,
+  simulateGraph,
+} from '@app/hooks/useTraceSimulation';
 import type { ConfigTarget } from '@app/components/diagramShared';
 import { DiagramCanvas } from '@app/components/DiagramCanvas';
 import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
@@ -41,6 +46,43 @@ import './styles.css';
  * while the live simulation keeps running through every edit — `useScopeSimulation`
  * rebuilds its plan whenever the nodes/connections array identity changes.
  */
+/**
+ * One assertion evaluated against the simulated node values after a test's
+ * final phase. Either compares a node's output to a constant, or (with
+ * `other`) to another node's output — the latter expresses relational goals
+ * like "the right wheel outruns the left" without hard-coding magnitudes.
+ * `eq` passes within `tol` (default 0.5).
+ */
+export type GoalAssertion =
+  | { node: string; op: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'; value: number; tol?: number }
+  | { node: string; op: 'gt' | 'eq'; other: string; tol?: number };
+
+/**
+ * One behavioral test: feed each phase's inputs for its tick count in order,
+ * then check every assertion against the final tick's node values. A single
+ * phase covers steady-state goals; multiple phases express pulse-then-release
+ * sequences (latches: "the wheel still turns ten ticks after the bump ends").
+ */
+export interface GoalTest {
+  /** Optional name, purely for MDX readability. */
+  label?: string;
+  phases: Array<{ inputs: Record<string, number>; ticks: number }>;
+  expect: GoalAssertion[];
+}
+
+/**
+ * A behavioral win condition for an editable embed. The reader's CURRENT
+ * wiring is simulated headlessly against every test (fixed seed, so noise
+ * nodes are deterministic); when all tests pass the goal banner flips to
+ * Solved. Only behavior is checked, never structure — any wiring that
+ * produces the right behavior wins.
+ */
+export interface DiagramGoal {
+  /** Challenge text shown in the goal banner, e.g. "Make it chase the light." */
+  title: string;
+  tests: GoalTest[];
+}
+
 export interface InteractiveDiagramProps {
   diagram: {
     loopPeriodMs?: number;
@@ -83,6 +125,12 @@ export interface InteractiveDiagramProps {
    * footer flips it; set `initialTrace={false}` for wire-first exercises.
    */
   initialTrace?: boolean;
+  /**
+   * Behavioral win condition — turns an editable embed into a puzzle. Checked
+   * headlessly (independent of trace mode) ~300 ms after every edit; once
+   * solved it stays solved until Reset. Meaningless without `editable`.
+   */
+  goal?: DiagramGoal;
 }
 
 /** Symmetric world padding around the node bounds (world px, pre-scale). */
@@ -212,6 +260,64 @@ function defaultNode(type: NodeTypeId, x: number, y: number, label: string): Dia
   };
 }
 
+// ── Goal evaluation (headless simulation of the reader's wiring) ───────────
+
+/** Fixed PRNG seed so noise nodes produce the same trace on every check —
+ *  a puzzle must not flicker between solved and unsolved on identical wiring. */
+const GOAL_SEED = 1;
+
+function assertionHolds(a: GoalAssertion, values: Record<string, number>): boolean {
+  const v = values[a.node];
+  const target = 'other' in a ? values[a.other] : a.value;
+  if (v === undefined || target === undefined) return false;
+  switch (a.op) {
+    case 'gt':
+      return v > target;
+    case 'gte':
+      return v >= target;
+    case 'lt':
+      return v < target;
+    case 'lte':
+      return v <= target;
+    case 'eq':
+      return Math.abs(v - target) <= (a.tol ?? 0.5);
+  }
+}
+
+/**
+ * Run every test against the current wiring and report whether all pass.
+ * Mid-edit graphs can be arbitrarily broken (dangling wires were already
+ * filtered by the editor, but cycles without delays make `order` null and
+ * yield an empty trace) — assertions on missing values simply fail, so a
+ * broken diagram is just "not solved yet", never an error.
+ */
+function goalSatisfied(
+  goal: DiagramGoal,
+  nodes: DiagramNode[],
+  connections: DiagramConnection[],
+  compoundTypes: CompoundTypeDefinition[],
+  loopPeriodMs: number,
+): boolean {
+  try {
+    const plan = buildSimulationPlan(nodes, connections, compoundTypes);
+    for (const test of goal.tests) {
+      const state = createSimulationState(nodes, loopPeriodMs, connections, compoundTypes, GOAL_SEED);
+      let last: Record<string, number> = {};
+      for (const phase of test.phases) {
+        for (let i = 0; i < phase.ticks; i++) {
+          // Same stepping the live loop uses: advance the tick, then evaluate.
+          state.tick += 1;
+          last = simulateGraph(nodes, connections, phase.inputs, state, compoundTypes, plan).nodeValues;
+        }
+      }
+      if (!test.expect.every((a) => assertionHolds(a, last))) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Rendering core, shared by the live and static (SSR) variants ───────────
 
 interface DiagramPanelProps {
@@ -237,6 +343,10 @@ interface DiagramPanelProps {
     edgeSignals: Record<string, number>;
     disconnected: Set<string>;
   };
+  /** Goal banner text; rendered above the canvas when present. */
+  goalTitle?: string;
+  /** Whether the goal is currently solved (flips the banner state). */
+  goalSolved?: boolean;
   // ── editing (all optional; omit → view-only) ─────────────────────────────
   editable?: boolean;
   palette?: NodeTypeId[];
@@ -287,6 +397,8 @@ function DiagramPanel({
   traceMode,
   onToggleTrace,
   traceResult,
+  goalTitle,
+  goalSolved = false,
   editable = false,
   palette,
   selectedNodeIds,
@@ -521,6 +633,19 @@ function DiagramPanel({
 
   return (
     <div className="id-frame">
+      {goalTitle && (
+        <div
+          className={`id-goal${goalSolved ? ' id-goal-solved' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="id-goal-icon" aria-hidden="true">
+            {goalSolved ? '✓' : '◎'}
+          </span>
+          <span className="id-goal-text">{goalTitle}</span>
+          {goalSolved && <span className="id-goal-badge">Solved</span>}
+        </div>
+      )}
       {editable && palette && palette.length > 0 && (
         <div className="id-palette" role="toolbar" aria-label="Add node">
           <span className="id-palette-label">Add:</span>
@@ -701,6 +826,7 @@ function LiveDiagram({
   editable,
   palette,
   initialTrace,
+  goal,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height?: number;
@@ -709,6 +835,7 @@ function LiveDiagram({
   editable: boolean;
   palette?: NodeTypeId[];
   initialTrace: boolean;
+  goal?: DiagramGoal;
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
@@ -784,6 +911,25 @@ function LiveDiagram({
     );
   }, [baseNodes, constantOverrides]);
   const connections = baseConnections;
+
+  // ── Goal checking ─────────────────────────────────────────────────────────
+  //
+  // Headless and debounced: every structural or constant edit schedules a
+  // re-check of the CURRENT wiring (the same effective `nodes` array the live
+  // simulation consumes). Solved is sticky — a reader dismantling their
+  // solution afterwards keeps the win — and only Reset clears it. If the
+  // pristine diagram itself passes, the banner shows Solved immediately: that's
+  // an authoring bug the preview makes visible, not a state to defend against.
+  const [goalSolved, setGoalSolved] = useState(false);
+  useEffect(() => {
+    if (!goal || goalSolved) return;
+    const timer = window.setTimeout(() => {
+      if (goalSatisfied(goal, nodes, connections, compoundTypes, loopPeriodMs)) {
+        setGoalSolved(true);
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [goal, goalSolved, nodes, connections, compoundTypes, loopPeriodMs]);
 
   // The simulation loop only runs while tracing is on — no timers when off.
   const { traceResult, pulse } = useScopeSimulation(
@@ -926,6 +1072,7 @@ function LiveDiagram({
     setConfigTarget(null);
     setPulsingId(null);
     setTraceOn(initialTrace);
+    setGoalSolved(false);
     // Recompute the epoch layout from the initial nodes (restores the exact
     // fit the reader saw on first load).
     setEpochLayout(computeLayout(diagram.nodes));
@@ -952,6 +1099,8 @@ function LiveDiagram({
       traceMode={traceOn}
       onToggleTrace={() => setTraceOn((on) => !on)}
       traceResult={traceResult}
+      goalTitle={goal?.title}
+      goalSolved={goalSolved}
       editable={editable}
       palette={palette}
       selectedNodeIds={selectedNodeIds}
@@ -980,11 +1129,13 @@ function StaticDiagram({
   height,
   pulseDurationMs,
   initialTrace,
+  goalTitle,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height?: number;
   pulseDurationMs: number;
   initialTrace: boolean;
+  goalTitle?: string;
 }) {
   return (
     <DiagramPanel
@@ -1002,6 +1153,7 @@ function StaticDiagram({
       // on hydration; there are no live values, so nodes render read-only.
       traceMode={initialTrace}
       traceResult={undefined}
+      goalTitle={goalTitle}
     />
   );
 }
@@ -1015,6 +1167,7 @@ export default function InteractiveDiagram({
   editable = false,
   palette,
   initialTrace = true,
+  goal,
 }: InteractiveDiagramProps) {
   // A palette implies editing.
   const isEditable = editable || (palette !== undefined && palette.length > 0);
@@ -1027,6 +1180,7 @@ export default function InteractiveDiagram({
             height={height}
             pulseDurationMs={pulseDurationMs}
             initialTrace={initialTrace}
+            goalTitle={goal?.title}
           />
         }
       >
@@ -1039,6 +1193,7 @@ export default function InteractiveDiagram({
             editable={isEditable}
             palette={palette}
             initialTrace={initialTrace}
+            goal={goal}
           />
         )}
       </BrowserOnly>

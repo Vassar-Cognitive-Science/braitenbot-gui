@@ -82,6 +82,54 @@
   font-style: italic;
 }
 
+/* ── Goal banner (puzzle win condition) ─────────────────────────────────── */
+
+.id-goal {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  color: #cfc9ba;
+  background: #22231e;
+  /* Divider only — the frame owns the outer border. */
+  border-bottom: 1px solid #33342b;
+  transition: background 300ms ease, color 300ms ease;
+}
+
+.id-goal-icon {
+  flex: none;
+  font-weight: 700;
+  color: #908c7e;
+  transition: color 300ms ease;
+}
+
+.id-goal-text {
+  font-weight: 600;
+}
+
+.id-goal-badge {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  color: #a9d6b4;
+  border: 1px solid #6aab7a;
+}
+
+.id-goal-solved {
+  background: #1e2a20;
+  color: #a9d6b4;
+}
+
+.id-goal-solved .id-goal-icon {
+  color: #6aab7a;
+}
+
 /* ── Palette strip ─────────────────────────────────────────────────────── */
 
 .id-palette {
