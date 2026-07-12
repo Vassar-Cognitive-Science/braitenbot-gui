@@ -134,6 +134,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setSelectedBoard,
     refreshBoards,
     uploadStatus,
+    uploadProgress,
     lastResult,
     compileAndUpload,
     uploadTestSketch,
@@ -1106,6 +1107,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // arduino-cli, and a selected board; generate-only is always available (it
   // never touches hardware — matching the old always-on Generate button).
   const uploadBusy = uploadStatus === 'compiling' || uploadStatus === 'uploading';
+  // Only trust a reported percent when it belongs to the phase we're showing;
+  // otherwise the bar runs indeterminate.
+  const uploadPercent =
+    uploadProgress &&
+    ((uploadStatus === 'compiling' && uploadProgress.phase === 'compile') ||
+      (uploadStatus === 'uploading' && uploadProgress.phase === 'upload'))
+      ? uploadProgress.percent
+      : null;
   const uploadSupported = tauriAvailable && cliAvailable;
   const canUpload = uploadSupported && !!selectedBoard && !!selectedBoard.fqbn;
   const primaryIsUpload = primaryAction === 'upload';
@@ -1424,6 +1433,22 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           onToggleFollowHost={toggleFollowHost}
         />
       </div>
+
+      {uploadBusy && (
+        <div className="upload-progress" role="status" aria-live="polite">
+          <span className="upload-progress-label">
+            {uploadStatus === 'compiling' ? 'Compiling' : 'Uploading'}
+            {uploadPercent != null ? ` ${Math.round(uploadPercent)}%` : '…'}
+          </span>
+          {uploadPercent != null ? (
+            <progress className="upload-progress-bar" max={100} value={uploadPercent} />
+          ) : (
+            <div className="upload-progress-bar is-indeterminate">
+              <div className="upload-progress-fill" />
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         ref={canvasRef}
