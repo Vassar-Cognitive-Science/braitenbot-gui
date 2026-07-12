@@ -86,6 +86,19 @@ Points: (-100, 100), (0, 0), (100, -100)
 
 Similar to a negative weight, but you can shape the curve asymmetrically.
 
+#### Speed cap
+
+Respond briskly to weak signals, but plateau instead of maxing out:
+
+<TransferCurveChart
+  points={[{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 30, y: 60 }, { x: 60, y: 60 }, { x: 100, y: 60 }]}
+  caption="Speed cap: output plateaus at 60 regardless of input"
+/>
+
+Points: (-100, 0), (0, 0), (30, 60), (60, 60), (100, 60)
+
+The motor reaches 60% speed quickly (by input 30) but plateaus there. On a light follower this cures overshoot: the vehicle approaches briskly from a distance but can't charge past the source, so it settles beside it instead of orbiting — Braitenberg's Vehicle 3 "love" behavior, encoded in a single curve.
+
 #### Step function
 
 Binary on/off at a specific threshold:

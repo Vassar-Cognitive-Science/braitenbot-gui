@@ -1,0 +1,45 @@
+---
+sidebar_position: 5
+title: "Field Test: Let It Loose"
+---
+
+# Field Test: Let It Loose
+
+You built the three-layer robot in [6. Nobody Home](../tutorials/subsumption-architecture) — now put it in a room with furniture and let it fend for itself.
+
+## What you should see
+
+Put the robot on the floor and watch:
+
+1. It drives forward (cruise)
+2. It approaches a table leg — the distance sensors detect it and the robot veers away (avoid overrides cruise)
+3. It clips a corner the sensors missed — bumper clicks — the robot reverses for about 2 seconds (escape overrides everything)
+4. After reversing, it resumes driving forward. If the table leg is still nearby, avoidance kicks in again immediately
+
+The robot navigates surprisingly well for something with no planning, no map, and no centralized control. Each behavior is a simple sensor-to-motor circuit. The competence comes from the layering.
+
+## Tuning the escape hold
+
+The escape latch's feedback weight is your dial for how long the robot reverses after a bump. At a 20 ms loop and a threshold of 10:
+
+| Feedback weight `w` | Approx. hold |
+|---|---|
+| 0.95 | 0.9 s |
+| 0.97 | 1.5 s |
+| 0.98 | 2.3 s |
+| 0.99 | 4.6 s |
+
+One quirk you'll notice on real hardware: a longer or firmer bump charges the latch past 100, which stretches the hold a little — the table values assume a brief trigger that tops out near 100. If the robot seems to back up longer after hard collisions, that's the latch working as wired, not a bug.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Wheels twitch even in a dark, empty room | Photocell noise floor (readings of 5–15 leaking through linear weights) | Add a dead-zone transfer curve, or set the threshold above the noise — see [Eyes: Photocells](./photocells) |
+| Robot turns *toward* walls and hugs them | Inhibition sign or wiring flipped — a positive weight (or same-side wiring) turns avoidance into attraction | Check that each Detect threshold cross-wires to the *opposite* Mix with weight **-1.0** — see [Rangefinders & Bumpers](./tof-and-bumpers) |
+| Robot ignores bumps entirely | Bumper node missing INPUT_PULLUP, so the press never reads as 100 | Use the Bump presets (D2/D3) with pullup enabled — pullup inverts the signal so a press reads HIGH |
+| Color node reads zeros | A second I2C device is wired to the bus but missing from the diagram, silently interfering | Add every wired I2C device to the diagram (or unplug it), then re-upload |
+
+## When in doubt, test the hardware
+
+If a symptom survives the table above, take the behavior out of the equation: run the built-in [hardware test](../hardware/testing) to check every sensor, switch, display, and wheel one at a time. It's the fastest way to tell a wiring problem from a wiring-diagram problem.

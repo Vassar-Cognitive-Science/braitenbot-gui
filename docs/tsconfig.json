@@ -6,7 +6,14 @@
   "compilerOptions": {
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "strict": true
+    "strict": true,
+    // Resolve `@app/*` to the desktop app's src/ so `npm run typecheck` here
+    // type-checks the imported simulation core against docs' TS 6.0. `paths`
+    // fully overrides the base config's map, so `@site/*` is repeated here.
+    "paths": {
+      "@site/*": ["./*"],
+      "@app/*": ["../src/*"]
+    }
   },
   "exclude": [".docusaurus", "build"]
 }

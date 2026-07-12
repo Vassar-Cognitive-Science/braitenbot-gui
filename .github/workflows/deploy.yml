@@ -12,6 +12,10 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      # The docs' InteractiveDiagram imports the trace-mode simulation core
+      # from the app's src/ via the @app alias, so simulation changes must
+      # redeploy the site.
+      - 'src/**'
       - 'scripts/fetch-latest-release.mjs'
       - '.github/workflows/deploy.yml'
   release:

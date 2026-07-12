@@ -26,16 +26,25 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Tutorials',
+      label: 'Lessons',
       items: [
         'tutorials/your-first-vehicle',
         'tutorials/light-follower',
         'tutorials/obstacle-avoidance',
         'tutorials/color-discrimination',
-        'tutorials/transfer-curves',
         'tutorials/latches-with-delay',
         'tutorials/subsumption-architecture',
-        'tutorials/compound-reuse',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'On the Robot',
+      items: [
+        'on-the-robot/first-upload',
+        'on-the-robot/photocells',
+        'on-the-robot/tof-and-bumpers',
+        'on-the-robot/color-sensor',
+        'on-the-robot/field-test',
       ],
     },
     'under-the-hood',

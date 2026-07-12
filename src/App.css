@@ -2,6 +2,12 @@
   color-scheme: dark;
   font-family: 'Source Serif 4', Georgia, serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* NOTE: the diagram palette variables below (--bg, --surface, --line, --text,
+     --muted, --accent, --sensor/compute/output-color, --font-mono, --text-xs,
+     --text-sm) are intentionally DUPLICATED in components/diagram.css, scoped
+     under `.bb-diagram` instead of `:root`, so that sheet is self-contained when
+     imported into the Docusaurus docs theme (leaks nothing to :root). Keep the
+     shared values in sync between here and components/diagram.css. */
   /* Warm dark palette — blackboard/aged paper */
   --bg: #12130f;
   --surface: #1a1b16;
@@ -431,37 +437,12 @@ select,
   text-align: center;
 }
  
-.diagram-links {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-}
- 
-.diagram-links path {
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  fill: none;
-  opacity: 0.95;
-}
+/* Diagram node + connection rendering rules were extracted to
+   src/components/diagram.css (scoped under `.bb-diagram`) so the docs embed can
+   reuse the exact same presentation. The app's `.diagram-canvas` carries the
+   `.bb-diagram` class. Editor-only chrome (canvas grid, robot overlay, trace
+   banner, breadcrumb, linking animation, remote cursors) stays here. */
 
-.diagram-links .draft-link {
-  stroke: var(--muted);
-  stroke-dasharray: 4 4;
-}
-
-.diagram-links .connection-link {
-  opacity: 0.85;
-}
-
-.diagram-links .connection-link.selected {
-  stroke: #d4bc78;
-  stroke-width: 2.2;
-  opacity: 1;
-}
- 
 .robot-overlay {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -486,304 +467,7 @@ select,
   );
 }
  
-.diagram-node {
-  position: absolute;
-  width: 148px;
-  height: 64px;
-  border: 1px solid var(--line);
-  background: rgba(18, 19, 15, 0.92);
-  border-radius: 3px;
-  padding: 0.55rem;
-  cursor: move;
-  z-index: 2;
-  pointer-events: auto;
-  /* Global block-size scale. transform-origin top-left keeps left/top in
-     unscaled node coordinates so the JS connection math only has to scale
-     width/height, not re-anchor the corner. */
-  transform: scale(var(--block-scale, 1));
-  transform-origin: top left;
-}
-
-.diagram-node.selected {
-  box-shadow: 0 0 0 1px #d4bc78;
-}
-
-/* Multi-selection highlight — distinct from `selected` (single config target)
-   so the user can see which nodes will be consumed by Group. */
-.diagram-node.multi-selected {
-  outline: 1px dashed rgba(138, 168, 216, 0.85);
-  outline-offset: 2px;
-}
- 
-.diagram-node .node-label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  margin-right: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.diagram-node .node-meta {
-  margin-top: 0.15rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--muted);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
- 
-.node-sensor {
-  border-color: var(--sensor-color);
-}
-
-.node-sensor .node-label {
-  color: var(--sensor-color);
-}
-
-.node-compute {
-  border-color: var(--compute-color);
-}
-
-.node-compute .node-label {
-  color: var(--compute-color);
-}
-
-.node-constant {
-  border-color: var(--compute-color);
-}
-
-.node-constant .node-label {
-  color: var(--compute-color);
-}
-
-.node-output {
-  border-color: var(--output-color);
-}
-
-.node-output .node-label {
-  color: var(--output-color);
-}
- 
-.node-handle {
-  position: absolute;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid var(--muted);
-  background: var(--bg);
-  color: var(--muted);
-  transform: translateX(-50%);
-  padding: 0;
-  cursor: crosshair;
-  z-index: 3;
-  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
-}
-
-.node-handle:hover {
-  transform: translateX(-50%) scale(1.18);
-  box-shadow: 0 0 0 4px rgba(212, 188, 120, 0.16);
-}
-
-.node-handle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(212, 188, 120, 0.45);
-}
-
-/* Output: solid disc — emits signal (plug) */
-.output-handle {
-  bottom: -9px;
-}
-
-.output-handle::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-/* Input: hollow ring with center dot — receives signal (socket) */
-.input-handle {
-  top: -9px;
-}
-
-.input-handle::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translate(-50%, -50%);
-}
-
-/* Per-kind handle coloring: inherit the node's accent */
-.node-sensor .node-handle {
-  color: var(--sensor-color);
-  border-color: var(--sensor-color);
-}
-
-.node-compute .node-handle,
-.node-constant .node-handle {
-  color: var(--compute-color);
-  border-color: var(--compute-color);
-}
-
-.node-output .node-handle {
-  color: var(--output-color);
-  border-color: var(--output-color);
-}
-
-/* Multi-output port anchors: positioned along the bottom edge via inline `left`. */
-.output-handle-port {
-  width: 12px;
-  height: 12px;
-  bottom: -7px;
-}
-
-.output-handle-clear {
-  color: #d8d4c4;
-  border-color: #d8d4c4;
-}
-
-.output-handle-red {
-  color: #d26a5e;
-  border-color: #d26a5e;
-}
-
-.output-handle-green {
-  color: #6eb87a;
-  border-color: #6eb87a;
-}
-
-.output-handle-blue {
-  color: #5e90d2;
-  border-color: #5e90d2;
-}
-
-/* Abbreviated channel label (C/R/G/B) shown under each port handle.
-   Decorative — the button still carries the full name via `title` and `aria-label`. */
-.output-port-label {
-  position: absolute;
-  bottom: -22px;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  pointer-events: none;
-  user-select: none;
-  color: var(--muted);
-}
-
-.output-port-label-clear { color: #d8d4c4; }
-.output-port-label-red   { color: #d26a5e; }
-.output-port-label-green { color: #6eb87a; }
-.output-port-label-blue  { color: #5e90d2; }
-.output-port-label-compound {
-  color: rgba(160, 185, 215, 0.85);
-  max-width: 60px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  text-transform: none;
-}
-
-/* Multi-input port anchors on compound instances (one per declared input).
-   Mirror of .output-handle-port but on the top edge. */
-.input-handle-port {
-  width: 12px;
-  height: 12px;
-  top: -7px;
-}
-
-.input-port-label {
-  position: absolute;
-  top: -22px;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  pointer-events: none;
-  user-select: none;
-  color: rgba(160, 185, 215, 0.85);
-  max-width: 60px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-}
-
-/* Trace-mode readouts attached to compound port handles. Inputs read
-   above the handle (which is itself above the node top); outputs read
-   below the handle (which is below the node bottom). */
-.input-port-value {
-  position: absolute;
-  top: -36px;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  user-select: none;
-  color: #d4bc78;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-
-.output-port-value {
-  position: absolute;
-  bottom: -36px;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  user-select: none;
-  color: #d4bc78;
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-
-/* Compound instance — same dimensions as a regular node, distinctive
-   double border + muted blue accent so it reads as a subdiagram. */
-.diagram-node.node-compound {
-  border: 1px solid #8aa8d8;
-  box-shadow: inset 0 0 0 1px rgba(138, 168, 216, 0.25);
-}
-
-.diagram-node.node-compound .node-label {
-  color: #c4d5ee;
-}
-
-.node-compound .node-handle {
-  color: #8aa8d8;
-  border-color: #8aa8d8;
-}
-
-/* Compound port anchors (compound-input / compound-output) — used inside a
-   body to mark where external signals enter and leave. */
-.diagram-node.node-port {
-  border: 1px dashed #b09cd0;
-  background: rgba(176, 156, 208, 0.06);
-}
-
-.diagram-node.node-port .node-label {
-  color: #d2c2e8;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-.node-port .node-handle {
-  color: #b09cd0;
-  border-color: #b09cd0;
-}
+/* (node + handle + port rules extracted to components/diagram.css) */
 
 /* While dragging a new connection, draw attention to input targets */
 .diagram-canvas.linking .input-handle {
@@ -806,44 +490,14 @@ select,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .node-handle {
-    transition: none;
-  }
-  .node-handle:hover {
-    transform: translateX(-50%);
-  }
   .diagram-canvas.linking .input-handle {
     animation: none;
     box-shadow: 0 0 0 3px rgba(212, 188, 120, 0.3);
   }
 }
- 
-.connection-config-trigger {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  border: 1px solid var(--line);
-  background: rgba(18, 19, 15, 0.92);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  padding: 0.2rem 0.35rem;
-  border-radius: 2px;
-  cursor: grab;
-  font-variant-numeric: tabular-nums;
-  pointer-events: auto;
-  touch-action: none;
-}
 
-.connection-config-trigger.dragging {
-  cursor: grabbing;
-}
+/* (.connection-config-trigger rules extracted to components/diagram.css) */
 
-.connection-config-trigger.selected {
-  border-color: #d4bc78;
-  color: #d4bc78;
-}
- 
 .diagram-config-panel {
   position: absolute;
   top: 0.75rem;
@@ -1645,92 +1299,8 @@ select,
   background: rgba(196, 168, 98, 0.12);
 }
 
-/* Trace values shown inline in meta text */
-.node-meta-trace {
-  color: #d4bc78;
-  font-weight: 700;
-}
-
-/* Expanded node height for sensor/constant slider */
-.diagram-node.trace-expanded {
-  height: 86px;
-}
-
-/* Color sensor exposes four per-channel sliders — needs extra room. */
-.diagram-node.trace-color-expanded {
-  height: auto;
-  min-height: 86px;
-  padding-bottom: 6px;
-}
-
-.trace-color-sliders {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* Disconnected nodes in trace mode */
-.diagram-node.trace-disconnected {
-  border-style: dashed;
-  opacity: 0.55;
-}
-
-/* Slider row inside node */
-.trace-slider-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-}
-
-.trace-slider-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--muted);
-  flex-shrink: 0;
-  width: 8px;
-  text-align: center;
-}
-
-.trace-slider {
-  flex: 1;
-  min-width: 0;
-  height: 14px;
-  accent-color: #c4a862;
-  cursor: pointer;
-}
-
-.trace-digital-toggle {
-  flex: 1;
-  min-width: 0;
-  height: 18px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--surface);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  padding: 0 0.4rem;
-}
-
-.trace-digital-toggle:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.trace-digital-toggle.high {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
-}
-
-/* Connection midpoint label in trace mode */
-.connection-config-trigger.trace-signal {
-  border-color: rgba(196, 168, 98, 0.5);
-  color: #d4bc78;
-}
+/* (trace-mode node slider/toggle/pulse + trace-signal rules extracted to
+   components/diagram.css) */
 
 @media (max-width: 1200px) {
   .canvas-toolbar {
@@ -2057,28 +1627,7 @@ select,
   text-align: right;
 }
 
-.trace-pulse-btn {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: 3px;
-  font-size: var(--text-xs);
-  padding: 0.05rem 0.4rem;
-  cursor: pointer;
-  margin-left: 0.3rem;
-  font-family: inherit;
-}
-
-.trace-pulse-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.trace-pulse-btn.pulsing {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
-}
+/* (.trace-pulse-btn rules extracted to components/diagram.css) */
 
 .setup-error {
   color: #d48a6a;
@@ -2454,33 +2003,9 @@ select,
   min-width: 0;
 }
 
-/* A node a remote peer has selected or is dragging — ringed in their color. */
-.diagram-node.remote-selected {
-  box-shadow: 0 0 0 2px var(--remote-color, var(--accent));
-}
-
-/* Small owner tag above a remotely-held node. */
-.remote-owner-tag {
-  position: absolute;
-  top: -0.85rem;
-  left: -2px;
-  padding: 0.05rem 0.3rem;
-  border-radius: 3px;
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: #12130f;
-  white-space: nowrap;
-  pointer-events: none;
-  line-height: 1.3;
-}
-
-/* Remote-selection halo under a connection path. */
-.connection-remote-select {
-  fill: none;
-  stroke-width: 6;
-  opacity: 0.4;
-  stroke-linecap: round;
-}
+/* (node/connection remote-selection rules — .diagram-node.remote-selected,
+   .remote-owner-tag, .connection-remote-select — extracted to
+   components/diagram.css) */
 
 /* Remote pointer, positioned in world space inside the diagram world. */
 .remote-cursor {

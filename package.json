@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p relay/tsconfig.json",
     "relay:dev": "tsx relay/src/index.ts",
     "relay:build": "tsc -p relay/tsconfig.build.json",
+    "docs:check-badges": "tsx docs/scripts/check-badge-overlaps.ts",
     "fetch:arduino-cli": "node scripts/fetch-arduino-cli.mjs",
     "fetch:arduino-cli:all": "node scripts/fetch-arduino-cli.mjs --all",
     "tauri": "tauri",

@@ -1,0 +1,53 @@
+---
+sidebar_position: 3
+title: "Rangefinders & Bumpers"
+---
+
+# Rangefinders & Bumpers
+
+You built the avoider in [3. Don't](../tutorials/obstacle-avoidance) and gave it a memory in [5. Memory](../tutorials/latches-with-delay) — now mount the sensors that make both circuits real.
+
+## Mounting the ToF sensors
+
+Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled outward about 30° from center — one pointing front-left, one front-right. Each one measures the actual distance to whatever is in front of it with a tiny time-of-flight laser and reports it over the shared I2C bus. The **ToF Distance** node scales that reading to 0–100, with a *closer* object reading *higher* and an object at the maximum distance you set reading 0.
+
+### XSHUT wiring
+
+Because both sensors sit on the same I2C bus and ship with the same default address, each needs its own **XSHUT** pin so BraitenBot can wake them one at a time at startup and give each a unique address (see [Supported Hardware](../hardware/supported-hardware)). The kit presets have this covered: **Left ToF Distance** uses XSHUT on **D8**, **Right ToF Distance** on **D12**. Both sensors share SDA/SCL; only the XSHUT lines are separate. Both XSHUT pins must be wired, or one sensor won't come up.
+
+## Calibrating the threshold
+
+Because the ToF reports distance, the threshold is easy to reason about: with the **ToF Distance** node's max distance left at its default of 500 mm, a closer object reads higher, so a threshold of 60 fires at roughly 200 mm (about 20 cm).
+
+To calibrate on the real robot: hold an object at the distance you want it to start turning, read the value in trace mode, and set the threshold just below it. Put the robot near a wall, activate trace mode, and watch the sensor readings — note the value at the distance where you want the robot to start turning.
+
+The right threshold depends on your specific sensors and how they're mounted:
+
+- **Too low** (e.g., 20): the robot reacts to distant objects and never gets close to anything — overly cautious, may get stuck oscillating
+- **Too high** (e.g., 90): the robot doesn't react until it's almost touching the obstacle — may clip corners
+- **About right** (e.g., 50–70): the robot turns about 15–20 cm from obstacles
+
+## Tuning the inhibition weight
+
+The weight on the inhibitory connections controls how sharply the robot turns:
+
+| Weight | Effect |
+|--------|--------|
+| -0.5 | The opposite motor slows to 0 but doesn't reverse — gentle, wide turns. Good for open spaces. |
+| -1.0 | The opposite motor reverses to -50 — sharp pivot turns. Good for tight spaces like corridors. |
+
+Weights are limited to the range -1 to +1, so **-1.0 is the sharpest single-connection inhibition available**. If you need an even harder turn, lower the **Constant** node's value (so there's less forward drive to overcome) rather than reaching for a weight below -1.
+
+## The bumpers
+
+The ToF sensors miss things — a thin chair leg, or a surface angled so the laser beam scatters away instead of bouncing back. The bump switches are the backstop.
+
+On the physical robot, the front-left bump switch is wired between pin **D2** and ground, and the front-right between **D3** and ground. The **Bump Front-Left** and **Bump Front-Right** presets come with **INPUT_PULLUP** enabled — so pressing the switch reads as 100 in BraitenBot (pullup mode inverts the signal, so pressing the button produces a HIGH reading).
+
+:::note[A real bump is over before you see it]
+On real switches the contact is momentary — maybe 50 ms, only a few loop iterations. By the time the next loop runs, the bumper is already open again and the event is gone. That's why the bumper feeds a latch rather than a motor directly: the circuit from [5. Memory](../tutorials/latches-with-delay) captures the click and holds it long enough to act on.
+:::
+
+## What's next
+
+Distance and touch cover the robot's front. [The Color Eye](./color-sensor) points a sensor at the floor.
