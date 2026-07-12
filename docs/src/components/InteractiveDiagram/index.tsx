@@ -304,49 +304,132 @@ function DiagramPanel({
   // world div carries its unscaled `contentW/contentH` as its box size and the
   // scale is applied purely visually — so we size the viewport ourselves rather
   // than let the scaled world dictate it.
-  const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
-  const scaledW = layout.contentW * scale;
-  const scaledH = layout.contentH * scale;
+  const liveScale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
+  const liveScaledW = layout.contentW * liveScale;
+  const liveScaledH = layout.contentH * liveScale;
+  const liveOverflowsX = liveScaledW > availW + 0.5;
+  const liveWorldOffsetX = liveOverflowsX ? 0 : Math.max(0, (availW - liveScaledW) / 2);
 
-  // Height: caller override, else derived from the scaled content, clamped to a
-  // sane band so short diagrams aren't a giant void and tall ones stay bounded.
-  const viewportH =
-    height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(scaledH)));
+  // ── Drag-latch: freeze the stage layout for the duration of a node drag ──
+  //
+  // During a node drag, `onNodeMove` updates positions on every mousemove →
+  // `layout` recomputes → `scale`/`worldOffsetX` change → `clientToWorld` maps
+  // the same pointer to a different world coordinate → the node teleports →
+  // runaway rescale. Fix: latch all layout-derived values on drag-start and
+  // hold them until drag-end; only then let bounds/scale/height reflow from
+  // the final positions.
+  //
+  // `latchedLayout` is null while not dragging (live values are used).
+  // During a drag it holds the snapshot of { scale, offsetX, offsetY,
+  // worldOffsetX, contentW, contentH, viewportH, overflowsX } that was current
+  // at drag-start. All resolver callbacks (clientToLayer/World, nodeWorldPos)
+  // read from a ref so DiagramCanvas's stableRef always sees the current
+  // latched values without needing new function identities.
+  interface LayoutSnapshot {
+    scale: number;
+    offsetX: number;
+    offsetY: number;
+    worldOffsetX: number;
+    contentW: number;
+    contentH: number;
+    viewportH: number;
+    overflowsX: boolean;
+  }
+  const [latchedLayout, setLatchedLayout] = useState<LayoutSnapshot | null>(null);
+  // A ref that always mirrors `latchedLayout` so stable callbacks can read it.
+  const latchRef = useRef<LayoutSnapshot | null>(null);
+  latchRef.current = latchedLayout;
 
-  // Center the content horizontally when it's narrower than the viewport; only
-  // scroll when the MIN_SCALE floor actually forces the world wider than the
-  // viewport.
-  const overflowsX = scaledW > availW + 0.5;
-  const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
+  // Live layout values also in a ref so drag-start can snapshot them without a
+  // stale-closure hazard (latchRef is read at call time, inside the callback).
+  const liveLayoutRef = useRef<LayoutSnapshot>({
+    scale: liveScale,
+    offsetX: layout.offsetX,
+    offsetY: layout.offsetY,
+    worldOffsetX: liveWorldOffsetX,
+    contentW: layout.contentW,
+    contentH: layout.contentH,
+    viewportH: height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(liveScaledH))),
+    overflowsX: liveOverflowsX,
+  });
+  // Update the live snapshot every render so drag-start always captures the
+  // most recent pre-drag values (no stale closure).
+  liveLayoutRef.current = {
+    scale: liveScale,
+    offsetX: layout.offsetX,
+    offsetY: layout.offsetY,
+    worldOffsetX: liveWorldOffsetX,
+    contentW: layout.contentW,
+    contentH: layout.contentH,
+    viewportH: height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(liveScaledH))),
+    overflowsX: liveOverflowsX,
+  };
+
+  // Effective (rendered) layout: latched if dragging, otherwise live.
+  const effective = latchedLayout ?? liveLayoutRef.current;
+  const scale = effective.scale;
+  const worldOffsetX = effective.worldOffsetX;
+  const overflowsX = effective.overflowsX;
+  const viewportH = effective.viewportH;
+  // World div sizing mirrors the effective layout so it doesn't change mid-drag.
+  const effectiveContentW = effective.contentW;
+  const effectiveContentH = effective.contentH;
+
+  const onNodeDragStart = useCallback(() => {
+    // Latch the pre-drag layout snapshot so neither scale, offsets, nor
+    // viewport height reflow while the drag is in progress.
+    setLatchedLayout({ ...liveLayoutRef.current });
+  }, []);
+
+  const onNodeDragEnd = useCallback(() => {
+    // Release the latch — one reflow from the final node positions.
+    setLatchedLayout(null);
+  }, []);
+
   const [rejectedNotice, setRejectedNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
 
   // Node world position = raw node coordinate + layout offset (docs have no
   // zoom / block-scale; the fit-to-width scale is a CSS transform on the
   // wrapper, outside the canvas's coordinate space).
-  const nodeWorldPos = useMemo(
-    () => (node: DiagramNode) => ({ x: node.x + layout.offsetX, y: node.y + layout.offsetY }),
-    [layout],
+  // Reads from latchRef so it's always stable but always current (no new
+  // function identity needed as latch changes).
+  const nodeWorldPos = useCallback(
+    (node: DiagramNode) => {
+      const l = latchRef.current ?? liveLayoutRef.current;
+      return { x: node.x + l.offsetX, y: node.y + l.offsetY };
+    },
+    // Stable: reads latchRef/liveLayoutRef at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   // clientToLayer: client px → world-div (unscaled layer) px. The world div is
   // CSS-scaled by `scale`, so undo it. clientToWorld: same, minus the layout
   // offset, so it matches node.x/y.
+  // Both callbacks are stable references that read latchRef at call time, so
+  // DiagramCanvas's stateRef always gets the current (latched or live) values
+  // without the resolver identities changing on every render.
   const clientToLayer = useCallback(
     (clientX: number, clientY: number) => {
+      const l = latchRef.current ?? liveLayoutRef.current;
       const rect = canvasRef.current?.getBoundingClientRect();
-      const left = (rect?.left ?? 0) + worldOffsetX;
+      const left = (rect?.left ?? 0) + l.worldOffsetX;
       const top = rect?.top ?? 0;
-      return { x: (clientX - left) / scale, y: (clientY - top) / scale };
+      return { x: (clientX - left) / l.scale, y: (clientY - top) / l.scale };
     },
-    [scale, worldOffsetX],
+    // Stable: reads latchRef/liveLayoutRef at call time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
   const clientToWorld = useCallback(
     (clientX: number, clientY: number) => {
+      const l = latchRef.current ?? liveLayoutRef.current;
       const layer = clientToLayer(clientX, clientY);
-      return { x: layer.x - layout.offsetX, y: layer.y - layout.offsetY };
+      return { x: layer.x - l.offsetX, y: layer.y - l.offsetY };
     },
-    [clientToLayer, layout],
+    // clientToLayer is stable above.
+    [clientToLayer],
   );
 
   const showRejected = useCallback((message: string) => {
@@ -469,8 +552,8 @@ function DiagramPanel({
           style={{
             transform: `scale(${scale})`,
             transformOrigin: '0 0',
-            width: layout.contentW,
-            height: layout.contentH,
+            width: effectiveContentW,
+            height: effectiveContentH,
             left: worldOffsetX,
           }}
         >
@@ -495,6 +578,8 @@ function DiagramPanel({
             configTarget={configTarget}
             setConfigTarget={setConfigTarget ?? NOOP_SET_CONFIG}
             onNodeMove={editable ? onNodeMove : undefined}
+            onNodeDragStart={editable ? onNodeDragStart : undefined}
+            onNodeDragEnd={editable ? onNodeDragEnd : undefined}
             onConnectionCreate={editable ? onConnectionCreate : undefined}
             onConnectionRejected={editable ? handleConnectionRejected : undefined}
             onConnectionLabelT={editable ? onConnectionLabelT : undefined}
