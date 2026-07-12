@@ -2,6 +2,7 @@ import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { formatTraceValue } from '../hooks/useTraceSimulation';
 import type { ConnectionPathDatum } from './connectionGeometry';
 import { signalToStroke, weightToColor } from './connectionGeometry';
+import { MiniTransferCurve } from './MiniTransferCurve';
 
 /**
  * Presentational connection layer: the `.diagram-links` SVG (one bézier path
@@ -83,7 +84,9 @@ export function ConnectionLayer({
           >
             {edgeSignal !== undefined
               ? formatTraceValue(edgeSignal)
-              : `w ${connection.weight.toFixed(2)}`}
+              : connection.transferMode === 'nonlinear'
+                ? <MiniTransferCurve points={connection.transferPoints} />
+                : `w ${connection.weight.toFixed(2)}`}
           </button>
         );
       })}

@@ -1,4 +1,4 @@
-import type { CompoundTypeDefinition, DiagramConnection, DiagramNode, OutputPortId } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramConnection, DiagramNode, OutputPortId, TransferMode, TransferPoint } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts } from '../types/diagram';
 
 /**
@@ -182,6 +182,8 @@ export interface ConnectionPathDatum {
   id: string;
   d: string;
   weight: number;
+  transferMode: TransferMode;
+  transferPoints: TransferPoint[];
   x1: number;
   y1: number;
   x2: number;
@@ -244,6 +246,8 @@ export function computeConnectionPaths(
         id: connection.id,
         d: makePath(x1, y1, x2, y2),
         weight: connection.weight,
+        transferMode: connection.transferMode,
+        transferPoints: connection.transferPoints,
         x1, y1, x2, y2,
         midX: badge.x,
         midY: badge.y,

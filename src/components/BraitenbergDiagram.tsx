@@ -7,7 +7,6 @@ import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { NodePalette, NODE_DRAG_MIME } from './NodePalette';
 import type { NodeDragPayload } from './NodePalette';
-import { NumberInput } from './NumberInput';
 import { useScopeSimulation } from '../hooks/useScopeSimulation';
 import { Oscilloscope } from './Oscilloscope';
 import { useDiagramPersistence } from '../hooks/useDiagramPersistence';
@@ -292,7 +291,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // Duration of the "▶" sensor pulse in trace mode. Local UI preference: the
   // duration is baked into each shared pulse event as durationTicks, so peers
   // don't need to agree on this setting.
-  const [pulseDurationMs, setPulseDurationMs] = useState(200);
+  // Trace pulse duration is an app setting (configured in the Settings modal),
+  // not a per-diagram value.
+  const pulseDurationMs = appSettings.pulseDurationMs;
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number>(0);
   const showToast = useCallback((msg: string) => {
@@ -1243,20 +1244,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             <WaypointsIcon />
             <span>{traceMode ? 'Exit Trace' : 'Trace Signal Flow'}</span>
           </button>
-          {traceMode && (
-            <label className="toolbar-setting" title="How long the ▶ button holds a sensor pulse">
-              <span className="toolbar-setting-label">Pulse</span>
-              <NumberInput
-                min={10}
-                max={5000}
-                step={10}
-                integer
-                value={pulseDurationMs}
-                onChange={setPulseDurationMs}
-              />
-              <span className="toolbar-setting-unit">ms</span>
-            </label>
-          )}
           {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
         </div>
 
@@ -1264,18 +1251,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
         <div className="toolbar-group">
           <span className="toolbar-group-label">Sketch</span>
-          <label className="toolbar-setting" title="Delay between sensor reads in the generated Arduino loop">
-            <span className="toolbar-setting-label">Loop</span>
-            <NumberInput
-              min={1}
-              max={1000}
-              step={1}
-              integer
-              value={loopPeriodMs}
-              onChange={(value) => store.setLoopPeriodMs(value)}
-            />
-            <span className="toolbar-setting-unit">ms</span>
-          </label>
           <div className="toolbar-split" ref={splitMenuRef}>
             <button
               type="button"
