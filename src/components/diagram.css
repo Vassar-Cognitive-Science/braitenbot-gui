@@ -475,11 +475,12 @@
   font-size: var(--text-xs);
   color: var(--muted);
   flex-shrink: 0;
-  width: 8px;
+  /* Size to content so "100" gets real space instead of overflowing into
+     the pulse button; min-width keeps the single-digit "0" from hugging
+     the node edge. nowrap guards against host pages (Docusaurus) with
+     global word-breaking stacking the digits vertically. */
+  min-width: 8px;
   text-align: center;
-  /* "100" is wider than the 8px box and intentionally overflows it; without
-     nowrap, host pages with global word-breaking (Docusaurus) stack it
-     vertically one digit per line. */
   white-space: nowrap;
 }
 
