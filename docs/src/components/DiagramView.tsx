@@ -12,6 +12,8 @@ type NodeTypeId =
   | 'compute-delay'
   | 'compute-summation'
   | 'compute-multiply'
+  | 'compute-min'
+  | 'compute-max'
   | 'compute-oscillator'
   | 'compute-noise'
   | 'constant'
@@ -41,6 +43,8 @@ const NODE_TYPE_DEFS: Record<NodeTypeId, NodeTypeDef> = {
   'compute-delay':     { kind: 'compute',  displayName: 'Delay',            metaLabel: 'delay',            canOutput: true,  canInput: true },
   'compute-summation': { kind: 'compute',  displayName: 'Summation',        metaLabel: 'sum',              canOutput: true,  canInput: true },
   'compute-multiply':  { kind: 'compute',  displayName: 'Multiply',         metaLabel: 'multiply',         canOutput: true,  canInput: true },
+  'compute-min':       { kind: 'compute',  displayName: 'Minimum',          metaLabel: 'min',              canOutput: true,  canInput: true },
+  'compute-max':       { kind: 'compute',  displayName: 'Maximum',          metaLabel: 'max',              canOutput: true,  canInput: true },
   'compute-oscillator':{ kind: 'compute',  displayName: 'Oscillator',       metaLabel: 'oscillator',       canOutput: true,  canInput: false },
   'compute-noise':     { kind: 'compute',  displayName: 'Noise',            metaLabel: 'noise',            canOutput: true,  canInput: false },
   'constant':          { kind: 'constant', displayName: 'Constant',         metaLabel: 'constant',         canOutput: true,  canInput: false },

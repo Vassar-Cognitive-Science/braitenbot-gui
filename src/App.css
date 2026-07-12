@@ -103,6 +103,81 @@ select,
   grid-column: 2;
   grid-row: 3;
 }
+
+/* The upload progress bar shares the canvas cell, pinned to the top as a thin
+   overlay strip so it never reflows the toolbar or canvas. */
+.diagram-layout > .upload-progress {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem auto 0;
+  width: min(420px, calc(100% - 1rem));
+  padding: 0.35rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.upload-progress-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.upload-progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: var(--surface-soft);
+}
+
+.upload-progress-bar::-webkit-progress-bar {
+  background: var(--surface-soft);
+}
+
+.upload-progress-bar::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.upload-progress-bar::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.upload-progress-bar.is-indeterminate {
+  position: relative;
+}
+
+.upload-progress-bar.is-indeterminate .upload-progress-fill {
+  position: absolute;
+  top: 0;
+  left: -40%;
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: upload-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes upload-progress-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
  
 .node-palette {
   position: relative;
@@ -860,6 +935,30 @@ select,
   cursor: grabbing;
 }
 
+/* When the badge shows a non-linear curve thumbnail instead of text, drop the
+   text padding so it reads as a tidy little square. */
+.connection-config-trigger.has-curve {
+  padding: 2px;
+  line-height: 0;
+}
+
+.mini-transfer-curve {
+  display: block;
+}
+
+.mini-transfer-curve .mini-curve-axis {
+  stroke: var(--line);
+  stroke-width: 0.75;
+  opacity: 0.6;
+}
+
+.mini-transfer-curve .mini-curve-path {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .connection-config-trigger.selected {
   border-color: #d4bc78;
   color: #d4bc78;
@@ -1141,16 +1240,18 @@ select,
 /* Canvas toolbar */
 .canvas-toolbar {
   display: flex;
-  align-items: end;
+  align-items: center;
   gap: 0.4rem 0.3rem;
   padding: 0.45rem 0.5rem;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 3px;
-  /* Never wrap to a second row. Everything stays intact except the board
-     picker, which shrinks (see below) to absorb a tight width. No overflow
-     is set here on purpose — it would clip the split-button/share dropdowns. */
-  flex-wrap: nowrap;
+  /* Stay on a single row at normal and full-screen widths: group labels sit
+     inline beside their buttons (not stacked above), so showing them never
+     adds a second row. Wrapping is allowed only as a last resort — a very
+     small window or heavy page-zoom — rather than overflowing and clipping the
+     split-button/share dropdowns. The board <select> shrinks first (below). */
+  flex-wrap: wrap;
 }
 
 /* Keep every toolbar item at its natural width... */
@@ -1173,18 +1274,19 @@ select,
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  flex-wrap: wrap;
+  /* Keep a group's label and its buttons together on one line. */
+  flex-wrap: nowrap;
 }
 
 .toolbar-group-label {
-  width: 100%;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
   line-height: 1;
-  margin-bottom: 0.1rem;
+  white-space: nowrap;
+  margin-right: 0.05rem;
 }
 
 .toolbar-separator {
@@ -1208,6 +1310,18 @@ select,
   cursor: pointer;
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+/* Disabled toolbar buttons gray out and stop responding, regardless of
+   variant (primary overrides below to match). */
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--line);
 }
 
 /* Inline lucide-style icons: keep their intrinsic size inside flex buttons. */
@@ -1794,23 +1908,15 @@ select,
   color: #d4bc78;
 }
 
-/* The uppercase group labels (GROUP, SIMULATE, …) stretch each group wider
-   than its buttons, so once the toolbar gets tight they, not the buttons, are
-   what forces a second row. Below this width, drop the labels and lay the
-   groups out compactly in a single row — the buttons alone are self-evident.
-   Set generously (not at the true overflow point) so it also covers browser
-   page-zoom, which shrinks the effective viewport. */
-@media (max-width: 1400px) {
-  .canvas-toolbar {
-    align-items: center;
-  }
-
+/* The inline group labels (GROUP, SIMULATE, …) cost horizontal room. Below this
+   width, drop them so the toolbar keeps to a single row on smaller screens and
+   under browser page-zoom (which shrinks the effective viewport); the buttons
+   alone are self-evident. Set generously so the labels only appear when they
+   comfortably fit — if the toolbar still can't fit, it wraps rather than
+   overflowing. */
+@media (max-width: 1700px) {
   .canvas-toolbar .toolbar-group-label {
     display: none;
-  }
-
-  .canvas-toolbar .toolbar-group {
-    flex-wrap: nowrap;
   }
 
   .canvas-toolbar .toolbar-separator {
@@ -1838,6 +1944,10 @@ select,
   .diagram-layout > .diagram-canvas {
     grid-column: 1;
     grid-row: auto;
+  }
+
+  .diagram-layout > .upload-progress {
+    grid-column: 1;
   }
 
   .diagram-canvas {
@@ -2265,6 +2375,30 @@ select,
   margin: 0;
   color: var(--muted);
   font-style: italic;
+}
+
+.serial-monitor-send {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.serial-monitor-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: 0.3rem 0.5rem;
+  background: #14150f;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.serial-monitor-input:disabled {
+  opacity: 0.5;
 }
 /* --- Collaborative session (Share menu, toasts, banner) ------------------ */
 

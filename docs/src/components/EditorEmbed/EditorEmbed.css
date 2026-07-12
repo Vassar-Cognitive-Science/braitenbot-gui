@@ -1,0 +1,31 @@
+.editor-embed {
+  margin: 1.75rem 0;
+}
+
+.editor-embed-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+  background: #1a1a2e;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+.editor-embed-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px dashed var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.95rem;
+}
+
+.editor-embed-caption {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--ifm-color-emphasis-700);
+  text-align: center;
+}

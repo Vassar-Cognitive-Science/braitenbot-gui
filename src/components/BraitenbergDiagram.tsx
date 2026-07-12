@@ -23,6 +23,7 @@ import { useCompoundEditing } from '../hooks/useCompoundEditing';
 import { useDiagramSnapshot, useDiagramStore, useTraceSnapshot } from '../doc/useDiagramStore';
 import type { DiagramState } from '../lib/diagramFile';
 import { DiagramNodeView } from './DiagramNodeView';
+import { MiniTransferCurve } from './MiniTransferCurve';
 import { CommentView } from './CommentView';
 import { ConfigPanel } from './ConfigPanel';
 import { CodeDialog, DiagnosticsDialog, UploadErrorDialog } from './dialogs';
@@ -260,9 +261,17 @@ function makeWheelNodes(layout: RobotOverlayLayout): DiagramNode[] {
 
 interface BraitenbergDiagramProps {
   arduino: ReturnType<typeof useArduino>;
+  /**
+   * 'app' (default) is the full desktop editor. 'playground' is the browser-only
+   * embed used by the docs site: it hides every hardware/collaboration control
+   * (Sketch upload, Device/serial, Share) and disables localStorage persistence
+   * so each embedded iframe stays ephemeral and seeded from its own preset.
+   */
+  mode?: 'app' | 'playground';
 }
 
-export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
+export function BraitenbergDiagram({ arduino, mode = 'app' }: BraitenbergDiagramProps) {
+  const isPlayground = mode === 'playground';
   const {
     tauriAvailable,
     cliAvailable,
@@ -273,6 +282,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     setSelectedBoard,
     refreshBoards,
     uploadStatus,
+    uploadProgress,
     lastResult,
     compileAndUpload,
     uploadTestSketch,
@@ -659,6 +669,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     isPristine: isDiagramPristine,
     resetToDefault,
     sessionRole,
+    enabled: !isPlayground,
   });
 
   // Group the currently-selected nodes into a new compound. Boundary-
@@ -761,14 +772,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       return;
     }
     if (!selectedBoard || !selectedBoard.fqbn) {
-      setCodeGenErrors([
-        {
-          severity: 'error',
-          message: 'No board selected. Plug in an Arduino and click Refresh.',
-        },
-      ]);
-      setGeneratedCode(null);
-      setShowCodeDialog(true);
+      // Not a codegen error — the diagram is fine, there's just no board to
+      // flash. Use a toast instead of the code-error dialog.
+      showToast('No board selected. Plug in an Arduino and click Refresh.');
       return;
     }
     const graph = buildGraph(topNodes, topConnections, loopPeriodMs, compoundTypes);
@@ -778,25 +784,28 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     // the upload fail. Not auto-restarted afterwards (boards re-enumerate).
     await pauseForUpload();
     await compileAndUpload(code, selectedBoard.fqbn, selectedBoard.port);
-  }, [topNodes, topConnections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload, pauseForUpload, serialDebug]);
+  }, [topNodes, topConnections, loopPeriodMs, compoundTypes, selectedBoard, compileAndUpload, pauseForUpload, serialDebug, showToast]);
 
   // Hardware ▸ Upload Test Sketch — flash the bundled bring-up test that
   // exercises every device in the default build. Independent of the diagram.
   const handleUploadTestSketch = useCallback(async () => {
     if (!selectedBoard || !selectedBoard.fqbn) {
-      setCodeGenErrors([
-        {
-          severity: 'error',
-          message: 'No board selected. Plug in an Arduino and click Refresh.',
-        },
-      ]);
-      setGeneratedCode(null);
-      setShowCodeDialog(true);
+      // A missing board isn't a code-generation problem, so surface it as a
+      // toast rather than the "fix errors before generating code" dialog.
+      showToast('No board selected. Plug in an Arduino and click Refresh.');
       return;
     }
     await pauseForUpload();
-    await uploadTestSketch(selectedBoard.fqbn, selectedBoard.port);
-  }, [selectedBoard, uploadTestSketch, pauseForUpload]);
+    const result = await uploadTestSketch(selectedBoard.fqbn, selectedBoard.port);
+    if (result.success) {
+      // The test sketch is driven entirely over serial (mode selection + live
+      // readings), so open the monitor automatically. The board resets and
+      // re-enumerates after flashing, so connect after a short beat.
+      const port = selectedBoard.port;
+      setShowSerialMonitor(true);
+      window.setTimeout(() => void serialMonitor.start(port), 1200);
+    }
+  }, [selectedBoard, uploadTestSketch, pauseForUpload, showToast, serialMonitor]);
 
   // Choosing an option in the split-button menu only re-points the primary
   // segment (and persists it) — it does not run anything. The user then clicks
@@ -968,6 +977,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           id: connection.id,
           d: makePath(x1, y1, x2, y2),
           weight: connection.weight,
+          transferMode: connection.transferMode,
+          transferPoints: connection.transferPoints,
           x1, y1, x2, y2,
           midX: badge.x,
           midY: badge.y,
@@ -1440,6 +1451,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // arduino-cli, and a selected board; generate-only is always available (it
   // never touches hardware — matching the old always-on Generate button).
   const uploadBusy = uploadStatus === 'compiling' || uploadStatus === 'uploading';
+  // Only trust a reported percent when it belongs to the phase we're showing;
+  // otherwise the bar runs indeterminate.
+  const uploadPercent =
+    uploadProgress &&
+    ((uploadStatus === 'compiling' && uploadProgress.phase === 'compile') ||
+      (uploadStatus === 'uploading' && uploadProgress.phase === 'upload'))
+      ? uploadProgress.percent
+      : null;
   const uploadSupported = tauriAvailable && cliAvailable;
   const canUpload = uploadSupported && !!selectedBoard && !!selectedBoard.fqbn;
   const primaryIsUpload = primaryAction === 'upload';
@@ -1534,6 +1553,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           {isViewOnly && <span className="view-only-chip" title="You have view-only access">View only</span>}
         </div>
 
+        {!isPlayground && (
+        <>
         <div className="toolbar-separator" />
 
         <div className="toolbar-group">
@@ -1731,6 +1752,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           followingHost={followingHost}
           onToggleFollowHost={toggleFollowHost}
         />
+        </>
+        )}
 
         <button
           type="button"
@@ -1742,6 +1765,22 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           <SettingsIcon />
         </button>
       </div>
+
+      {!isPlayground && uploadBusy && (
+        <div className="upload-progress" role="status" aria-live="polite">
+          <span className="upload-progress-label">
+            {uploadStatus === 'compiling' ? 'Compiling' : 'Uploading'}
+            {uploadPercent != null ? ` ${Math.round(uploadPercent)}%` : '…'}
+          </span>
+          {uploadPercent != null ? (
+            <progress className="upload-progress-bar" max={100} value={uploadPercent} />
+          ) : (
+            <div className="upload-progress-bar is-indeterminate">
+              <div className="upload-progress-fill" />
+            </div>
+          )}
+        </div>
+      )}
 
       <div
         ref={canvasRef}
@@ -1970,10 +2009,14 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
 
         {connectionPaths.map((connection) => {
           const edgeSignal = traceMode ? traceResult.edgeSignals[connection.id] : undefined;
+          // A non-linear edge ignores its weight, so show a thumbnail of the
+          // curve instead of a misleading number (unless tracing, where the
+          // live signal takes over).
+          const showCurve = edgeSignal === undefined && connection.transferMode === 'nonlinear';
           return (
             <button
               key={`${connection.id}-config`}
-              className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''}`}
+              className={`connection-config-trigger ${selectedConnection?.id === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''} ${showCurve ? 'has-curve' : ''}`}
               style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
               onMouseDown={(event) => event.stopPropagation()}
               onPointerDown={(event) => beginBadgeDrag(event, connection)}
@@ -1989,7 +2032,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             >
               {edgeSignal !== undefined
                 ? formatTraceValue(edgeSignal)
-                : `w ${connection.weight.toFixed(2)}`}
+                : showCurve
+                  ? <MiniTransferCurve points={connection.transferPoints} />
+                  : `w ${connection.weight.toFixed(2)}`}
             </button>
           );
         })}
@@ -2244,6 +2289,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           onClear={serialMonitor.clear}
           onReconnect={() => void serialMonitor.start(selectedBoard.port)}
           onClose={closeSerialMonitor}
+          onSend={(text) => void serialMonitor.send(text)}
         />
       )}
       <SessionOverlays />

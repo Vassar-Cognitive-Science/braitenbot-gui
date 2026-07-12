@@ -46,6 +46,11 @@ export interface DiagramPersistenceOptions {
   // is the copy of record. Any in-session role gates file ops behind a
   // "replaces the shared diagram" confirm.
   sessionRole: 'host' | 'guest' | null;
+  // When false, all persistence is disabled: no mount-restore from localStorage,
+  // no autosave, no desktop-menu file listeners. Used by the docs playground,
+  // where each embed is seeded from a preset and must stay ephemeral (multiple
+  // iframes share one origin's localStorage and would otherwise clobber it).
+  enabled?: boolean;
 }
 
 export function useDiagramPersistence({
@@ -54,6 +59,7 @@ export function useDiagramPersistence({
   isPristine,
   resetToDefault,
   sessionRole,
+  enabled = true,
 }: DiagramPersistenceOptions) {
   const applyRef = useRef(applyDiagram);
   // eslint-disable-next-line react-hooks/refs
@@ -76,6 +82,7 @@ export function useDiagramPersistence({
   sessionRoleRef.current = sessionRole;
 
   useLayoutEffect(() => {
+    if (!enabled) return;
     try {
       const raw = localStorage.getItem(PERSONAL_STORAGE_KEY);
       if (!raw) return;
@@ -85,9 +92,10 @@ export function useDiagramPersistence({
       console.warn('[diagram] failed to restore from localStorage:', err);
     }
     // Intentionally run once on mount — refs are read inside, no reactive deps needed.
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const key = sessionRole === 'guest' ? SESSION_STORAGE_KEY : PERSONAL_STORAGE_KEY;
     const timer = window.setTimeout(() => {
       try {
@@ -97,9 +105,10 @@ export function useDiagramPersistence({
       }
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [state, sessionRole]);
+  }, [state, sessionRole, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!isTauri()) return;
 
     let disposed = false;
@@ -184,5 +193,5 @@ export function useDiagramPersistence({
       disposed = true;
       for (const fn of unlistenFns) fn();
     };
-  }, []);
+  }, [enabled]);
 }

@@ -51,14 +51,17 @@ Connection badges show the signal after weight/transfer application. The connect
 
 ### Wheel drive indicator
 
-Each wheel shows an arrow that grows from its center: forward (green) for a positive motor signal, reverse (tan) for a negative one, scaled by magnitude. It's a quick read on which way each wheel would turn and how fast — the same value shown on the motor node, made spatial. (It indicates drive only; to see the robot actually move, upload to hardware.)
+Each motor block grows an arrow straight out of it: up from the top edge (green) for a positive, forward signal, down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude. It's a quick read on which way each wheel would turn and how fast — the same value shown on the motor node, made spatial. (It indicates drive only; to see the robot actually move, upload to hardware.)
 
 ### Oscilloscope
 
-The oscilloscope panel at the bottom shows a rolling history (**5 seconds by default**) of all signal values plotted over time, so you can see how signals change across iterations. Controls:
+The oscilloscope panel at the bottom shows a rolling history (**5 seconds by default**) of all signal values plotted over time, so you can see how signals change across iterations. Each node gets its own row — a color-coded sparkline (orange for sensors, blue for compute, green for outputs) with the latest value beside it. Controls:
 
 - **Pause/Resume** — freeze the display to inspect values
 - **Clear** — reset the history buffer
+- **Hide/show a trace** — click the eye icon on any row to remove that signal from the plot (useful when a busy diagram crowds the view), and **Show all / Hide all** to toggle every row at once
+- **Resize** — drag the panel's top edge to make it taller or shorter
+- **Collapse/expand** — the chevron folds the panel away without leaving trace mode
 
 The oscilloscope samples at the configured loop period (matching what the hardware would do), so the time axis is accurate to the real-time behavior.
 

@@ -10,6 +10,12 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Don't watch the Rust side — Cargo locks build artifacts in
+    // src-tauri/target/ mid-compile, which crashes Vite's file watcher
+    // with EBUSY on Windows.
+    watch: {
+      ignored: ['**/src-tauri/**'],
+    },
   },
   plugins: [react()],
   test: {

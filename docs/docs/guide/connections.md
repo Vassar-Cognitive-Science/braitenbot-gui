@@ -64,6 +64,14 @@ output = source signal × weight
 For example, a sensor reading of 80 through a weight of 0.5 arrives as 40; through
 a weight of -1 it arrives as -80.
 
+:::tip A weight already covers every straight line through the origin
+Because linear mode is just multiplication, any response that's a **straight line
+through zero** is already a weight — you don't need a curve for it. "Invert the
+signal" is simply a weight of **-1**; "halve and invert" is **-0.5**. Reach for a
+non-linear curve only when the response has to *bend*: a dead zone near zero, a
+threshold step, or saturation at the extremes.
+:::
+
 A connection can also use a **non-linear curve** instead of a single weight, for
 responses that change shape across the input range — see
 [Transfer Functions](./transfer-functions).
@@ -153,6 +161,9 @@ say which port it uses:
 
 Connections are drawn as curves between nodes. In normal editing, the color shows
 the weight (green for positive, rust/red for negative) and a badge at the midpoint
-shows its value. In [trace mode](./simulation), the same curve shows the *live*
-signal instead — color and thickness track its magnitude and sign, and a badge
-shows the value after the weight or curve is applied.
+shows its value. A connection using a **non-linear curve** shows a tiny thumbnail
+of that curve on its badge instead of a number — the same shape you'd see in the
+curve editor — since a single weight can't describe it. In
+[trace mode](./simulation), the same curve shows the *live* signal instead —
+color and thickness track its magnitude and sign, and a badge shows the value
+after the weight or curve is applied.

@@ -7,6 +7,12 @@ title: Nodes
 
 Nodes are the building blocks you drag onto the canvas. Every node belongs to a **kind** (sensor, compute, output, constant, compound, or port) and has a specific **type** that defines its behavior. This page documents all available node types.
 
+In the editor, these live in the palette's **Basic** and **Advanced** tabs. The Basic tab lists the reference kit's parts by friendly name with pins pre-filled (dropping "Left Photocell" gives you an analog sensor already set to A0, inverted); the Advanced tab lists every type generically. See [The Editor](../getting-started/editor#node-palette-left-sidebar) for how the palette is organized.
+
+:::note Reference detail is optional
+Each entry lists a **Type ID** and, where useful, the **generated C++** and hardware-driver specifics. You never need any of that to build vehicles — it's tucked into expandable sections you can open if you're curious.
+:::
+
 ## Sensors
 
 Sensor nodes read values from the physical world and output signals into the diagram.
@@ -27,7 +33,9 @@ Reads an analog pin (0–1023) and scales the value to **0–100**.
 - **Arduino Port** — a free-text field for the analog pin label (e.g., `A0`)
 - **Invert signal** — checkbox that outputs `100 − value`, so a brighter reading produces a higher signal. Useful with a photocell wired as a voltage divider, where the raw reading *drops* as light increases — inverting flips it so brighter means higher.
 
-**Generated code:**
+<details>
+<summary>Generated code</summary>
+
 ```cpp
 // Without invert
 float sig_sensor = analogRead(SENSOR_PIN) * (100.0 / 1023.0);
@@ -35,6 +43,8 @@ float sig_sensor = analogRead(SENSOR_PIN) * (100.0 / 1023.0);
 // With invert
 float sig_sensor = 100.0 - (analogRead(SENSOR_PIN) * (100.0 / 1023.0));
 ```
+
+</details>
 
 ---
 
@@ -53,9 +63,20 @@ Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 **Configuration:**
 - **Arduino Port** — a free-text field for the digital pin number (e.g., `2`)
 - **INPUT_PULLUP** — checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
-- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling. One caveat: because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens. Pin support differs by board: classic Uno R3 / Nano boards support every pin (via pin-change interrupts), but the UNO R4 can only attach interrupts on pins 2, 3, 8, 12, and A1–A5 — and pins 3 + A4 (and A3 + A5) share an interrupt channel, so only one pulse-capture sensor can use each pair. The diagram validator warns about both cases.
+- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling.
 
-**Generated code:**
+<details>
+<summary>Pulse capture: caveats and per-board pin support</summary>
+
+Because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens.
+
+Pin support differs by board: classic Uno R3 / Nano boards support every pin (via pin-change interrupts), but the UNO R4 can only attach interrupts on pins 2, 3, 8, 12, and A1–A5 — and pins 3 + A4 (and A3 + A5) share an interrupt channel, so only one pulse-capture sensor can use each pair. The diagram validator warns about both cases.
+
+</details>
+
+<details>
+<summary>Generated code</summary>
+
 ```cpp
 // Without pullup
 float sig_sensor = digitalRead(PIN) * 100.0;
@@ -71,6 +92,8 @@ pulse_sensor = false;
 interrupts();
 float sig_sensor = (pulsed_sensor || digitalRead(PIN) == HIGH) ? 100.0 : 0.0;
 ```
+
+</details>
 
 ---
 
@@ -117,9 +140,18 @@ Reads a VL53L4CD time-of-flight distance sensor over I2C and outputs a single si
 - **Max Distance (mm)** — the distance that maps to full-scale signal (default: 500). Objects at or beyond this read 0.
 - **Invert (far reads higher)** — checkbox that flips the mapping so a farther object produces a higher signal.
 
-**Multiple sensors and the address trick:** every VL53L4CD powers up at the same default I2C address (written `0x52`, or `0x29` in 7-bit notation — the same address, two ways of writing it), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
+**Multiple ToF sensors** — and pairing a ToF with the color sensor — share the I2C bus automatically. You only need to give each ToF node its own **XSHUT pin**; the generated sketch handles the rest.
 
-**Generated code (per loop):**
+<details>
+<summary>The I2C address trick (how multiple sensors share one bus)</summary>
+
+Every VL53L4CD powers up at the same default I2C address (written `0x52`, or `0x29` in 7-bit notation — the same address, two ways of writing it), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
+
+</details>
+
+<details>
+<summary>Generated code (per loop) and range-status handling</summary>
+
 ```cpp
 uint8_t ready_tof = 0;
 static float dist_tof = 500.0;            // distance (mm); no target reads as far
@@ -144,6 +176,8 @@ The read is non-blocking — the main loop runs faster than a ranging cycle, so 
 
 These resolve to *distances*, so the node's **Invert** setting still applies: in the default near-reads-high orientation, status 3 yields signal 100 and status 4–7 yield 0; with Invert on, they flip.
 
+</details>
+
 ---
 
 ## Compute Nodes
@@ -164,10 +198,14 @@ Binary decision node. Outputs **100** if the input exceeds the threshold, otherw
 **Configuration:**
 - **Threshold** — value from -100 to 100 (default: 50)
 
-**Generated code:**
+<details>
+<summary>Generated code</summary>
+
 ```cpp
 float sig_node = (input > 50.0) ? 100.0 : 0.0;
 ```
+
+</details>
 
 ---
 

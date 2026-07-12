@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
         'guide/transfer-functions',
         'guide/compound-nodes',
         'guide/simulation',
+        'guide/collaborative-sessions',
       ],
     },
     {

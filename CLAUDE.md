@@ -41,6 +41,11 @@ npm test             # vitest run (unit tests)
 | `src/components/NumberInput.tsx` | Controlled numeric input with keyboard/scroll increment |
 | `src/components/SetupModal.tsx` | First-run Arduino detection/setup dialog |
 | `src/components/TransferCurveEditor.tsx` | Per-connection transfer curve editor |
+| `src/components/DiagramNodeView.tsx` | Single-node renderer (label, type glyph, handles, trace controls); holds the `NODE_TYPE_ICONS` map |
+| `src/components/CommentView.tsx` | Movable/resizable annotation note drawn behind nodes |
+| `src/components/SettingsModal.tsx` | App-preferences dialog (weight cap, loop period, trace pulse duration) |
+| `src/components/icons.tsx` | Inline-SVG icon set (toolbar buttons + per-node-type glyphs) |
+| `src/settings/appSettings.ts` | Cross-diagram app preferences (localStorage) |
 | `src/App.css` | All styling (layout, nodes, robot overlay, config panel) |
 | `src/App.tsx` | Root component wiring the diagram and setup modal |
 | `src/hooks/useArduino.ts` | Arduino detection + compile/upload via Tauri |
@@ -56,7 +61,7 @@ npm test             # vitest run (unit tests)
 ### Node Types
 
 - **Sensors**: `sensor-analog`, `sensor-digital`, `sensor-color` (TCS34725 RGBC), `sensor-tof` (VL53L4CD ToF distance)
-- **Compute**: `compute-threshold`, `compute-delay`, `compute-summation`, `compute-multiply`, `compute-oscillator`, `compute-noise`
+- **Compute**: `compute-threshold`, `compute-delay`, `compute-summation`, `compute-multiply`, `compute-min`, `compute-max`, `compute-oscillator`, `compute-noise`
 - **Constants**: `constant` — fixed-value input
 - **Outputs**: `servo-cr` (continuous servo), `servo-positional`, `digital-out`, `display-tm1637` (7-segment)
 - **Compound**: `compound` — user-defined sub-diagram instance; `compound-input` / `compound-output` port anchors (body-only)
@@ -72,6 +77,43 @@ The robot is rendered as a top-down view in the center of the canvas:
 - Circular body
 - Two rounded-rectangle wheels at the left/right edges
 - Motor nodes anchored to wheel positions
+
+## Adding a new node type
+
+Every node type is expected to be complete on all of these fronts — a new
+block that skips one reads as half-finished. When adding one, touch:
+
+1. **`src/types/diagram.ts`** — add the id to the `NodeTypeId` union and an
+   entry to the `NODE_TYPES` registry (kind, `displayName`, `metaLabel`,
+   `mode`, port flags).
+2. **`src/components/icons.tsx`** — add a glyph. *Every node type has a
+   per-node icon shown before its label; there are no exceptions.* Follow the
+   existing lucide-style convention (24×24 viewBox, `currentColor` stroke).
+3. **`src/components/DiagramNodeView.tsx`** — register the glyph in the
+   `NODE_TYPE_ICONS` map (the map is keyed by every `NodeTypeId`, so a new
+   type won't type-check until it's added).
+4. **`src/components/palettePresets.ts`** — add the palette entry (Basic
+   and/or Advanced) with any pre-filled pins/params.
+5. **`src/codegen/emitter.ts`** — emit the node's Arduino code for its `mode`.
+6. **`src/hooks/useTraceSimulation.ts`** — implement its trace-mode behavior
+   so simulation matches the generated sketch.
+7. **Docs** — add a reference entry in `docs/docs/guide/nodes.md` and list it
+   in the palette sections of `docs/docs/getting-started/editor.md`.
+
+Kinds are color-coded consistently across the app and docs: orange sensors,
+blue compute, green outputs, purple compounds (CSS vars `--sensor-color`,
+`--compute-color`, `--output-color`, `--compound-color`).
+
+## Keeping docs in sync
+
+`docs/` is the public website, so treat user-visible changes as incomplete
+until the docs match. When a feature commit changes what the user sees, update
+the relevant page in the same change:
+
+- New/changed node type → `guide/nodes.md`, `getting-started/editor.md`
+- Toolbar / menu / Settings changes → `getting-started/editor.md`
+- Trace / simulation behavior → `guide/simulation.md`
+- Connection or weight behavior → `guide/connections.md`
 
 ## Conventions
 

@@ -12,14 +12,11 @@
 //   2x continuous servo      (MG996R, the wheels)
 //
 // HOW TO USE IT
-//   - The 7-segment display shows the current test mode as 0001, 0002, 0003 ...
-//   - Hold the FRONT-LEFT bump switch to scrub modes: each press steps the
-//     mode number forward and previews it (nothing runs while held); RELEASE
-//     the switch to start that mode.
-//   - A running mode shows that device's live reading. Motor modes spin a
-//     wheel briefly (only after release, never while you're previewing).
-//   - The USB serial monitor (115200 baud) prints full diagnostics for every
-//     device every loop, so nothing is hidden behind the 4-digit display.
+//   - Pick which device to test over the USB serial monitor (115200 baud):
+//     send a mode number (1-9), or "n" / "p" for next / previous.
+//   - The 7-segment display shows the current mode's live reading; the serial
+//     monitor prints full diagnostics for every device each loop.
+//   - Motor modes (7, 8) spin a wheel forward/stop/reverse on a repeating cycle.
 //
 // All pins live in config.h — edit that file to match your wiring.
 // ============================================================================
@@ -65,7 +62,34 @@ TM1637Display display(TM1637_CLK_PIN, TM1637_DIO_PIN);
 // ---------------------------------------------------------------------------
 const uint8_t TCS34725_ADDR = 0x29;
 
+// ADC full-scale count at the ~101 ms integration time set below. A channel at
+// this value maps to 100. Matches TCS34725_FULL_SCALE in the code generator, so
+// the test sketch reports the same 0-100 scale a generated diagram would.
+const float TCS34725_FULL_SCALE = 44032.0;
+
 struct ColorSample { uint16_t c, r, g, b; };
+
+// Scale a raw 16-bit channel count to the 0-100 signal range (saturated = 100).
+int colorPercent(uint16_t raw) {
+  return (int)(constrain(raw * (100.0 / TCS34725_FULL_SCALE), 0.0, 100.0) + 0.5);
+}
+
+// Scale a raw analog reading (0-1023) to 0-100, like an Analog Sensor node
+// (before any invert option).
+int analogPercent(int raw) {
+  return (int)(constrain(raw * (100.0 / 1023.0), 0.0, 100.0) + 0.5);
+}
+
+// Distance (mm) that maps to full scale for the ToF readout — matches the ToF
+// Distance node's default Max Distance, so the test shows the same 0-100 a
+// default node would.
+const float TOF_MAX_MM = 500.0;
+
+// Scale a ToF distance (mm) to 0-100 the way a ToF Distance node does: a closer
+// object reads higher, ramping to 0 at TOF_MAX_MM.
+int tofPercent(int distMm) {
+  return (int)(constrain((1.0 - distMm / TOF_MAX_MM) * 100.0, 0.0, 100.0) + 0.5);
+}
 
 void tcs34725_write8(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(TCS34725_ADDR);
@@ -107,18 +131,13 @@ ColorSample tcs34725_read() {
 int currentMode = 0;
 unsigned long modeEnteredAt = 0;
 
-// While the MODE button is held after a press, we "preview" the upcoming mode:
-// the display shows its number but the mode itself doesn't run yet. Releasing
-// the button starts the mode.
-bool modePreview = false;
-
 // Which ToF sensors actually answered at boot (set in setup()).
 bool tof1Present = false;
 bool tof2Present = false;
 
-// Front-left bump switch edge detection (the MODE button).
-bool modeBtnPressed = false;          // debounced "currently held" state
-unsigned long modeBtnLastChange = 0;
+// Line buffer for mode-selection commands typed over USB serial.
+char serialCmdBuf[16];
+uint8_t serialCmdLen = 0;
 
 // ---------------------------------------------------------------------------
 // Wheels. CR servos: 1500 us = stop, +/- 500 us = full speed either way.
@@ -238,7 +257,8 @@ void setup() {
   Serial.println(i2cResponding(0x29) ? F("responding") : F("NOT FOUND"));
 
   modeEnteredAt = millis();
-  Serial.println(F("Ready. Press the front-left bumper to change mode."));
+  Serial.println(F("Ready. Select a mode over serial: 1-9 = mode number,"));
+  Serial.println(F("n = next, p = previous."));
 }
 
 // ---------------------------------------------------------------------------
@@ -261,30 +281,42 @@ int readTof(VL53L4CD &sensor, uint8_t addr7, int &held) {
   return held;
 }
 
-// ---------------------------------------------------------------------------
-// MODE button (front-left bumper), debounced:
-//   press   -> advance to the next mode and PREVIEW it (show its number only)
-//   release -> START that mode (it begins running)
-// Hold the button to scrub through mode numbers; let go on the one you want.
-// ---------------------------------------------------------------------------
-void updateModeButton() {
-  bool raw = bumpPressed(BUMP_FRONT_LEFT_PIN);
-  unsigned long now = millis();
-  if (raw != modeBtnPressed && (now - modeBtnLastChange) > MODE_DEBOUNCE_MS) {
-    modeBtnLastChange = now;
-    modeBtnPressed = raw;
-    if (raw) {                          // pressed -> preview the next mode
-      currentMode = (currentMode + 1) % MODE_COUNT;
-      modePreview = true;
-      driveLeft(0);                     // hold motors still while previewing
-      driveRight(0);
-      display.clear();
-      Serial.print(F("--- Mode "));
-      Serial.print(currentMode + 1);
-      Serial.println(F(" (release to start) ---"));
-    } else {                            // released -> start the mode now
-      modePreview = false;
-      modeEnteredAt = now;
+// Jump straight to a mode (used by serial commands). Modes are selected only
+// over serial — the front-left bumper is a normal switch again (tested in the
+// bumpers mode).
+void startMode(int mode) {
+  currentMode = ((mode % MODE_COUNT) + MODE_COUNT) % MODE_COUNT;
+  modeEnteredAt = millis();
+  driveLeft(0);
+  driveRight(0);
+  Serial.print(F("--- Mode "));
+  Serial.print(currentMode + 1);
+  Serial.println(F(" started ---"));
+}
+
+// Read mode-selection commands from USB serial (newline-terminated):
+//   1..9  -> jump to that mode number
+//   n / + -> next mode
+//   p / - -> previous mode
+void handleSerialCommand() {
+  while (Serial.available() > 0) {
+    char ch = (char)Serial.read();
+    if (ch == '\n' || ch == '\r') {
+      if (serialCmdLen > 0) {
+        serialCmdBuf[serialCmdLen] = '\0';
+        char c = serialCmdBuf[0];
+        if (c == 'n' || c == 'N' || c == '+') {
+          startMode(currentMode + 1);
+        } else if (c == 'p' || c == 'P' || c == '-') {
+          startMode(currentMode + MODE_COUNT - 1);
+        } else {
+          int n = atoi(serialCmdBuf);
+          if (n >= 1 && n <= MODE_COUNT) startMode(n - 1);
+        }
+      }
+      serialCmdLen = 0;
+    } else if (serialCmdLen < sizeof(serialCmdBuf) - 1) {
+      serialCmdBuf[serialCmdLen++] = ch;
     }
   }
 }
@@ -305,31 +337,21 @@ void showDashes() {
 // ---------------------------------------------------------------------------
 void loop() {
   unsigned long loopStart = millis();
-  updateModeButton();
-
-  // While the button is held, just show the upcoming mode number and don't run
-  // the mode (motors stay still). The mode starts when the button is released.
-  if (modePreview) {
-    display.showNumberDec(currentMode + 1, true);  // 0001, 0002, ...
-    digitalWrite(LED_BUILTIN, (loopStart / 500) % 2);
-    unsigned long held = millis() - loopStart;
-    if (held < LOOP_PERIOD_MS) delay(LOOP_PERIOD_MS - held);
-    return;
-  }
+  handleSerialCommand();
 
   unsigned long sinceEnter = loopStart - modeEnteredAt;
 
   switch (currentMode) {
     case MODE_PHOTOCELL_LEFT: {
-      int v = analogRead(PHOTOCELL_LEFT_PIN);
+      int v = analogPercent(analogRead(PHOTOCELL_LEFT_PIN));
       showValue(v);
-      Serial.print(F("Photocell L (A0 raw 0-1023): ")); Serial.println(v);
+      Serial.print(F("Photocell L (0-100): ")); Serial.println(v);
       break;
     }
     case MODE_PHOTOCELL_RIGHT: {
-      int v = analogRead(PHOTOCELL_RIGHT_PIN);
+      int v = analogPercent(analogRead(PHOTOCELL_RIGHT_PIN));
       showValue(v);
-      Serial.print(F("Photocell R (A1 raw 0-1023): ")); Serial.println(v);
+      Serial.print(F("Photocell R (0-100): ")); Serial.println(v);
       break;
     }
     case MODE_TOF1: {
@@ -340,8 +362,10 @@ void loop() {
       }
       static int held = 9999;
       readTof(tof1, TOF1_I2C_ADDR >> 1, held);  // 8-bit addr -> 7-bit
-      showValue(held);
-      Serial.print(F("Left ToF distance (mm): ")); Serial.println(held);
+      int pct = tofPercent(held);
+      showValue(pct);
+      Serial.print(F("Left ToF (0-100): ")); Serial.print(pct);
+      Serial.print(F("  (dist mm: ")); Serial.print(held); Serial.println(F(")"));
       break;
     }
     case MODE_TOF2: {
@@ -352,23 +376,28 @@ void loop() {
       }
       static int held = 9999;
       readTof(tof2, TOF2_I2C_ADDR >> 1, held);  // 8-bit addr -> 7-bit
-      showValue(held);
-      Serial.print(F("Right ToF distance (mm): ")); Serial.println(held);
+      int pct = tofPercent(held);
+      showValue(pct);
+      Serial.print(F("Right ToF (0-100): ")); Serial.print(pct);
+      Serial.print(F("  (dist mm: ")); Serial.print(held); Serial.println(F(")"));
       break;
     }
     case MODE_COLOR: {
       ColorSample s = tcs34725_read();
-      showValue(s.c);   // display the clear channel
-      Serial.print(F("Color  C:")); Serial.print(s.c);
-      Serial.print(F(" R:"));       Serial.print(s.r);
-      Serial.print(F(" G:"));       Serial.print(s.g);
-      Serial.print(F(" B:"));       Serial.println(s.b);
+      int c = colorPercent(s.c);
+      int r = colorPercent(s.r);
+      int g = colorPercent(s.g);
+      int b = colorPercent(s.b);
+      showValue(c);   // display the clear channel, scaled to 0-100
+      Serial.print(F("Color (0-100)  C:")); Serial.print(c);
+      Serial.print(F(" R:"));               Serial.print(r);
+      Serial.print(F(" G:"));               Serial.print(g);
+      Serial.print(F(" B:"));               Serial.println(b);
       break;
     }
     case MODE_BUMPERS: {
-      // One digit per switch: FL FR RL RR (1 = pressed, 0 = open). Pressing FL
-      // advances the mode, so it's verified by navigation; FR/RL/RR are the
-      // ones you watch live here.
+      // One digit per switch: FL FR RL RR (1 = pressed, 0 = open). All four are
+      // tested live here — the front-left switch is no longer a mode button.
       bool fl = bumpPressed(BUMP_FRONT_LEFT_PIN);
       bool fr = bumpPressed(BUMP_FRONT_RIGHT_PIN);
       bool rl = bumpPressed(BUMP_REAR_LEFT_PIN);

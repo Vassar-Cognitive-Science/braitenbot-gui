@@ -29,25 +29,27 @@ Arduino and click Refresh."* instead of uploading. Select a board first.
 
 ## Using the test
 
-The test checks one device at a time, and you pick which one with the front-left
-bump switch:
+Once the upload finishes, the **Serial Monitor** opens automatically (115200
+baud). You pick which device to test — and read its live values — entirely over
+serial. In the monitor's send box, type:
 
-- **Hold the front-left bump switch** to step through the modes. Each press
-  advances the mode number (`0001`, `0002`, …) and shows it on the display.
-- **Release** to start the mode you landed on.
-- Each mode shows that device's live reading on the 7-segment display. To see
-  readings from every device at once, open the **Serial Monitor at 115200 baud**.
+- A **mode number** `1`–`9` to jump straight to that device's mode.
+- **`n`** for the next mode, **`p`** for the previous one.
+
+The current mode's reading also shows on the 7-segment display, but the Serial
+Monitor prints full diagnostics for every device each loop — so nothing is
+hidden behind the 4-digit display.
 
 There are nine modes, one per device:
 
 | # | Mode | What it shows on the display |
 |---|------|------|
-| `0001` | Left photocell | Raw light reading, 0–1023 (A0). Cover/uncover the sensor and watch it change. |
-| `0002` | Right photocell | Raw light reading, 0–1023 (A1). |
-| `0003` | Left ToF distance | Distance in millimeters. `9999` means nothing in range; `----` means the sensor wasn't found at boot. |
+| `0001` | Left photocell | Light level scaled to 0–100 (A0). Cover/uncover the sensor and watch it change. |
+| `0002` | Right photocell | Light level scaled to 0–100 (A1). |
+| `0003` | Left ToF distance | Proximity scaled to 0–100 — closer reads higher, ramping to 0 by about 500 mm (the same scale a ToF Distance node uses). `----` means the sensor wasn't found at boot. The Serial Monitor also prints the raw distance in mm. |
 | `0004` | Right ToF distance | Same as above, for the right-side sensor. |
-| `0005` | Color sensor | The clear-light channel. The Serial Monitor also prints the red, green, and blue values. |
-| `0006` | Bump switches | Four digits, one per switch — front-left, front-right, rear-left, rear-right — each `1` when pressed, `0` when open. (Pressing front-left changes the mode, so test it by navigating; watch the other three here.) |
+| `0005` | Color sensor | The clear-light channel, scaled to 0–100 (a saturated channel reads 100 — the same scale a Color Sensor node uses). The Serial Monitor also prints red, green, and blue on the same 0–100 scale. |
+| `0006` | Bump switches | Four digits, one per switch — front-left, front-right, rear-left, rear-right — each `1` when pressed, `0` when open. All four are testable directly (the front-left switch is no longer a mode button). |
 | `0007` | Left wheel | Spins the left wheel forward → stop → reverse → stop on a repeating cycle. The display shows the commanded speed (e.g. `60`, `-60`). |
 | `0008` | Right wheel | Same drive pattern for the right wheel. |
 | `0009` | Display self-test | Lights every segment (`8888` plus the colon) to confirm the display itself works. |

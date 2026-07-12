@@ -31,6 +31,16 @@ type RustUploadResult = {
 
 export type UploadStatus = 'idle' | 'compiling' | 'uploading' | 'success' | 'error';
 
+/**
+ * Fine-grained compile/upload progress from the Rust backend. `percent` is null
+ * when the underlying tool reports no percentage (compiling, or an uploader that
+ * prints no progress bar) — the UI shows an indeterminate bar then.
+ */
+export interface UploadProgress {
+  phase: 'compile' | 'upload';
+  percent: number | null;
+}
+
 export type CoreInstallStatus = 'idle' | 'checking' | 'installing' | 'success' | 'error';
 
 /**
@@ -57,6 +67,7 @@ export function useArduino() {
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<BoardInfo | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [lastResult, setLastResult] = useState<UploadResult | null>(null);
   const [coreInstalled, setCoreInstalled] = useState<boolean | null>(null);
   const [coreInstallStatus, setCoreInstallStatus] = useState<CoreInstallStatus>('idle');
@@ -134,6 +145,7 @@ export function useArduino() {
       };
 
       setUploadStatus('compiling');
+      setUploadProgress(null);
       try {
         const rustResult = await invoke<RustUploadResult>(command, args);
         if (cancelledRef.current) {
@@ -356,6 +368,23 @@ export function useArduino() {
     };
   }, [tauriAvailable]);
 
+  // Reflect fine-grained compile/upload progress emitted by the Rust backend.
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let active = true;
+    let unlisten: UnlistenFn | null = null;
+    listen<UploadProgress>('arduino-upload-progress', (event) => {
+      setUploadProgress(event.payload);
+    }).then((fn) => {
+      if (active) unlisten = fn;
+      else fn();
+    });
+    return () => {
+      active = false;
+      if (unlisten) unlisten();
+    };
+  }, [tauriAvailable]);
+
   // Clear any pending idle-reset timer on unmount.
   useEffect(
     () => () => {
@@ -374,6 +403,7 @@ export function useArduino() {
     setSelectedBoard,
     refreshBoards,
     uploadStatus,
+    uploadProgress,
     lastResult,
     compileAndUpload,
     uploadTestSketch,

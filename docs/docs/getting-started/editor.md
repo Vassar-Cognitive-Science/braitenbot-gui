@@ -11,16 +11,20 @@ The BraitenBot editor is a single-screen workspace with four main areas.
 
 ```
 ┌──────────────┬──────────────────────────────────────┬──────────────┐
-│              │          Canvas Toolbar               │              │
-│   Node       ├──────────────────────────────────────┤  Config      │
-│   Palette    │                                      │  Panel       │
-│              │         Diagram Canvas                │              │
-│              │        (Robot Overlay)                │              │
+│              │            Canvas Toolbar            │              │
+│  Node        ├──────────────────────────────────────┤  Config      │
+│  Palette     │            Diagram Canvas            │  Panel       │
+│              │           (Robot Overlay)            │              │
 │              │                                      │              │
 │              ├──────────────────────────────────────┤              │
-│              │       Oscilloscope (trace mode)       │              │
+│              │      Oscilloscope (trace mode)       │              │
 └──────────────┴──────────────────────────────────────┴──────────────┘
 ```
+
+- **Node palette** (left) and **config panel** (right) span the full height.
+- The **canvas toolbar** sits above the **diagram canvas** (with the robot
+  overlay at its center); the **oscilloscope** slides in below the canvas in
+  trace mode.
 
 ## Node palette (left sidebar)
 
@@ -51,6 +55,9 @@ Each section is color-coded to match the node kind:
 - Orange for sensors
 - Blue for compute
 - Green for outputs
+- Purple for compounds
+
+On the canvas, every node also shows a small type glyph before its label (a sun for an analog sensor, a timer for a delay, a sigma for summation, and so on), tinted to the node's kind so you can read a diagram at a glance without reading each label.
 
 **To add a node:** drag it from either tab and drop it onto the canvas.
 
@@ -90,7 +97,7 @@ The editor prevents invalid connections: you can't connect a node to itself, exc
 
 The robot appears as a circle in the center of the canvas with two wheels (rounded rectangles) on the left and right edges. The two motor nodes (left wheel, right wheel) are always snapped to the wheel positions — you can't drag them away from the robot body. All other nodes can be positioned freely.
 
-In **trace mode**, each wheel also shows a drive arrow that grows from the wheel's center: it points forward (green) for a positive motor signal and reverses (tan) for a negative one, scaled by magnitude — a quick read on which way each wheel would turn. (It's an indicator only; to actually watch the robot move, upload to the real hardware.)
+In **trace mode**, each wheel's motor block also grows a drive arrow straight out of it: up from the top edge (green) for a positive, forward signal and down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude — a quick read on which way each wheel would turn. (It's an indicator only; to actually watch the robot move, upload to the real hardware.)
 
 ## Canvas toolbar (top)
 
@@ -111,12 +118,14 @@ The toolbar is divided into functional groups:
 ### Sketch
 - **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
 
+During an upload, a **progress bar** appears at the top of the canvas showing the current phase (compiling, then uploading — with a percentage once the uploader reports one), next to a **Cancel** button.
+
 The Arduino **loop period** is no longer in this group — it now lives in **Settings** (see below).
 
 ### Device
 - **Board selector** — dropdown showing detected Arduino boards
 - **Refresh** — re-scan serial ports
-- **Monitor** — open the serial monitor to watch live output from the board
+- **Monitor** — open the serial monitor to watch live output from the board, and send lines back to it using the text box at the bottom of the panel (for example, to drive the [hardware test sketch](../hardware/testing) over serial)
 
 ### Share
 - **Share** — start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
@@ -169,6 +178,7 @@ When signal tracing is active (toggled with **Trace Signal Flow**), a collapsibl
 | **Drag** on empty canvas | Pan the view |
 | **Scroll** / two-finger swipe | Pan the view |
 | **Ctrl/Cmd + Scroll** | Zoom in/out (0.3× to 3×) |
+| **Ctrl/Cmd + 0** | Go to main view (recenter, reset zoom to 100%) |
 | **Delete** or **Backspace** | Delete the selected node or connection |
 | **Ctrl/Cmd + Z** | Undo |
 | **Ctrl/Cmd + Shift + Z** or **Ctrl/Cmd + Y** | Redo |

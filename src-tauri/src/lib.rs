@@ -144,6 +144,7 @@ pub fn run() {
             arduino::cancel_upload,
             arduino::start_serial_monitor,
             arduino::stop_serial_monitor,
+            arduino::write_serial,
             arduino::check_avr_core,
             arduino::install_avr_core,
             arduino::check_driver_issue,

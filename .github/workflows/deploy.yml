@@ -14,6 +14,13 @@ on:
       - 'docs/**'
       - 'scripts/fetch-latest-release.mjs'
       - '.github/workflows/deploy.yml'
+      # The docs embed the editor as a browser-only "playground" built from the
+      # app, so app/build changes must retrigger a deploy to rebuild it.
+      - 'src/**'
+      - 'playground.html'
+      - 'vite.playground.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
   release:
     types: [published]
   workflow_dispatch:
@@ -43,6 +50,13 @@ jobs:
         run: node scripts/fetch-latest-release.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install app dependencies (for the embedded playground)
+        run: npm ci
+
+      - name: Build the docs playground (embedded editor)
+        # Emits to docs/static/playground/ so Docusaurus serves it under the site.
+        run: npm run build:playground
 
       - name: Install docs dependencies
         working-directory: docs

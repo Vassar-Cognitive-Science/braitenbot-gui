@@ -3,6 +3,10 @@ dist
 dist-ssr
 *.local
 
+# Docs playground: built from the app by `npm run build:playground` (and by CI
+# before each Pages deploy). A generated artifact — not checked in.
+docs/static/playground/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

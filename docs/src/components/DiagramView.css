@@ -154,11 +154,11 @@
 }
 
 .dv-node-compound {
-  border: 1px solid #8aa8d8;
-  box-shadow: inset 0 0 0 1px rgba(138, 168, 216, 0.25);
+  border: 1px solid #8a6ee6;
+  box-shadow: inset 0 0 0 1px rgba(138, 110, 230, 0.25);
 }
 .dv-node-compound .dv-node-label {
-  color: #c4d5ee;
+  color: #d3c8f7;
 }
 
 .dv-node-port {
@@ -242,8 +242,8 @@
 }
 
 .dv-node-compound .dv-handle {
-  color: #8aa8d8;
-  border-color: #8aa8d8;
+  color: #8a6ee6;
+  border-color: #8a6ee6;
 }
 
 .dv-node-port .dv-handle {
