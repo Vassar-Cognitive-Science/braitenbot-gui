@@ -477,6 +477,10 @@
   flex-shrink: 0;
   width: 8px;
   text-align: center;
+  /* "100" is wider than the 8px box and intentionally overflows it; without
+     nowrap, host pages with global word-breaking (Docusaurus) stack it
+     vertically one digit per line. */
+  white-space: nowrap;
 }
 
 /* Explicit cross-engine slider styling: the native control renders slim in
