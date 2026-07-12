@@ -3,9 +3,35 @@ sidebar_position: 6
 title: Simulating & Tracing
 ---
 
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
 # Simulating & Tracing
 
 Trace mode lets you simulate your diagram's signal flow without hardware. It's the fastest way to verify that your wiring produces the behavior you expect.
+
+## Try it live
+
+The diagram below runs the exact same simulation the desktop app uses. Drag the light sensor's slider (or tap **▶** to pulse it) and watch the signal propagate to the two motors. This is a Braitenberg *vehicle 2* with crossed wiring: more light on the sensor speeds up the far wheel, so the vehicle turns *toward* light.
+
+This one is **editable** — drag the nodes around, drag from a node's bottom dot to draw a new wire, or click a connection's weight badge to retune it. Try adding a **Threshold** node between the sensor and a motor so the wheel only kicks in past a certain brightness, or drop in a second **Analog Sensor** to give the vehicle a second eye. Hit **Reset** to get the original wiring back.
+
+<InteractiveDiagram
+  palette={['sensor-analog', 'compute-threshold', 'compute-delay']}
+  initialInputs={{ 'sensor-light': 50 }}
+  diagram={{
+    loopPeriodMs: 50,
+    nodes: [
+      { id: 'sensor-light', type: 'sensor-analog', label: 'Light', x: 240, y: 40, arduinoPort: 'A0' },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 60, y: 260, servoPin: '9' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 420, y: 260, servoPin: '10' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor-light', to: 'right-motor', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sensor-light', to: 'left-motor', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2 (crossed): the light sensor drives the opposite-side motor harder, so the vehicle steers toward light."
+/>
 
 ## Activating trace mode
 

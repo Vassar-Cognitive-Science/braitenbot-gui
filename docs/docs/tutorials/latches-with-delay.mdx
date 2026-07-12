@@ -1,64 +1,43 @@
 ---
 sidebar_position: 6
-title: "Tutorial: Latches with Delay"
+title: "5. Memory"
 ---
 
-# Latches with Delay
+# Memory
 
-Put a bumper switch on the front of the obstacle-avoidance robot from the earlier tutorial and you'll discover a problem. The robot detects the wall with its distance sensors and turns away — but sometimes it doesn't turn far enough and clips the corner. The bumper clicks for a fraction of a second, then releases. The robot doesn't react because by the time the next loop iteration runs, the bumper is already open again. The event is gone.
+Every vehicle you've built so far is **purely reactive**: its output depends only on what the sensors read *right now*. A vehicle like that lives in an eternal present — it has no "a moment ago." Its sensors make this worse, not better: they report the present *continuously*, so a brief bump against a wall is, on the very next reading, simply gone. Nothing in the circuit ever saw a "then."
 
-What you need is **memory**: a way for the robot to notice a brief event (the bumper click) and hold onto it for long enough to respond (reverse for two seconds). This tutorial introduces the latch — a feedback loop built from a Summation and a Delay node that captures transient events and sustains them.
+That matters the moment you want a behavior to outlast its cause. A bumper tap lasts a twentieth of a second; "back away from the wall" needs to last a second or two. So where could a memory possibly live? Not in any single part — none of them store anything. The answer turns out to be **topology**: route a signal back into itself through a delay, and the loop keeps that signal alive after its cause has vanished. Memory becomes a *process* rather than a place — activity sustaining itself. This lesson, you build "the past" out of components that only ever sense "now."
 
-There's a deeper puzzle hiding here. Every circuit you've built so far is **purely reactive**: its output depends only on what the sensors read *right now*. A vehicle like that lives in an eternal present — it has no "a moment ago." And its sensors make this worse, not better: they report the present *continuously*, so a 50 ms bump is, on the very next reading, simply gone. Nothing in the circuit ever saw a "then."
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-So where could a memory possibly live? Not in any single part — none of them store anything. The answer turns out to be **topology**: route a signal back into itself through a delay, and the loop keeps that signal alive after its cause has vanished. Memory becomes a *process* rather than a place — activity sustaining itself. You're about to build "the past" out of components that can only ever sense "now."
-
-**Time:** 20 minutes
-**Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and familiar with [signal flow](../guide/connections)
-
-## The scenario: bump and reverse
-
-Here's the concrete behavior we're building:
-
-1. The robot drives forward at cruising speed
-2. Its front bumper hits a wall (momentary contact — maybe 50ms)
-3. The robot remembers the bump and reverses for 2 seconds
-4. After 2 seconds, the robot stops reversing and drives forward again
-
-The bumper is a momentary switch — it's only pressed for a few loop iterations. Without memory, the robot would reverse for those few iterations (imperceptibly) and then immediately drive forward again, right back into the wall.
-
-## How a latch works
-
-A latch is a feedback loop: a Summation node sends its output through a Delay node, which feeds the value back into the Summation one iteration later.
-
-import DiagramView from '@site/src/components/DiagramView';
-
-<DiagramView
-  width={500}
-  height={300}
-  nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'D2' },
-    { id: 'sum', type: 'compute-summation', label: 'Latch', x: 176, y: 30 },
-    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 176, y: 170, meta: '20 ms' },
-    { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 340, y: 30 },
-  ]}
-  connections={[
-    { from: 'bumper', to: 'sum', weight: 1.0 },
-    { from: 'sum', to: 'motor', weight: 0.5 },
-    { from: 'sum', to: 'delay', weight: 1.0 },
-    { from: 'delay', to: 'sum', weight: 1.0, label: 'feedback' },
-  ]}
-  caption="Basic latch: summation + delay feedback loop"
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Tap the bumper (▶) once, briefly. The bumper forgets instantly. The circuit doesn't. Find where the memory is kept — you can't."
 />
 
-Walk through the loop iterations:
+This is a **latch**: a Summation node sends its output through a Delay node (set to 20 ms — exactly one loop tick), which feeds the value back into the Summation one tick later. Walk the loop:
 
-1. **Before the bump**: Summation receives 0 from the bumper and 0 from the delay feedback. Output is 0. Motor is off.
-2. **Bumper pressed**: Bumper sends 100. Summation outputs 100. The delay captures 100.
-3. **Bumper released**: Bumper sends 0. But the delay feeds back the *previous* output (100). Summation receives 0 + 100 = 100. The latch holds.
-4. **Every subsequent iteration**: The delay keeps feeding back 100, and the summation keeps outputting 100. The latch remembers the bump indefinitely.
+1. **Before the tap**: the Latch receives 0 from the bumper and 0 from the feedback. Output 0. Motor off.
+2. **Bumper pressed**: the bumper sends 100. The Latch outputs 100. The delay captures it.
+3. **Bumper released**: the bumper sends 0 — but the delay hands back the *previous* output. The Latch receives 0 + 100 = 100. It holds.
+4. **Every tick after**: the delay keeps echoing, the Latch keeps summing. The tap is remembered indefinitely.
 
-The robot's motor stays active even though the bumper was only pressed for a moment. The feedback loop sustains the signal.
+The motor keeps driving even though the bumper was only pressed for a moment. The feedback loop sustains the signal on its own.
 
 :::note[Memory without a memory]
 
@@ -67,123 +46,287 @@ Look closely at what just happened: the latch "remembers" the bump, yet nowhere 
 This is a strange idea, and it isn't just a trick of the editor. Many models of biological short-term memory work the same way: a memory is held not by a dedicated "storage" cell but by a loop of neurons that keep re-exciting each other. Break the loop for a single tick and the memory is gone — instantly and completely, with no trace left behind. A thought, on this view, is something a circuit *does*, not something it *has*.
 :::
 
-## Step 1: Build the latch
+Now build it yourself — one wire at a time.
 
-1. Drag a **Summation** node onto the canvas, label it "Latch"
-2. Drag a **Delay** node onto the canvas — set its delay to **20 ms** (one loop period, the minimum for a simple latch)
-3. Connect Summation → Delay (weight 1.0)
-4. Connect Delay → Summation (weight 1.0)
+## Puzzle 1 — Close the loop
 
-## Step 2: Add the bumper trigger
+Here's the same circuit with one wire missing: the feedback from the Delay back into the Latch. As it stands, a tap runs Bumper → Latch → Motor and evaporates one tick later. The delay hears everything and tells no one.
 
-1. Drag **Bump Front-Left** (D2) from the palette's **Basic** tab — it arrives labeled and wired to pin 2 with its pull-up already on. Rename it "Bumper" if you like; that front bumper switch is exactly the momentary contact this lesson is about.
-2. Connect Bumper → Summation (weight 1.0)
+Draw the missing wire: drag from the dot at the bottom of the Delay up to the Latch. The default weight of 1.0 is exactly what you want.
 
-On the physical robot, the front-left bump switch is already wired between pin 2 and ground, and the **Bump Front-Left** preset comes with INPUT_PULLUP enabled — so pressing the switch reads as 100 in BraitenBot (pullup mode inverts the signal, so pressing the button produces a HIGH reading).
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'bumper': 0 }}
+  goal={{
+    title: 'Make the moment outlive itself: ten ticks after the tap ends, the wheel must still be turning.',
+    tests: [
+      {
+        label: 'the memory outlives the tap',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [{ node: 'motor', op: 'gte', value: 40 }],
+      },
+      {
+        label: 'silence stays silent',
+        phases: [{ inputs: { bumper: 0 }, ticks: 15 }],
+        expect: [{ node: 'motor', op: 'eq', value: 0 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag from the Delay's bottom dot to the Latch. Then tap the bumper (▶) and watch the moment refuse to end. The goal checker runs its own taps — the ▶ button is for you."
+/>
 
-## Step 3: Connect to a motor
+One wire turned a reflex into a memory. Notice, though, what kind of memory: watch the Latch readout after a tap and you'll see the number *climbing* — 100, 200, 300. Each tick adds the feedback to whatever's already there, and it never comes back down. This vehicle doesn't just remember the bump. It can never stop remembering it. Hold that thought.
 
-Connect Summation → Right Wheel (weight 0.5) to see the latch in action.
+## Puzzle 2 — Teach it to forget
 
-## Step 4: Test with trace mode
+A memory that never fades has a name: a grudge. Below, the latch drives a Threshold node named "Still stinging?" (it fires 100 whenever the latch is above 10), and the feedback wire is at 1.0 — tap the bumper and watch the Latch sum climb tick after tick and never, ever let go. No input will release it. An unforgettable grudge is a bug.
 
-1. Activate **Trace Signal Flow**
-2. Click the **pulse button** (▶) next to the bumper — this sends a brief HIGH for the **trace pulse duration** set in **Settings** (the ⚙ gear; default **200 ms**; leave it at the default so the tick counts below line up), simulating a momentary button press
-3. Watch the latch activate: the summation jumps to 100 and the motor to 50
-4. After the pulse ends, the bumper returns to 0 — but the latch holds. The motor stays at 50.
+The fix is to make the feedback *lossy*. Click the weight badge on the Delay → Latch wire and set it to **0.95**. Now each trip around the loop returns 95% of the value: the tap charges the sum up to a few hundred, and once the bumper releases, the echo decays geometrically — 452 → 429 → 408 → … — until it slips under the threshold and the sting goes quiet.
 
-The pulse button is specifically designed for testing circuits like this. It simulates the brief, transient events that you'd get from real bumper switches or momentary buttons.
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'bumper': 0 }}
+  goal={{
+    title: 'An unforgettable grudge is a bug. Keep the memory alive for about a second — then let it die on its own.',
+    tests: [
+      {
+        label: 'still stinging just after the tap',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [{ node: 'sting', op: 'gte', value: 90 }],
+      },
+      {
+        label: 'has let go a couple of seconds later',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 120 },
+        ],
+        expect: [{ node: 'sting', op: 'eq', value: 0 }],
+      },
+      {
+        label: 'never fires on its own',
+        phases: [{ inputs: { bumper: 0 }, ticks: 15 }],
+        expect: [{ node: 'sting', op: 'eq', value: 0 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 390, y: 30, threshold: 10 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'sum', to: 'sting', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'sting', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Click the weight badge on the Delay → Latch wire and drag it to 0.95. Then tap ▶ and watch the sum charge, decay, and cross back under the threshold — the sting switches off on its own."
+/>
 
-## Fixing the runaway problem
+The threshold is doing quiet but important work here: the decaying sum is a *fading* trace, but behavior usually wants a crisp yes-or-no. "Still stinging?" converts the fade into a clean on/off — fully on until the trace slips below 10, then silence. The feedback weight is now a dial for how long the vehicle remembers; we'll work out exactly how to read that dial in a moment.
 
-You may notice the summation value keeps climbing: 100, 200, 300... Each iteration adds the feedback (100) to whatever the summation already is. This runaway doesn't affect the motor (it still drives at full speed), but it means the latch is numerically unstable.
+## Interlude — watch, don't wire
 
-Fix it with a **clamping transfer curve** on the feedback connection:
+Two fixed circuits worth staring at before the capstone. You can't edit these — just pulse them and watch.
 
-1. Click the Delay → Summation connection
-2. Set the **Transfer Function** to **Non-linear (curve)**
-3. Set a step curve: points at (-100, 0), (0, 0), (1, 100), (100, 100)
+### The clamp
 
-Now the feedback is always exactly 0 or 100 — any positive value clamps to 100, any negative to 0. The summation stabilizes at 100 when latched and 0 when cleared.
+Suppose you *want* the indefinite latch from Puzzle 1 — some memories should hold until something clears them — but not the runaway sum. Each tick adds the feedback to whatever the sum already is, and summation nodes don't clamp, so the number genuinely runs away; the motor doesn't care (motors clamp at ±100), but the latch is numerically unstable.
 
-## Making the latch time out
+The fix is a **clamping transfer curve** on the feedback wire: any positive value becomes exactly 100, anything at or below zero becomes 0. In the app you draw this by clicking the connection and switching its transfer function to non-linear (see [transfer functions](../guide/transfer-functions)); in the diagram below it's pre-drawn with points at (-100, 0), (0, 0), (1, 100), (100, 100).
 
-An indefinite latch isn't useful for bump-and-reverse — you want the robot to reverse for a specific time and then drive forward again. Two approaches:
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
+    ],
+  }}
+  caption="Same latch, clamped feedback. Tap ▶: the sum settles at a clean, steady 100 instead of climbing forever."
+/>
 
-### Approach 1: Decay feedback
+One caveat that matters for everything else on this page: a non-linear curve *replaces* the weight — the clamp ignores whatever number is on the wire. So you can have a clamped hold-forever latch, or a linear decaying one, but the decay has to live in a plain linear weight like your 0.95.
 
-Instead of clamping the feedback, make it *lossy*. Set the feedback transfer back to **Linear** and change its weight from 1.0 to **0.98**. (A non-linear clamp curve ignores the weight, so decay needs the plain linear transfer.) Each iteration the feedback is 98% of the previous value, so once the bump ends the sum decays geometrically:
+### The tape loop
 
-100 → 98 → 96 → 94.1 → ... → eventually reaches 0
+Here's a tempting wrong idea. Decay is a *fading* memory — strongest right after the tap, trailing off. If what you want is a crisp "hold for exactly two seconds, then release," a long delay looks like the obvious tool: set the delay to **2000 ms** (100 ticks at a 20 ms loop), keep the clamped feedback, and surely the pulse rides the buffer for 2 seconds and falls off the end?
 
-Add a **Threshold** node (threshold = 10) after the summation to convert the decaying signal into a clean on/off: the latch reads as "on" until the sum slips below 10. With a 20 ms loop period and a 0.98 weight, that takes about 2.3 seconds. The feedback weight is your dial for the hold time — the next section works out exactly how.
+Pulse the bumper below and watch what actually happens.
 
-### Approach 2: Why not just use a longer delay?
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 2000 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
+    ],
+  }}
+  caption="A 2-second delay with clamped feedback. Tap ▶ once — then wait. And wait. The tap comes back, every 2 seconds, forever."
+/>
 
-Decay works, but it's a *fading* memory — strongest right after the bump, then trailing off. If what you want is a crisp "hold for a fixed time, then release," a long delay line looks like the obvious tool. The delay already carries the past intact for a fixed interval; why not just make that interval the hold time?
+Tick by tick (a ~200 ms tap is 10 ticks):
 
-The idea: set the delay to **2000 ms** (100 iterations at a 20 ms loop) and keep the clamping feedback from the runaway fix. Trigger the latch and — the reasoning goes — the pulse rides the buffer for 2 seconds and then falls off the end.
+| Ticks | What's happening |
+|---|---|
+| 0–9 (the tap) | Bumper feeds 100; the delay is still reading its *pre-tap zeros*. Sum = 100, and those 100s get written into the buffer. |
+| 10–99 | Tap over. The delay is *still* reading zeros — the stored 100s are 2 seconds from re-emerging. Sum = **0**. No hold. |
+| 100–109 | The stored 100s finally reach the output. Sum jumps to 100 — and the feedback writes them *back into the buffer*. |
+| 110–199 | Silence for another ~1.8 s. |
+| 200–209 | The echo returns. |
+| … | A ~200 ms echo every 2 seconds, forever. |
 
-It's worth building, because it fails in an instructive way. Trace it tick by tick:
+Instead of a 2-second hold you built a tape loop that never stops playing. On a robot this looks like a twitch into reverse for a fraction of a second every couple of seconds — nothing like "reverse, then resume."
 
-- **Ticks 0–9** (the ~200 ms bump): the bumper feeds 100 into the summation. The delay is still reading its *zero-filled* buffer from before the bump, so the sum is just 100. Those 100s get written into the buffer.
-- **Ticks 10–99** (the next ~1.8 s): the bump is over, and the delay is *still* reading pre-bump zeros — the 100s we just wrote are 2 seconds from re-emerging. The sum sits at **0**. The latch is silent. There is no hold.
-- **Tick 100**: the first stored 100 finally reaches the delay's output. The sum jumps back to 100 — and the clamped feedback writes that 100 *back into the buffer*.
-- **Ticks 100–109**: a ~200 ms burst, an exact replay of the original bump.
-- **Ticks 110–199**: silence again for ~1.8 s. Then another burst at tick 200, another at 400, 600, …
+The lesson is worth holding onto: a delay line is a *transport* delay, not a hold. It doesn't keep a signal present; it moves the signal forward in time, unchanged. To keep something present you need feedback that sustains it *right now* — which is exactly what your decaying loop from Puzzle 2 does. So the decay latch isn't a poor substitute for a "real" timer; for a self-sustaining hold it *is* the right tool. And it comes with a dial. A brief tap charges the sum to a few hundred (a 100 ms tap at feedback 0.95 charges it to about 450), then the charge shrinks by a factor of `w` each tick, crossing the threshold `T` after:
 
-Instead of a 2-second hold you get a ~200 ms *echo* of the bump every 2 seconds, repeating forever. The feedback turned the delay line into a tape loop that never stops playing. On the robot this would look like a twitch into reverse for a fraction of a second every couple of seconds — nothing like "reverse for 2 seconds and resume."
+**hold ≈ loopPeriod × ln(T / charge) / ln(w)**
 
-The lesson is worth holding onto: a delay line is a *transport* delay, not a hold. It doesn't keep a signal present; it moves the signal forward in time, unchanged. To keep something present you need feedback that sustains it *right now* — which is exactly what the decaying loop in Approach 1 does. So the decay latch isn't a poor substitute for a "real" timer; for a self-sustaining hold it *is* the right tool. And it comes with a dial. The sum starts near 100 and decays by a factor of `w` each tick, crossing the threshold `T` after:
-
-**hold ≈ loopPeriod × ln(T / 100) / ln(w)**
-
-At a 20 ms loop and threshold 10, that gives:
+At a 20 ms loop, threshold 10, and a brief tap (charge ≈ 450):
 
 | Feedback weight `w` | Approx. hold |
 |---|---|
-| 0.95 | 0.9 s |
-| 0.97 | 1.5 s |
-| 0.98 | 2.3 s |
-| 0.99 | 4.6 s |
+| 0.90 | 0.7 s |
+| 0.95 | 1.5 s |
+| 0.98 | 3.8 s |
+| 0.99 | 7.6 s |
 
-For bump-and-reverse we want about 2 seconds, so **w = 0.98**. (A longer or firmer bump charges the sum past 100, which stretches the hold a little; the numbers above assume a brief trigger that tops out near 100.)
+The weight slider on this page moves in steps of 0.05, which is why every puzzle here uses 0.95. In the app, the weight's numeric box accepts finer values — 0.98 buys you nearly four seconds. (A longer or firmer press charges the sum higher, which stretches the hold a little; the log means it stretches less than you'd guess.)
 
 :::tip[Two ways to forget]
 
 Decay and delay embody two different theories of forgetting. **Decay** is a *forgetting curve*: the trace fades smoothly, vivid right after the event and gradually slipping away — the mechanism behind the latch you just tuned. **A delay line** is something else: a *reminder*. Left open, with no feedback, it holds an event perfectly intact and replays it once, exactly one delay-time later, then lets it go — like a note-to-self that surfaces at a set moment. Wrap that same delay in a feedback loop, though, and the reminder never stops arriving: it reverberates, as you saw above. Nervous systems seem to use both fading traces and precisely-timed reverberation — but which one you get depends on the topology you wire, not on the delay alone.
 :::
 
-## Building the complete bump-and-reverse
+## Puzzle 3 — Bump and reverse
 
-Now combine the latch with the obstacle avoidance circuit:
+The capstone. On the right, a cruise chain: a Forward constant (50) feeds both wheel summations, so the vehicle drives steadily ahead. On the left, your complete decay latch from Puzzle 2, sting and all — charged by the bumper, fading at 0.95 per tick. The two halves don't know about each other yet: the sting fires into thin air.
 
-1. **Cruise circuit**: Constant (50) → Left Summation and Right Summation → Motors (same as obstacle avoidance)
-2. **Latch circuit**: Bumper → Summation → Delay (20 ms) → feedback (linear, weight **0.98**) — the decay latch from Approach 1, tuned for a ~2.3 s hold
-3. **Inhibition**: Wire the latch's Summation output through a Threshold (threshold = 10) → both motor summations with weight **-1.0**
+Connect memory to behavior. Draw **Still stinging? → Left Sum** and **Still stinging? → Right Sum**, and set both weights to **-1.0**. While the sting is alive it contributes -100 to each sum: 50 + (-100) = -50, and the vehicle backs away. When the trace fades below threshold, the inhibition vanishes and the cruise takes over again — the vehicle carries on as if nothing happened.
 
-The physical behavior plays out like this:
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'bumper': 0 }}
+  goal={{
+    title: 'Wire memory into behavior: cruise, take the hit, back off for about a second, then carry on as if nothing happened.',
+    tests: [
+      {
+        label: 'cruising on open floor',
+        phases: [{ inputs: { bumper: 0 }, ticks: 15 }],
+        expect: [
+          { node: 'left', op: 'gte', value: 45 },
+          { node: 'right', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'reversing just after the hit',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [
+          { node: 'left', op: 'lte', value: -40 },
+          { node: 'right', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'recovered and cruising again',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 150 },
+        ],
+        expect: [
+          { node: 'left', op: 'gte', value: 45 },
+          { node: 'right', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 390, y: 30, threshold: 10 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 650, y: 30, constantValue: 50 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 560, y: 190 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 750, y: 190 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 560, y: 350, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 750, y: 350, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.46, from: 'delay', to: 'sum', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'sum', to: 'sting', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Draw two wires from Still stinging? into the wheel sums and set both to -1.0. Then tap ▶ and watch the whole story: cruise, hit, retreat, recovery."
+/>
 
-- **Normal driving**: The latch is off. The constant drives both motors at 50. The robot cruises forward.
-- **Bump happens**: The bumper clicks for 50 ms. The latch charges to ~100 and starts decaying by ×0.98 each tick. While the sum stays above the threshold of 10, the threshold fires, sending -100 to both motor summations. Motors get 50 + (-100) = -50 — the robot reverses.
-- **About 2.3 seconds later**: The decaying sum finally slips below 10, the threshold turns off, the inhibition stops. Motors return to 50 and the robot drives forward again.
+From the outside: the vehicle bonks into a wall, backs up for a second and a half, and resumes driving. A fifty-millisecond contact got amplified into a sustained behavioral response — which is exactly what memory is *for*. Somewhere between Puzzle 1 and here, "output depends only on the present input" quietly stopped being true.
 
-From the outside, the robot bonks into a wall, backs up for two seconds, and then resumes driving. The brief bumper contact got amplified into a sustained behavioral response — exactly what memory is for.
-
-## Resettable latch
-
-Sometimes you want to reset a latch manually — for example, a "panic button" that cancels an automated behavior. Add a second bump switch — drag **Bump Front-Right** (D3) from the Basic tab and rename it "Reset" — then connect it to the latch summation with weight **-1.0**:
-
-When Reset fires it contributes 100 × -1.0 = -100, exactly canceling the +100 of clamped feedback. The summation drops to 0, the delay captures 0, and on the next iteration the feedback is 0 — the latch clears immediately, regardless of how much time was left.
+**Going further — a resettable latch.** Sometimes you want to clear a memory on demand — a "panic button" that cancels a behavior early. Wire a second bump switch into the Latch summation with weight **-1.0**: on the clamped hold-forever latch from the interlude, its -100 exactly cancels the +100 feedback, the sum drops to 0, the delay captures the 0, and the latch is clear one tick later — however much hold time was left. On a decay latch it works too; a held press drains the charge in a few ticks. Try it in the app.
 
 :::note[Weights are limited to ±1]
 
-By default, connection weights are clamped to the range **-1 to +1** (the conventional Braitenberg range — you can lift the cap in Settings, but staying inside it keeps the vehicles honest). A single connection can therefore scale a 0–100 signal to at most ±100. To "overpower" a signal more strongly than that, prefer a [non-linear transfer curve](./transfer-curves), a Threshold, or stacking multiple connections — not a weight outside ±1.
+Connection weights are clamped to the range **-1 to +1**. A single connection can therefore scale a 0–100 signal to at most ±100. To "overpower" a signal more strongly than that, use a [non-linear transfer curve](../guide/transfer-functions), a Threshold, or stack multiple connections — not a weight outside ±1.
 :::
+
+## Building it in the app
+
+Everything on this page transfers directly: drag a Summation and a Delay from the palette, set the delay to **20 ms** (one loop period — the minimum for a latch), wire the loop, and use **Trace Signal Flow**'s pulse button to tap the bumper. The app gives you two things these embeds can't: the weight box accepts fine-grained values like 0.98 for longer holds, and clicking any connection opens the transfer-curve editor where the clamp is drawn (see [transfer functions](../guide/transfer-functions)).
 
 ## What you've learned
 
-The latch pattern — summation + delay feedback — converts a transient event into a sustained state, giving the robot a form of short-term memory. This is what separates reactive behaviors (turn away from obstacles) from deliberate behaviors (reverse for two seconds after a bump).
+The latch pattern — summation + delay feedback — converts a transient event into a sustained state, giving a vehicle short-term memory with no storage part anywhere in it. A feedback weight of 1.0 remembers forever (and runs away without a clamp); a weight just below 1.0 turns the loop into a fading trace with a tunable hold time; a threshold turns the fade back into a crisp behavior. And a delay alone can never do this job — it transports moments, it doesn't hold them.
 
 ### Questions to sit with
 
@@ -193,4 +336,6 @@ The latch pattern — summation + delay feedback — converts a transient event 
 
 ## What's next
 
-With latches, you can build individual behaviors that respond to events over time. But a real robot needs multiple behaviors that work together — cruise forward, avoid obstacles, and escape from collisions — with some way to decide which behavior wins when they conflict. [Subsumption Architecture](./subsumption-architecture) shows how to layer behaviors with priority arbitration.
+[6. Nobody Home](./subsumption-architecture) — three behaviors sharing one body, deciding who wins every tick, with no boss anywhere in the wiring.
+
+Have the kit? [Rangefinders & Bumpers](../on-the-robot/tof-and-bumpers) wires the real bump switches.

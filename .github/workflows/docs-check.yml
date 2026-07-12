@@ -1,0 +1,44 @@
+name: Docs checks
+
+# Validates the docs' embedded interactive diagrams on pull requests that
+# touch the site. Currently one check: connection weight badges must not
+# land on top of node boxes (docs/scripts/check-badge-overlaps.ts replays
+# the app's render geometry over every <InteractiveDiagram> literal and
+# fails if a badge overlaps a node; run it locally with --fix to write
+# corrected labelT values into the MDX).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      # Badge positions are computed by the app's shared geometry module, so
+      # changes there can move badges in already-clean diagrams.
+      - 'src/components/connectionGeometry.ts'
+      - 'src/types/diagram.ts'
+      - '.github/workflows/docs-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  badge-overlaps:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Root deps only: the checker runs with the repo's tsx and imports the
+      # app's geometry straight from src/ — it doesn't build the docs site.
+      - run: npm ci
+
+      - run: npm run docs:check-badges

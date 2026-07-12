@@ -1,243 +1,256 @@
 ---
 sidebar_position: 7
-title: "Tutorial: Subsumption Architecture"
+title: "6. Nobody Home"
 ---
 
-# Subsumption Architecture
+# Nobody Home
 
-So far we've built individual behaviors: drive toward light, avoid obstacles, reverse on bump. But a real robot needs all of these working together. What happens when the cruise behavior says "forward" and the avoidance behavior says "turn right" at the same time?
+So far every creature you've built has had one behavior: drive toward light, veer from walls, reverse on a bump. A real robot needs all of them at once — and the moment you say that, a question sneaks in. When cruise says "forward" and avoidance says "hard right" at the same instant, *who decides?*
 
-If you look back at the [obstacle avoidance tutorial](./obstacle-avoidance), you've actually already solved this problem once. The Constant node provides a forward drive, and the threshold + negative weight connections override it when an obstacle appears. That's two behaviors — cruise and avoid — with avoidance suppressing cruise through inhibition. You built a two-layer subsumption architecture without knowing it.
+This lesson quietly abandons an assumption you might not know you were making: that somewhere in a behaving robot there is a *decider* — a central place where options are weighed and a choice is issued. There isn't one here. Cruise, avoid, and escape all run at once, blind to each other, and "what the robot does" is simply whatever their signals sum to. As you wire it up, look for the spot where you expect a controller to live — and notice the robot works fine without it.
 
-In this tutorial, we'll make that structure explicit, then extend it to three layers by adding the bump-and-reverse escape behavior from the [latch tutorial](./latches-with-delay). The key principle is simple: **higher-priority behaviors suppress lower-priority ones when they activate.**
+You've already built every part. The cruise-plus-inhibition pattern is [3. Don't](./obstacle-avoidance); the decaying bump latch is [5. Memory](./latches-with-delay). Today you stack them into three layers, with one rule doing all the arbitration: **higher-priority behaviors suppress lower-priority ones by outvoting them at a summation.**
 
-This tutorial quietly abandons an assumption you might not know you were making: that somewhere in a behaving robot there is a *decider* — a central place where options are weighed and a choice is issued. There isn't one here. Cruise, avoid, and escape all run at once, blind to each other, and "what the robot does" is simply whatever their signals sum to. As you wire it up, look for the spot where you expect a controller to live — and notice the robot works fine without it.
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-**Time:** 30 minutes
-**Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and [Latches with Delay](./latches-with-delay)
+<InteractiveDiagram
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 130 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 270, delayMs: 20 },
+      { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 400, threshold: 10 },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 220, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 470, y: 10, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 220, y: 130, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 470, y: 130, threshold: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 345, y: 260, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 250, y: 400 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 440, y: 400 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 250, y: 520, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 440, y: 520, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'escape-latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'escape-latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.58, from: 'delay', to: 'escape-latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.76, from: 'escape-latch', to: 'escape-active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', labelT: 0.24, from: 'left-detect', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.24, from: 'right-detect', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', from: 'escape-active', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', labelT: 0.36, from: 'escape-active', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c14', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Thirteen nodes, no boss. Drag a wall toward it, then pulse the bumper mid-swerve — three creatures arguing through arithmetic, and nobody wins by decree."
+/>
 
-import DiagramView from '@site/src/components/DiagramView';
+Three clusters, all feeding the same two Mix summations. **Cruise** (the constant, middle) always says +50 forward. **Avoid** (the ToF distance sensors and thresholds, top) says −100 to one wheel when a wall gets close. **Escape** (the bumper and decay latch, left) says −100 to *both* wheels for about a second after a bump. Every layer runs all the time; none of them checks whether another is active. Priority lives in the wiring — an inhibitory −100 always outvotes cruise's +50 at a summation — and the summation is the whole arbitration mechanism. When the strong signals go quiet, cruise is simply what's left.
 
-## Part 1: Two layers — Cruise + Avoid
+Now build the pecking order yourself, one layer at a time.
 
-Let's start by rebuilding the obstacle avoidance circuit and labeling the layers explicitly.
+## Puzzle 1 — Restore the pecking order
 
-### The Cruise layer
+Two layers first: cruise plus avoid. Someone almost finished this one. The right detector is cross-wired correctly — a wall on the right sends −100 to the Left Mix and the robot pivots away. But the left detector was wired to the *left* Mix at *+1.0*: wrong wheel, wrong sign. Instead of retreating from a wall on the left, this creature speeds up at it. It hugs walls lovingly.
 
-The cruise layer is the robot's default behavior: drive forward at a constant speed. It's just a Constant node wired to both motors.
+Select the bad wire and delete it. Then draw the correct one — Left Detect to **Right** Mix — and click its weight badge to drag it down to **−1.0**.
 
-1. Add a **Constant** node, value **50**, label "Cruise"
-2. Add two **Summation** nodes: "Left Mix" and "Right Mix"
-3. Wire: Cruise → Left Mix (weight 1.0), Cruise → Right Mix (weight 1.0)
-4. Wire: Left Mix → Left Wheel (weight 1.0), Right Mix → Right Wheel (weight 1.0)
-
-The summation nodes are where behaviors combine. Right now only cruise feeds into them, so both motors run at 50.
-
-### The Avoid layer
-
-The avoid layer watches for obstacles and steers away. It uses the cross-wired threshold inhibition pattern from the earlier tutorial.
-
-1. From the palette's **Basic** tab, drag **Left ToF Distance** (XSHUT D8) and **Right ToF Distance** (XSHUT D12) — they arrive on their correct XSHUT pins. Rename them "Left Distance" and "Right Distance" if you like.
-2. Add two **Threshold** nodes: "Left Detect" (threshold 60), "Right Detect" (threshold 60)
-3. Wire each sensor → its threshold (weight 1.0)
-4. Cross-wire with negative weights: Left Detect → **Right** Mix (weight **-1.0**), Right Detect → **Left** Mix (weight **-1.0**)
-
-<DiagramView
-  width={550}
-  height={340}
-  robot={{ x: 275, y: 270, radius: 65 }}
-  nodes={[
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT D8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT D12' },
-    { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 100, meta: '> 60' },
-    { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 100, meta: '> 60' },
-    { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 10, meta: '50' },
-    { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 130, y: 200 },
-    { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 290, y: 200 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 135, y: 290 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 295, y: 290 },
-  ]}
-  connections={[
-    { from: 'left-ir', to: 'left-detect', weight: 1.0 },
-    { from: 'right-ir', to: 'right-detect', weight: 1.0 },
-    { from: 'cruise', to: 'left-mix', weight: 1.0 },
-    { from: 'cruise', to: 'right-mix', weight: 1.0 },
-    { from: 'left-detect', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'right-detect', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'left-mix', to: 'left-motor', weight: 1.0 },
-    { from: 'right-mix', to: 'right-motor', weight: 1.0 },
-  ]}
-  caption="Two-layer subsumption: cruise (constant forward) + avoid (threshold inhibition)"
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'left-ir': 80, 'right-ir': 0 }}
+  goal={{
+    title: 'It turns toward walls and accelerates. Make obstacles outvote cruise — on the correct wheel.',
+    tests: [
+      {
+        label: 'wall on the left pivots it right',
+        phases: [{ inputs: { 'left-ir': 80, 'right-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'wall on the right pivots it left',
+        phases: [{ inputs: { 'right-ir': 80, 'left-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'open floor cruises straight',
+        phases: [{ inputs: { 'left-ir': 0, 'right-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 130, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 130, threshold: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 20, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 130, y: 250 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 290, y: 250 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 130, y: 370, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 290, y: 370, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-detect', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-detect', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Delete the wire from Left Detect to Left Mix, then drag a new one from Left Detect's bottom dot to Right Mix and set its weight to −1.0."
 />
 
 ### How suppression works here
 
-Walk through the signal values in trace mode:
+Walk the arithmetic for a wall on the left: Left Distance reads 80, Left Detect fires at 100, and the −1.0 weight delivers −100 to the Right Mix.
 
-**No obstacles** — both thresholds output 0. Each Mix node receives only the cruise signal: 50. Both motors at 50. The robot drives straight.
+| Input to Right Mix | Value |
+|---|---|
+| Cruise | +50 |
+| Left Detect (cross-wired) | −100 |
+| **Total** | **−50** |
 
-**Obstacle on the left** — Left Distance reads 80, Left Detect fires at 100. The -1.0 weight sends -100 to Right Mix. Right Mix computes: 50 (cruise) + (-100) (avoid) = **-50**. The right wheel reverses while the left stays at 50. The robot pivots right, away from the wall.
+The left wheel stays at 50, the right wheel reverses, and the robot pivots away. This *is* suppression: cruise is still running — still faithfully contributing its +50 — but avoidance's −100 overwhelms it and takes effective control of that motor. The cruise layer is suppressed, not turned off. The moment the wall clears, the −100 disappears and cruise's +50 is revealed again, seamlessly, with no transition logic anywhere.
 
-This *is* suppression: the avoid layer's -100 overwhelms the cruise layer's +50, taking effective control of the right motor. Cruise is still running — it's still contributing +50 — but the avoidance signal is strong enough to override it. The cruise layer is suppressed, not turned off.
+## Puzzle 2 — Install the veto
 
-**Obstacle clears** — the sensor drops below threshold, the -100 disappears, and cruise's +50 takes over again seamlessly. No transition logic needed.
+The two-layer system handles most rooms, but rangefinders have blind spots: a thin chair leg, a surface angled so the laser scatters away instead of bouncing back. Sometimes the first the robot knows of an obstacle is the *thud*. That's what the bumper is for — and the bump response must outrank everything, both wheels, no exceptions.
 
-This is the essence of subsumption. Each layer runs independently and continuously. When a higher-priority layer has something to say, its signal is strong enough to dominate the summation. When it goes quiet, the lower layer's signal is all that's left.
+The escape cluster is pre-built on the left; it's the decay latch from [5. Memory](./latches-with-delay). A bump charges the Escape Latch, the 20 ms Delay feeds 95% of it back each tick, and the sum decays geometrically — staying above Escape Active's threshold of 10 for about 45 ticks, roughly a second, before snapping back to 0. (The embed's weight slider moves in steps of 0.05; in the app you can set finer feedback weights, like 0.98 for a hold of about 2.3 seconds.)
 
-## Part 2: Adding Escape — the third layer
+Right now the latch is shouting into the void: Escape Active connects to nothing. Give it the veto — wire it into **both** Mix nodes at **−1.0**.
 
-The two-layer system handles most situations, but sometimes the distance sensors miss an obstacle — a thin chair leg, or a surface angled so the laser beam scatters away instead of bouncing back — and the robot drives right into it. That's where the bumper comes in.
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  goal={{
+    title: 'The rangefinders miss thin chair legs. Give the bumper veto power over everything — for about a second, then hand control back.',
+    tests: [
+      {
+        label: 'a bump reverses both wheels',
+        phases: [
+          { inputs: { bumper: 100, 'left-ir': 0, 'right-ir': 0 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'the veto expires and cruise resumes',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 150 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'avoidance still works',
+        phases: [{ inputs: { 'left-ir': 80, bumper: 0 }, ticks: 5 }],
+        expect: [{ node: 'right-motor', op: 'lte', value: -40 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 130 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 270, delayMs: 20 },
+      { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 400, threshold: 10 },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 220, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 470, y: 10, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 220, y: 130, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 470, y: 130, threshold: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 345, y: 260, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 250, y: 400 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 440, y: 400 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 250, y: 520, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 440, y: 520, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'escape-latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'escape-latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.58, from: 'delay', to: 'escape-latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.76, from: 'escape-latch', to: 'escape-active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', labelT: 0.24, from: 'left-detect', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.24, from: 'right-detect', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Draw Escape Active → Left Mix and Escape Active → Right Mix, both at −1.0. Then pulse the Bumper (▶) and watch the latch hold both wheels in reverse for about a second."
+/>
 
-The escape behavior is: **when the bumper is pressed, reverse both motors for about 2 seconds, overriding everything else.** This is the highest-priority layer. It must suppress both cruise and avoid.
-
-### Building the escape latch
-
-We need the decay latch from the [latch tutorial](./latches-with-delay): a bumper press charges a self-sustaining loop that decays over a couple of seconds.
-
-1. From the **Basic** tab, drag **Bump Front-Left** (D2) — it arrives on pin 2 with its pull-up already on. Rename it "Bumper."
-2. Add a **Summation** node: "Escape Latch"
-3. Add a **Delay** node: set to **20 ms** (one loop period)
-4. Wire: Bumper → Escape Latch (weight 1.0)
-5. Wire: Escape Latch → Delay (weight 1.0)
-6. Wire: Delay → Escape Latch — set the feedback to a **linear transfer with weight 0.98**. Each 20 ms tick the fed-back signal is 98% of the last, so a bump charges the sum to ~100 and it decays away geometrically. (Don't use a clamping curve here — a non-linear transfer ignores the weight, which would turn the loop into an *indefinite* latch that never releases.)
-7. Add a **Threshold** node: "Escape Active" (threshold 10)
-8. Wire: Escape Latch → Escape Active
-
-When the bumper is pressed, the Escape Latch charges to ~100 and decays by ×0.98 each tick. It stays above the threshold of 10 for about 2.3 seconds — `loopPeriod × ln(10 / 100) / ln(0.98) ≈ 114 ticks × 20 ms` — so Escape Active outputs a clean 100 for ~2.3 s and then snaps back to 0 the moment the decaying sum drops below 10. Want a different hold time? Turn the feedback weight: 0.95 gives ~0.9 s, 0.99 gives ~4.6 s.
-
-### Wiring escape into the mix
-
-Escape needs to reverse both motors. Wire Escape Active → Left Mix (weight **-1.0**) and Escape Active → Right Mix (weight **-1.0**).
-
-Connection weights are capped at ±1, so the strongest pull a single connection can apply is -100 (a 0–100 signal times weight -1.0). When escape fires with no obstacle present, each Mix computes 50 (cruise) + (-100) (escape) = **-50** — both motors reverse together. Escape doesn't need a larger weight to take priority. Unlike avoidance, which inhibits only the *opposite* motor (producing a turn), escape inhibits *both* motors symmetrically (producing a straight reverse), and the latch holds it for about 2 seconds. Escape's priority comes from its topology and timing, not from an out-of-range weight.
-
-If avoidance is also active during escape, the motor on the obstacle side sees +50 (cruise) + (-100) (avoid) + (-100) (escape) = -150, which clamps to -100. The two inhibitory layers reinforce each other rather than fight — the robot backs away from the wall.
+Notice what makes escape the top layer. It isn't a bigger number — its wires are −1.0, exactly like avoidance's. Unlike avoidance, which inhibits only the *opposite* wheel (producing a turn), escape inhibits *both* wheels symmetrically (producing a straight reverse), and the latch sustains it after the bump ends. Escape's priority comes from its topology and timing, not from an out-of-range weight.
 
 :::note[Why not -1.5?]
 
 It's tempting to give escape a weight like -1.5 to "overpower" both lower layers at once, but that isn't possible — weights clamp to the range **-1 to +1**. A single connection can scale a 0–100 signal to at most ±100. To suppress a lower layer more aggressively than that, gate it (for example with a Multiply node) or restructure the layering — don't reach for a weight outside ±1.
 :::
 
-<DiagramView
-  width={620}
-  height={480}
-  robot={{ x: 310, y: 400, radius: 65 }}
-  nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, meta: 'D2' },
-    { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 100 },
-    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '20 ms' },
-    { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 310, meta: '> 10' },
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT D8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT D12' },
-    { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 190, y: 100, meta: '> 60' },
-    { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 100, meta: '> 60' },
-    { id: 'cruise', type: 'constant', label: 'Cruise', x: 300, y: 190, meta: '50' },
-    { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 200, y: 310 },
-    { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 370, y: 310 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 205, y: 410 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 375, y: 410 },
-  ]}
-  connections={[
-    { from: 'bumper', to: 'escape-latch', weight: 1.0 },
-    { from: 'escape-latch', to: 'delay', weight: 1.0 },
-    { from: 'delay', to: 'escape-latch', weight: 0.98, label: 'feedback ×0.98' },
-    { from: 'escape-latch', to: 'escape-active', weight: 1.0 },
-    { from: 'left-ir', to: 'left-detect', weight: 1.0 },
-    { from: 'right-ir', to: 'right-detect', weight: 1.0 },
-    { from: 'cruise', to: 'left-mix', weight: 1.0 },
-    { from: 'cruise', to: 'right-mix', weight: 1.0 },
-    { from: 'left-detect', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'right-detect', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'escape-active', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'escape-active', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'left-mix', to: 'left-motor', weight: 1.0 },
-    { from: 'right-mix', to: 'right-motor', weight: 1.0 },
-  ]}
-  caption="Three-layer subsumption: cruise + avoid + escape. Escape inhibits both motors (weight -1.0) to reverse the robot; the decay latch (feedback ×0.98) holds it for ~2.3 seconds."
-/>
+### When layers collide
 
-## Testing the complete system
+Two more scenarios, and the arithmetic settles both without a referee.
 
-Activate trace mode and walk through each scenario. The signal arithmetic at the Mix nodes tells you exactly what the motors will do.
-
-### Scenario 1: Open floor (cruise only)
-
-All sensors at 0. No thresholds firing, latch inactive.
-
-| Input to Left Mix | Value |
-|---|---|
-| Cruise | +50 |
-| **Total** | **50** |
-
-Both motors at 50. The robot drives forward.
-
-### Scenario 2: Wall on the left (avoid suppresses cruise)
-
-Left Distance at 80 → Left Detect fires at 100.
+**Bumper hit *while* avoiding a wall.** Bumper pressed and Left Distance at 80 simultaneously:
 
 | Input to Right Mix | Value |
 |---|---|
 | Cruise | +50 |
-| Left Detect (cross-wired) | -100 |
-| **Total** | **-50** |
-
-Left motor stays at 50, right motor at -50. The robot pivots right. Avoidance has effectively taken over the right motor.
-
-### Scenario 3: Bumper hit (escape suppresses everything)
-
-Pulse the bumper. Escape Active fires at 100 while the latch decays — about 2.3 seconds. No obstacles present.
+| Left Detect (avoid) | −100 |
+| Escape Active | −100 |
+| **Total** | **−150 → clamped to −100** |
 
 | Input to Left Mix | Value |
 |---|---|
 | Cruise | +50 |
-| Escape Active | -100 |
-| **Total** | **-50** |
+| Escape Active | −100 |
+| **Total** | **−50** |
 
-Both motors at -50. The robot reverses straight back (both wheels together). The Escape Latch's sum decays by ×0.98 each tick; once it slips below the threshold of 10 — about 2.3 seconds after the bump — Escape Active snaps to 0 and the motors return to 50. (A longer or firmer press charges the latch higher, so it holds a little longer.)
+Right motor at −100, left motor at −50 — both wheels reverse, the right one harder because avoidance reinforces escape on that side. The robot backs away from the wall, curving as it goes. The two inhibitory layers stack rather than fight.
 
-### Scenario 4: Bumper hit *while* avoiding an obstacle
-
-Bumper pressed and Left Distance at 80 simultaneously.
+**Escape ends, obstacle still present.** About a second after the bump the latch decays below 10 and Escape Active drops to 0. Left Distance still reads 80:
 
 | Input to Right Mix | Value |
 |---|---|
 | Cruise | +50 |
-| Left Detect (avoid) | -100 |
-| Escape Active | -100 |
-| **Total** | **-150 → clamped to -100** |
-
-| Input to Left Mix | Value |
-|---|---|
-| Cruise | +50 |
-| Escape Active | -100 |
-| **Total** | **-50** |
-
-Right motor at -100, left motor at -50 — both wheels reverse, the right one harder because avoidance reinforces escape on that side. The robot backs away from the wall, curving as it goes. The two inhibitory layers stack rather than fight: escape sets the overall reverse, and avoidance biases the turn.
-
-### Scenario 5: Escape ends, obstacle still present
-
-Once the Escape Latch decays below the threshold — about 2.3 seconds after the bump — Escape Active drops to 0. Left Distance still reads 80.
-
-| Input to Right Mix | Value |
-|---|---|
-| Cruise | +50 |
-| Left Detect (avoid) | -100 |
+| Left Detect (avoid) | −100 |
 | Escape Active | 0 |
-| **Total** | **-50** |
+| **Total** | **−50** |
 
-The robot immediately begins steering right — avoidance picks up seamlessly where it left off. There's no gap, no transition logic. The layers just produce their signals independently, and the summation sorts out which behavior dominates.
+The robot immediately resumes steering right — avoidance picks up seamlessly where it left off. No gap, no handoff protocol. The layers just produce their signals independently, and the summation sorts out which behavior dominates.
 
-## Why this works
-
-The key insight is that suppression doesn't require any explicit "if-then" logic or mode switching. Every layer runs all the time, producing its output signal into the shared summation. Priority is encoded in the *weights* and the *wiring topology*:
-
-- Cruise contributes +50 (moderate forward)
-- Avoid contributes -100 to one motor — strong enough to override cruise and pivot the robot
-- Escape contributes -100 to *both* motors — reversing the robot — and the decay latch holds it for about 2 seconds (set by the feedback weight)
-
-An inhibitory -100 connection always overrides the +50 cruise, so any active layer takes effective control. Escape sits at the top not because of a bigger weight (weights cap at ±1) but because it inhibits both wheels at once and sustains itself through the latch. The summation acts as the arbitration mechanism: whichever layers are active sum together, and when the strong inhibitory signals disappear, cruise is automatically revealed.
-
-This is subsumption's central virtue: **behaviors are independent modules that don't know about each other.** The avoid layer doesn't check whether escape is active. Escape doesn't turn off avoidance. They just produce signals, and the math sorts it out. You can add or remove layers without modifying the existing ones.
+That is subsumption's central virtue: **behaviors are independent modules that don't know about each other.** Avoid never checks whether escape is active. Escape can't switch avoidance off. They emit signals, and the math resolves the argument at the wheels. You can add or remove layers without touching the existing ones.
 
 :::note[Intelligence without a boss]
 
@@ -246,42 +259,207 @@ No part of this robot is "in charge." No layer knows the others exist; none can 
 This is the radical idea Rodney Brooks built behavior-based robotics on in the 1980s: **intelligence without representation**. Skip the central model of the world and the planner that reasons over it; layer many simple, tightly-coupled sensor-to-motor behaviors and let conflicts resolve at the wheels, not in a mind. It works unnervingly well — and it raises a question that won't quite go away: if a robot can be this competent with nobody home, how sure are you that *you* have a boss inside, rather than a very good committee?
 :::
 
-## The physical result
+:::tip[Go further: more layers]
 
-Put the robot in a room with furniture and watch:
+The pattern scales. A **wander layer** — an Oscillator feeding both Mix nodes at ±0.3 — makes the robot gently weave while cruising, and avoidance overrides it for free because −100 outvotes ±30. A **light-seek layer** between avoid and escape is just the cross-wired photocells from [2. Fear & Love](./light-follower) at ±0.8. For each new layer, pick a weight magnitude stronger than the layers it should suppress and weaker than the layers that should suppress it.
+:::
 
-1. It drives forward (cruise)
-2. It approaches a table leg — the distance sensors detect it and the robot veers away (avoid overrides cruise)
-3. It clips a corner the sensors missed — bumper clicks — the robot reverses for about 2 seconds (escape overrides everything)
-4. After reversing, it resumes driving forward. If the table leg is still nearby, avoidance kicks in again immediately
+## Puzzle 3 — Your diagram got unwieldy
 
-The robot navigates surprisingly well for something with no planning, no map, and no centralized control. Each behavior is a simple sensor-to-motor circuit. The competence comes from the layering.
+Look back at what you just wired: thirteen nodes, fourteen connections, and the *idea* — three layers in a pecking order — is nowhere on the canvas. You have to squint to see the architecture through the spaghetti. But you already know the clusters have names. Four nodes on the left are "escape." Four up top are "avoid." Name them, and the diagram becomes three boxes.
 
-## Extending the architecture
+That's what a **compound** is: a cluster of nodes collapsed into a single box with named input and output ports. The internal wiring still exists — every instance shares one body — but from the outside it's a single part with a clean interface. Below, Escape and Avoid have been boxed for you. The sensors feed the boxes' input ports, Avoid's two inhibit outputs are already cross-wired into the Mixes, and everything else is exactly the machine you built. One thing is missing: Escape's **Suppress** port connects to nothing.
 
-Once you have this pattern, adding new behaviors is straightforward:
+Wire Suppress into both Mix nodes at **−1.0** — and let the goal tests prove the boxed machine is the same animal.
 
-- **Wander layer** (priority between cruise and avoid): add an Oscillator node with a symmetric dead-zone transfer curve feeding into the Mix nodes with weight ±0.3. The robot will gently weave left and right while cruising, covering more area. Avoidance overrides it because -100 > ±30.
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  goal={{
+    title: 'Same machine, three named boxes. Wire Escape into the mix — and prove nothing changed.',
+    tests: [
+      {
+        label: 'wall on the left pivots it right',
+        phases: [{ inputs: { 'left-ir': 80, 'right-ir': 0, bumper: 0 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'a bump reverses both wheels',
+        phases: [
+          { inputs: { bumper: 100, 'left-ir': 0, 'right-ir': 0 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'the veto expires and cruise resumes',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 150 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    compoundTypes: [
+      {
+        id: 'escape-behavior',
+        displayName: 'Escape',
+        body: {
+          nodes: [
+            { id: 'in-bumper', type: 'compound-input', label: 'Bumper', x: 100, y: 20 },
+            { id: 'latch', type: 'compute-summation', label: 'Latch', x: 100, y: 140 },
+            { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 140, delayMs: 20 },
+            { id: 'active', type: 'compute-threshold', label: 'Active', x: 100, y: 270, threshold: 10 },
+            { id: 'out-suppress', type: 'compound-output', label: 'Suppress', x: 100, y: 390 },
+          ],
+          connections: [
+            { id: 'e1', from: 'in-bumper', to: 'latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e2', from: 'latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e3', from: 'delay', to: 'latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+            { id: 'e4', from: 'latch', to: 'active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e5', from: 'active', to: 'out-suppress', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+      {
+        id: 'avoid-behavior',
+        displayName: 'Avoid',
+        body: {
+          nodes: [
+            { id: 'in-left', type: 'compound-input', label: 'Left Distance', x: 40, y: 20 },
+            { id: 'in-right', type: 'compound-input', label: 'Right Distance', x: 280, y: 20 },
+            { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 40, y: 140, threshold: 60 },
+            { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 280, y: 140, threshold: 60 },
+            { id: 'out-inhibit-right', type: 'compound-output', label: 'Inhibit Right', x: 40, y: 270 },
+            { id: 'out-inhibit-left', type: 'compound-output', label: 'Inhibit Left', x: 280, y: 270 },
+          ],
+          connections: [
+            { id: 'a1', from: 'in-left', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'a2', from: 'in-right', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'a3', from: 'left-detect', to: 'out-inhibit-right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'a4', from: 'right-detect', to: 'out-inhibit-left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 250, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 480, y: 10, xshutPin: '12' },
+      { id: 'escape', type: 'compound', label: 'Escape', x: 10, y: 160, compoundTypeId: 'escape-behavior' },
+      { id: 'avoid', type: 'compound', label: 'Avoid', x: 360, y: 160, compoundTypeId: 'avoid-behavior' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 190, y: 170, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 250, y: 330 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 440, y: 330 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 250, y: 450, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 440, y: 450, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'escape', toPort: 'in-bumper', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'left-ir', to: 'avoid', toPort: 'in-left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'right-ir', to: 'avoid', toPort: 'in-right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'avoid', fromPort: 'out-inhibit-right', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'avoid', fromPort: 'out-inhibit-left', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag two wires from Escape's Suppress port — one to each Mix — and set both to −1.0. The layers are now visible as parts: Escape, Avoid, Cruise."
+/>
 
-- **Light seek layer** (priority between avoid and escape): add the two light-sensor boards with cross-wired connections to the Mix nodes, weight ±0.8. The robot drives toward light when no obstacles are in the way.
+The tests are the same ones you passed in Puzzles 1 and 2. That's the point: boxing a behavior changes nothing about the machine. Compounds are purely an organizational tool — a way to see the architecture instead of the plumbing.
 
-For each new layer, choose a weight magnitude that's stronger than the layers it should suppress and weaker than the layers that should suppress it.
+### Making boxes in the app
 
-## Packaging behaviors as compounds
+In the desktop app you build compounds from any cluster you've wired: **Shift+click** to select the nodes (say, the latch, delay, and threshold of the escape cluster), then click **Group** in the toolbar. BraitenBot collapses the selection into a single compound instance, automatically creating an **input port** for every connection that entered the selection from outside and an **output port** for every connection that left it — name the ports descriptively, since those names label the instance's connection handles. **Double-click** an instance to enter the body editor and adjust the internals; every instance of the type shares one body, so a change inside propagates to all of them. Once a type exists, a **Compounds** section appears in the palette and you can stamp out as many instances as you like. One design tip covers most mistakes: **wheels and sensors stay outside the box** — motors live on the robot overlay, and hardware pins belong on individual sensor nodes, not in a shared body.
 
-The diagram has grown complex — 13 nodes. You can clean it up by grouping each behavior into a compound:
+That last clause hints at the real payoff. Tidiness is the smaller half of compounds; the bigger half is **reuse**. Because every source in BraitenBot emits the same 0–100 signal, a compound that processes signals doesn't care what hardware feeds it. Here is one "Calibrated Sensor" compound — a dead-zone curve followed by a threshold — stamped out four times across two completely different sensor types:
 
-- **Escape** compound: contains the bumper, latch, delay, and threshold. Exposes one output: the -100 suppression signal sent to both motors.
-- **Avoid** compound: contains the two distance sensors, two thresholds, and the cross-wired connections. Exposes two outputs: left and right inhibition signals.
+<InteractiveDiagram
+  initialInputs={{ 'tof-l': 55, 'tof-r': 8, 'photo-l': 40, 'photo-r': 5 }}
+  diagram={{
+    compoundTypes: [
+      {
+        id: 'calibrated-sensor',
+        displayName: 'Calibrated Sensor',
+        body: {
+          nodes: [
+            { id: 'in-port', type: 'compound-input', label: 'In', x: 60, y: 20 },
+            { id: 'in-sum', type: 'compute-summation', label: 'In', x: 60, y: 140 },
+            { id: 'detected', type: 'compute-threshold', label: 'Detected', x: 60, y: 260, threshold: 30 },
+            { id: 'out-port', type: 'compound-output', label: 'Detected', x: 60, y: 380 },
+          ],
+          connections: [
+            { id: 'b1', from: 'in-port', to: 'in-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'b2', from: 'in-sum', to: 'detected', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 15, y: 0 }, { x: 100, y: 100 }] },
+            { id: 'b3', from: 'detected', to: 'out-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, xshutPin: '8' },
+      { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 200, y: 20, xshutPin: '12' },
+      { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 380, y: 20, arduinoPort: 'A0' },
+      { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 560, y: 20, arduinoPort: 'A1' },
+      { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-2', type: 'compound', label: 'Calibrated', x: 200, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-3', type: 'compound', label: 'Calibrated', x: 380, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-4', type: 'compound', label: 'Calibrated', x: 560, y: 200, compoundTypeId: 'calibrated-sensor' },
+    ],
+    connections: [
+      { id: 'c1', from: 'tof-l', to: 'cal-1', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'tof-r', to: 'cal-2', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'photo-l', to: 'cal-3', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'photo-r', to: 'cal-4', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="One 'Calibrated Sensor' compound, four instances — reused across two different sensor types. The left ToF is above threshold, so its calibrated output reads 100."
+/>
 
-See [Compound Reuse](./compound-reuse) for how to do this.
+Two of the instances are cleaning up laser-distance data and two are cleaning up photocell data, but the compound neither knows nor cares. Adjust the threshold once inside the shared body and all four update — exactly the consistency you want when tuning a robot.
+
+:::note[Why the sensor stays outside]
+
+It's tempting to drop the ToF sensor *inside* the compound so "Calibrated Sensor" is a complete, self-contained unit. Don't. Every instance of a compound shares one body, so all four would share a single XSHUT pin — and worse, they'd all have to be ToF sensors, making the compound useless for the photocells. Keeping the sensor outside is what lets the *same* calibration serve four sensors across two different hardware types.
+
+:::
+
+:::note[Minds are built from reused parts]
+
+A compound is an abstraction: a chunk of circuit you can name, trust, and then stop thinking about. This is the only known way to build anything truly complex — hide the details of a working sub-part behind a clean interface, then use it as a single move in a larger design. Software does it with functions; brains appear to do it with reusable circuit motifs; evolution does it shamelessly, copying a working sub-system and repurposing it rather than inventing from scratch.
+
+Notice that the abstraction is purely *for you*. The generated robot code doesn't know your compounds exist — at upload time they're flattened back into the same flat mesh of nodes and wires the robot actually runs. The hierarchy is a tool for the designer's mind, not the machine's. Which is a clue worth keeping: the modules we "see" in a complex system are often a story we tell to make it thinkable, as much as a fact about how it runs.
+
+:::
+
+## What you've learned
+
+You stacked three independent behaviors — cruise, avoid, escape — into a robot that navigates, dodges, and recovers, with no controller anywhere in it. Priority is nothing but topology and arithmetic: an inhibitory −100 outvotes a +50 at a summation, escape outranks avoid by inhibiting both wheels and latching, and when the loud layers fall silent, cruise is simply what remains. Then you named the clusters, and the same machine became three legible boxes — an abstraction that changed how you see the robot without changing the robot at all.
 
 ### Questions to sit with
 
 - Nothing in this robot chooses between behaviors, yet it reliably does the "right" one. Does arbitration require an arbiter — or just the right place for signals to collide?
-- Each layer is ignorant of the others. Would the robot be *better* with a central controller that knew about all of them, or would you just be adding a single point of failure and calling it a mind?
 - Watching the finished robot dodge, reverse, and resume, you'll instinctively narrate one continuous agent. But it's three deaf modules summing into a wheel. Which is the illusion — the unified agent, or the separateness of the parts?
+- Your compounds vanish at upload — the robot runs as one flat mesh. If the modular structure isn't in the machine, is it "really there," or only in your understanding of the machine?
+- Reuse let you build something complex without holding all of it in your head at once. Is that a limitation you worked around, or is *abstraction itself* what makes complex behavior possible in the first place?
 
 ## What's next
 
-[Compound Reuse](./compound-reuse) shows how to package sub-circuits like these behavior layers into reusable modules, keeping complex diagrams manageable.
+You've finished the lessons. [Field Test: Let It Loose](../on-the-robot/field-test) puts the whole architecture on the real robot — a room with furniture is the only benchmark that matters.
+
+For the full grouping reference — ungrouping, nesting, multi-port compounds — see [compound nodes](../guide/compound-nodes).

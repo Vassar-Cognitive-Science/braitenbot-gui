@@ -1,108 +1,172 @@
 ---
 sidebar_position: 1
-title: "Tutorial: Your First Vehicle"
+title: "1. Your First Vehicle"
 ---
 
 # Your First Vehicle
 
 Imagine a moth drawn to a porch light. It doesn't plan a route or make decisions — it simply moves faster when light hits its sensors. That's the idea behind a Braitenberg vehicle: wire a sensor directly to a motor and behavior emerges from the connection itself.
 
-In this tutorial, you'll build the simplest version of this: a robot with one light sensor wired to both wheels. Shine a flashlight at it and it drives toward you. Cover the sensor and it stops. No code, no logic, no if-statements — just a direct connection.
+This is Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to *build* minds rather than dissect them: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. (For the full tour of vehicles, see [Braitenberg Vehicles](../guide/braitenberg-vehicles).)
 
-This is essentially Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to *build* minds rather than dissect them: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. As you build, hold on to the gap between what the vehicle *is* — a sensor and two wires — and what it *appears to be doing*. That gap is the real subject of this whole series, and it only widens from here. (For the full tour of vehicles, see [Braitenberg Vehicles](../guide/braitenberg-vehicles).)
+Every circuit on this page is live — nothing to install, nothing to read first. Start by playing.
 
-**Time:** 5 minutes
-**Prerequisites:** BraitenBot installed and open
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-## What you'll build
-
-A photoresistor (or any analog light sensor) on pin A0, wired directly to both wheel motors. The brighter the light, the faster the robot drives — both wheels at equal speed, so it travels in a straight line.
-
-import DiagramView from '@site/src/components/DiagramView';
-
-<DiagramView
-  width={500}
-  height={280}
-  robot={{ x: 250, y: 200, radius: 80 }}
-  nodes={[
-    { id: 'sensor', type: 'sensor-analog', label: 'Left Photocell', x: 176, y: 30, meta: 'A0' },
-    { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 96, y: 190 },
-    { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 190 },
-  ]}
-  connections={[
-    { from: 'sensor', to: 'left', weight: 1.0 },
-    { from: 'sensor', to: 'right', weight: 1.0 },
-  ]}
-  caption="A single sensor driving both motors with weight 1.0"
+<InteractiveDiagram
+  initialInputs={{ 'sensor': 60 }}
+  diagram={{
+    nodes: [
+      { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 160, y: 30, arduinoPort: 'A0' },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 220, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 260, y: 220, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor', to: 'left', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sensor', to: 'right', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="This is a complete animal. Drag the light slider — you are the sun."
 />
 
-## Step 1: Observe the default canvas
+One sensor, two wires, two wheels. The brighter the light, the faster both wheels turn — and because they always turn at exactly the same speed, this creature can only ever drive straight. There is no program anywhere in it. The wiring *is* the behavior.
 
-When you first open BraitenBot, the canvas already has two nodes: **Left Wheel** and **Right Wheel**, snapped to the robot wheel overlay. These represent the two motors that drive the robot's wheels. Every vehicle starts here.
+Now build it yourself, one move at a time.
 
-## Step 2: Add a sensor
+## Puzzle 1 — Wake the other wheel
 
-1. The **Node Palette** on the left opens on its **Basic** tab, which lists the kit's hardware by name
-2. In the **Kit sensors** group, drag **Left Photocell** onto the canvas, dropping it above the robot
-3. It appears as an orange-bordered node labeled "Left Photocell"
+Someone wired this vehicle in a hurry and only connected one wheel. In bright light it pivots in a sad circle.
 
-We're only using one sensor here, so either photocell would do — rename it "Light Sensor" if you like; the label is yours.
+Draw a connection: drag from the dot at the bottom of the sensor down to the Right Wheel.
 
-On the physical robot, this sensor is a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'sensor': 60 }}
+  goal={{
+    title: 'Make both wheels spin in bright light — and stop dead in the dark.',
+    tests: [
+      {
+        label: 'bright light drives both wheels',
+        phases: [{ inputs: { sensor: 80 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'gte', value: 40 },
+          { node: 'right', op: 'gte', value: 40 },
+        ],
+      },
+      {
+        label: 'darkness stops it',
+        phases: [{ inputs: { sensor: 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'eq', value: 0 },
+          { node: 'right', op: 'eq', value: 0 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 160, y: 30, arduinoPort: 'A0' },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 220, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 260, y: 220, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor', to: 'left', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag from the sensor's bottom dot to the Right Wheel. The slider stays live while you wire."
+/>
 
-## Step 3: Look at the sensor's configuration
+That wire you just drew is the whole idea. A connection carries the sensor's value to the motor, and the connection's **weight** decides how much of it arrives. Both wires here have weight 1.0: a light reading of 75 becomes a motor speed of 75, unmodified.
 
-1. Click the sensor node to select it — the config panel opens on the right
-2. Notice the **Arduino Port** is already set to **A0**. The preset filled it in to match the kit's wiring, so you never have to type a pin number for standard kit hardware.
+## Puzzle 2 — Make it timid
 
-This is where you *would* point the sensor at a different pin — if you wired your own photoresistor to, say, A2, you'd change the port here. For the kit build, the preset already has it right.
+The weight badge is the small number sitting on each wire. Click it and a slider appears.
 
-## Step 4: Connect sensor to motors
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'sensor': 80 }}
+  goal={{
+    title: 'Half the nerve: at light 80, both wheels should run at about 40.',
+    tests: [
+      {
+        label: 'half speed in bright light',
+        phases: [{ inputs: { sensor: 80 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'gte', value: 35 },
+          { node: 'left', op: 'lte', value: 45 },
+          { node: 'left', op: 'eq', other: 'right', tol: 2 },
+        ],
+      },
+      {
+        label: 'still proportional in dim light',
+        phases: [{ inputs: { sensor: 40 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'gte', value: 15 },
+          { node: 'left', op: 'lte', value: 25 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 160, y: 30, arduinoPort: 'A0' },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 220, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 260, y: 220, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor', to: 'left', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sensor', to: 'right', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Click a weight badge to open its slider. Both wires need the same weight, or the vehicle starts to veer — try it and watch."
+/>
 
-1. Hover over the sensor's **output handle** (the filled circle at the bottom of the node)
-2. Click and drag down toward the **Left Wheel** node
-3. When the Left Wheel's input handle glows, release to create the connection
-4. Repeat: drag from the sensor's output to the **Right Wheel**
+Same wiring, half the response. Nothing about the vehicle's *character* changed — it still loves light and only light — but its temperament did. Weight is the first knob you have on a creature's personality.
 
-You should now see two curved lines connecting the sensor to both motors. Each connection carries the sensor's signal to a motor — this is the "wire" in Braitenberg's thought experiment.
+## Puzzle 3 — Now make light repel it
 
-## Step 5: Set connection weights
+Weights can be negative. A negative weight turns the wire into a "don't": the brighter the light, the harder the motor drives *backward*.
 
-Both connections default to a weight of 1.0, which means the sensor signal passes to the motors unmodified. A sensor reading of 75 (bright light) becomes a motor drive of 75 (fast forward). A reading of 10 (dim) becomes a slow crawl.
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'sensor': 80 }}
+  goal={{
+    title: 'One vehicle, opposite soul: bright light should push both wheels into reverse, equally.',
+    tests: [
+      {
+        label: 'bright light repels',
+        phases: [{ inputs: { sensor: 80 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'lte', value: -20 },
+          { node: 'right', op: 'lte', value: -20 },
+          { node: 'left', op: 'eq', other: 'right', tol: 2 },
+        ],
+      },
+      {
+        label: 'darkness is peace',
+        phases: [{ inputs: { sensor: 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left', op: 'eq', value: 0 },
+          { node: 'right', op: 'eq', value: 0 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'sensor', type: 'sensor-analog', label: 'Light Sensor', x: 160, y: 30, arduinoPort: 'A0' },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 220, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 260, y: 220, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'sensor', to: 'left', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sensor', to: 'right', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag both weights below zero. The same two wires now encode the opposite reaction."
+/>
 
-To verify:
-1. Click on a connection line (or its weight badge)
-2. The config panel shows the **Connection Weight** slider (with a separate **Numeric Weight** box)
-3. Confirm it's set to **1.0**
-
-If you set the weight to 0.5, the motor would receive half the sensor signal — the robot would move more slowly for the same light level. We'll use this in later tutorials to tune sensitivity.
-
-## Step 6: Test with trace simulation
-
-Before uploading to hardware, you can simulate the signal flow right in the app:
-
-1. Click **Trace Signal Flow** in the toolbar
-2. A slider appears near your sensor node — this simulates the light level the sensor would read
-3. Drag the slider from 0 to 100 and watch both motor values change in real time
-4. At 0 (darkness): both motors read 0 — the robot is stopped
-5. At 50 (moderate light): both motors read 50 — moderate forward speed
-6. At 100 (bright light): both motors read 100 — full speed
-
-Since both motors always get the same value, the robot drives in a straight line. It can't steer yet — we'll fix that in the next tutorial.
-
-## Step 7: Upload to the robot
-
-If you have an Arduino connected:
-
-1. Set the **loop period** to `20` ms in **Settings** (the ⚙ gear in the toolbar) — this means the robot reads its sensor and updates its motors 50 times per second. (20 ms is already the default, so you can usually leave it.)
-2. Select your board in the **Device** dropdown
-3. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board
-
-The two wheel nodes already have their servo pins set (D5 and D6, matching the kit wiring), so there's nothing to configure there before uploading.
-
-If you don't have a board connected yet, you can still click the **▾** chevron next to the button, choose **Generate code only**, and then click the button to see the generated sketch.
-
-Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
+Stop and notice what just happened. You didn't add a "flee" module or write an avoidance rule. You changed the *sign of a number*, and an observer watching the physical robot would tell you it's a different animal — one that backs away from flashlights instead of chasing them.
 
 :::note[Thinking like Braitenberg]
 
@@ -111,9 +175,13 @@ Watch someone meet this robot for the first time. They'll say it "likes" the lig
 Braitenberg called this the **law of uphill analysis and downhill invention** — it is far easier to *create* a behavior than to *deduce* the mechanism behind one. An observer reasoning backward from what the robot does would invent something far more elaborate than the truth. We do exactly this every day when we explain other people, and perhaps even ourselves. Sitting with that possibility is the real point of the exercise; the robot is just the excuse.
 :::
 
+## Building it in the app
+
+Everything you did on this page works the same way in the desktop app: drag nodes from the palette, wire them by dragging from output dots, click connections to edit weights, and use **Trace Signal Flow** to simulate. The [editor guide](../getting-started/editor) walks the interface; the app's canvas starts with the two wheel nodes already placed.
+
 ## What you've learned
 
-With just one sensor and two wires, you've created a vehicle that responds to its environment. There's no program logic — the behavior is entirely a product of the physical wiring. This is the core insight of Braitenberg vehicles: complex-looking behavior can emerge from very simple connections.
+With one sensor and two wires you built a vehicle that responds to its environment — and then rebuilt its whole personality twice without adding a single part. There's no program logic anywhere. The behavior is entirely a product of the wiring: which nodes connect, and with what weight.
 
 ### Questions to sit with
 
@@ -121,8 +189,10 @@ With just one sensor and two wires, you've created a vehicle that responds to it
 - The behavior isn't really in the robot or in the room, but in their interaction. Where, exactly, is "moving toward light" located — in the sensor, the wire, the motor, or the flashlight?
 - You wrote no rules, yet the robot reliably does something that looks purposeful. How much of a *living* animal's behavior, do you think, might also run without rules?
 
-But this vehicle has a limitation: it can only drive straight. To make it steer toward a light source, you need two sensors — one on each side — with crossed wiring. That's what we'll build next.
+This vehicle has a limitation: with one sensor it can only speed up or slow down, never steer. Giving it a second eye — and choosing how the two eyes cross to the two wheels — is where things get genuinely strange.
 
 ## What's next
 
-[Light Follower](./light-follower) — add a second sensor and cross-wire them so the robot steers toward the brightest spot.
+[2. Fear & Love](./light-follower) — add a second sensor and discover that the *same parts* wired two different ways produce a creature that chases light or one that flees it.
+
+Have the robot kit? [First Upload](../on-the-robot/first-upload) puts this exact circuit on real wheels.

@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:playground": "vite build --config vite.playground.config.ts",
     "preview": "vite preview",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p relay/tsconfig.json",
     "relay:dev": "tsx relay/src/index.ts",
     "relay:build": "tsc -p relay/tsconfig.build.json",
+    "docs:check-badges": "tsx docs/scripts/check-badge-overlaps.ts",
     "fetch:arduino-cli": "node scripts/fetch-arduino-cli.mjs",
     "fetch:arduino-cli:all": "node scripts/fetch-arduino-cli.mjs --all",
     "tauri": "tauri",
@@ -44,8 +44,5 @@
     "vite": "^8.1.0",
     "vitest": "^4.1.4",
     "ws": "^8.21.0"
-  },
-  "allowScripts": {
-    "esbuild@0.28.1": true
   }
 }

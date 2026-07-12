@@ -45,7 +45,7 @@ Follow becomes available once the host has published a viewport; if the host has
 
 ## Trace mode is shared
 
-When you enter [trace mode](./simulation.md) during a session, trace flips on for everyone. Sensor sliders, the shared seed, and pulse buttons all sync — every participant sees the same numbers and the same 200 ms pulse blips at the same instant.
+When you enter [trace mode](./simulation) during a session, trace flips on for everyone. Sensor sliders, the shared seed, and pulse buttons all sync — every participant sees the same numbers and the same 200 ms pulse blips at the same instant.
 
 The trace state is session-ephemeral. It is never persisted to your file, and it clears when you exit trace mode.
 
