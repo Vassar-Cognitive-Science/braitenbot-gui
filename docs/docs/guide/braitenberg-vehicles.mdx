@@ -22,7 +22,6 @@ A Braitenberg vehicle has:
 No microcontroller logic, no if-statements, no planning. The vehicle's behavior emerges entirely from how the wires are arranged and weighted.
 
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
-import DiagramView from '@site/src/components/DiagramView';
 
 ## Vehicle 2a: "Fear"
 
@@ -76,27 +75,35 @@ This is the basis of the [light follower tutorial](../tutorials/light-follower).
 
 ## Vehicle 3: "Love"
 
-Take Vehicle 2b's cross-wiring, but use **negative** (inhibitory) weights:
+Take Vehicle 2b's cross-wiring, but use **negative** (inhibitory) weights. Because inhibition only makes sense as *subtraction from something*, we add a **Constant** baseline that drives both motors forward; each sensor then subtracts from the opposite motor as light rises. The diagram below runs live with more light on the left — notice the right motor is held below the baseline while the left runs near-full, steering the vehicle toward the light while slowing it down. Drag the sliders up together and watch both motors sink toward zero: the vehicle parks.
 
-<DiagramView
-  width={440}
-  robot={{ x: 220, y: 180, radius: 70 }}
-  nodes={[
-    { id: 'ls', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20 },
-    { id: 'rs', type: 'sensor-analog', label: 'Right Sensor', x: 240, y: 20 },
-    { id: 'lm', type: 'servo-cr', label: 'Left Motor', x: 76, y: 170 },
-    { id: 'rm', type: 'servo-cr', label: 'Right Motor', x: 220, y: 170 },
-  ]}
-  connections={[
-    { from: 'ls', to: 'rm', weight: -1.0 },
-    { from: 'rs', to: 'lm', weight: -1.0 },
-  ]}
-  caption="Vehicle 3 — cross-wired with negative weights"
+<InteractiveDiagram
+  initialInputs={{ 'ls-3': 60, 'rs-3': 15 }}
+  diagram={{
+    nodes: [
+      { id: 'ls-3', type: 'sensor-analog', label: 'Left Sensor', x: 40, y: 20, arduinoPort: 'A0' },
+      { id: 'rs-3', type: 'sensor-analog', label: 'Right Sensor', x: 320, y: 20, arduinoPort: 'A1' },
+      { id: 'baseline', type: 'constant', label: 'Forward', x: 190, y: 20, constantValue: 80 },
+      { id: 'lm-3', type: 'compute-summation', label: 'Left Mix', x: 60, y: 160 },
+      { id: 'rm-3', type: 'compute-summation', label: 'Right Mix', x: 300, y: 160 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 60, y: 280, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 300, y: 280, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'b1', from: 'baseline', to: 'lm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'b2', from: 'baseline', to: 'rm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'x1', from: 'ls-3', to: 'rm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'x2', from: 'rs-3', to: 'lm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'm1', from: 'lm-3', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'm2', from: 'rm-3', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 3 — cross-wired with negative weights over a Constant baseline. Light on one side inhibits the opposite motor, so the vehicle turns toward the light and slows as it nears."
 />
 
 The vehicle still turns toward the stimulus (cross-wiring), but now it **slows down** as it gets closer. Stronger light means more inhibition of the motors. The vehicle approaches gently and parks next to the source — Braitenberg's "love."
 
-On a real robot, this requires a baseline forward drive (a Constant node) for the negative weights to subtract from. Without it, the motors would be driven in reverse. The [transfer curves tutorial](../tutorials/transfer-curves) shows how to achieve this approach-and-stop behavior using a capped response curve instead of negative weights.
+The **Constant** baseline is what makes the negative weights read as "ease off the throttle" rather than "throw it in reverse." Without it, a bright light would drive the motors below zero and the vehicle would back away instead of parking. The [transfer curves tutorial](../tutorials/transfer-curves) shows an alternative route to the same approach-and-stop behavior using a capped response curve instead of negative weights.
 
 ## The power of the idea
 

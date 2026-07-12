@@ -16,7 +16,7 @@ This tutorial quietly abandons an assumption you might not know you were making:
 **Time:** 30 minutes
 **Prerequisites:** Completed [Obstacle Avoidance](./obstacle-avoidance) and [Latches with Delay](./latches-with-delay)
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
 ## Part 1: Two layers — Cruise + Avoid
 
@@ -42,32 +42,34 @@ The avoid layer watches for obstacles and steers away. It uses the cross-wired t
 3. Wire each sensor → its threshold (weight 1.0)
 4. Cross-wire with negative weights: Left Detect → **Right** Mix (weight **-1.0**), Right Detect → **Left** Mix (weight **-1.0**)
 
-<DiagramView
-  width={550}
-  height={340}
-  robot={{ x: 275, y: 270, radius: 65 }}
-  nodes={[
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, meta: 'XSHUT D8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, meta: 'XSHUT D12' },
-    { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 100, meta: '> 60' },
-    { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 100, meta: '> 60' },
-    { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 10, meta: '50' },
-    { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 130, y: 200 },
-    { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 290, y: 200 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 135, y: 290 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 295, y: 290 },
-  ]}
-  connections={[
-    { from: 'left-ir', to: 'left-detect', weight: 1.0 },
-    { from: 'right-ir', to: 'right-detect', weight: 1.0 },
-    { from: 'cruise', to: 'left-mix', weight: 1.0 },
-    { from: 'cruise', to: 'right-mix', weight: 1.0 },
-    { from: 'left-detect', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'right-detect', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'left-mix', to: 'left-motor', weight: 1.0 },
-    { from: 'right-mix', to: 'right-motor', weight: 1.0 },
-  ]}
-  caption="Two-layer subsumption: cruise (constant forward) + avoid (threshold inhibition)"
+The circuit below runs live with an obstacle on the left (Left Distance at 80). Watch Left Detect fire and drive Right Mix to −50, so the right wheel reverses and the robot pivots away — while cruise keeps quietly contributing +50. Drag the distance sliders to work through the other scenarios below.
+
+<InteractiveDiagram
+  initialInputs={{ 'left-ir': 80, 'right-ir': 10 }}
+  diagram={{
+    nodes: [
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 10, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 390, y: 10, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 10, y: 130, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 390, y: 130, threshold: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 200, y: 20, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 130, y: 250 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 290, y: 250 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 130, y: 370, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 290, y: 370, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-detect', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-detect', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Two-layer subsumption: cruise (constant forward) + avoid (threshold inhibition). Shown with an obstacle on the left — the right wheel reverses."
 />
 
 ### How suppression works here
@@ -118,41 +120,44 @@ If avoidance is also active during escape, the motor on the obstacle side sees +
 It's tempting to give escape a weight like -1.5 to "overpower" both lower layers at once, but that isn't possible — weights clamp to the range **-1 to +1**. A single connection can scale a 0–100 signal to at most ±100. To suppress a lower layer more aggressively than that, gate it (for example with a Multiply node) or restructure the layering — don't reach for a weight outside ±1.
 :::
 
-<DiagramView
-  width={620}
-  height={480}
-  robot={{ x: 310, y: 400, radius: 65 }}
-  nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, meta: 'D2' },
-    { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 100 },
-    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 220, meta: '20 ms' },
-    { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 310, meta: '> 10' },
-    { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 190, y: 10, meta: 'XSHUT D8' },
-    { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 400, y: 10, meta: 'XSHUT D12' },
-    { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 190, y: 100, meta: '> 60' },
-    { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 100, meta: '> 60' },
-    { id: 'cruise', type: 'constant', label: 'Cruise', x: 300, y: 190, meta: '50' },
-    { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 200, y: 310 },
-    { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 370, y: 310 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 205, y: 410 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 375, y: 410 },
-  ]}
-  connections={[
-    { from: 'bumper', to: 'escape-latch', weight: 1.0 },
-    { from: 'escape-latch', to: 'delay', weight: 1.0 },
-    { from: 'delay', to: 'escape-latch', weight: 0.98, label: 'feedback ×0.98' },
-    { from: 'escape-latch', to: 'escape-active', weight: 1.0 },
-    { from: 'left-ir', to: 'left-detect', weight: 1.0 },
-    { from: 'right-ir', to: 'right-detect', weight: 1.0 },
-    { from: 'cruise', to: 'left-mix', weight: 1.0 },
-    { from: 'cruise', to: 'right-mix', weight: 1.0 },
-    { from: 'left-detect', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'right-detect', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'escape-active', to: 'left-mix', weight: -1.0, label: '-1.0' },
-    { from: 'escape-active', to: 'right-mix', weight: -1.0, label: '-1.0' },
-    { from: 'left-mix', to: 'left-motor', weight: 1.0 },
-    { from: 'right-mix', to: 'right-motor', weight: 1.0 },
-  ]}
+The full three-layer architecture is below. It starts in trace off so you can take in the wiring first — three behavior clusters (escape on the left, avoid up top, cruise in the middle) all feeding the two Mix summations. Click **Trace Signal Flow** to bring it alive: drag a distance slider to watch avoid override cruise, then pulse the Bumper (▶) and watch the decay latch hold both wheels in reverse for a couple of seconds before releasing.
+
+<InteractiveDiagram
+  initialTrace={false}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 130 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 10, y: 270, delayMs: 20 },
+      { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 400, threshold: 10 },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 220, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 470, y: 10, xshutPin: '12' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 220, y: 130, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 470, y: 130, threshold: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 345, y: 260, constantValue: 50 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 250, y: 400 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 440, y: 400 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 250, y: 520, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 440, y: 520, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'escape-latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'escape-latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'delay', to: 'escape-latch', weight: 0.98, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'escape-latch', to: 'escape-active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'left-detect', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', from: 'right-detect', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', from: 'escape-active', to: 'left-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', from: 'escape-active', to: 'right-mix', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c14', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
   caption="Three-layer subsumption: cruise + avoid + escape. Escape inhibits both motors (weight -1.0) to reverse the robot; the decay latch (feedback ×0.98) holds it for ~2.3 seconds."
 />
 

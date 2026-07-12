@@ -22,28 +22,50 @@ Despite being different hardware, all four want the same preprocessing before th
 
 The insight that makes this powerful: **the calibration doesn't care what kind of sensor feeds it.** Every source in BraitenBot — ToF, photocell, color channel — emits the same 0–100 signal. So a single "calibrated sensor" compound can sit downstream of *any* of them. Build it once; reuse it across the whole robot, regardless of the hardware upstream.
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-<DiagramView
-  width={640}
-  height={330}
-  nodes={[
-    { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, meta: 'XSHUT D8' },
-    { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 180, y: 20, meta: 'XSHUT D12' },
-    { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 340, y: 20, meta: 'A0' },
-    { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 500, y: 20, meta: 'A1' },
-    { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 170, meta: 'Calibrated Sensor' },
-    { id: 'cal-2', type: 'compound', label: 'Calibrated', x: 180, y: 170, meta: 'Calibrated Sensor' },
-    { id: 'cal-3', type: 'compound', label: 'Calibrated', x: 340, y: 170, meta: 'Calibrated Sensor' },
-    { id: 'cal-4', type: 'compound', label: 'Calibrated', x: 500, y: 170, meta: 'Calibrated Sensor' },
-  ]}
-  connections={[
-    { from: 'tof-l', to: 'cal-1', weight: 1.0 },
-    { from: 'tof-r', to: 'cal-2', weight: 1.0 },
-    { from: 'photo-l', to: 'cal-3', weight: 1.0 },
-    { from: 'photo-r', to: 'cal-4', weight: 1.0 },
-  ]}
-  caption="One 'Calibrated Sensor' compound, four instances — reused across two different sensor types"
+The layout below runs live: one **Calibrated Sensor** compound type, stamped out four times, fed by two ToF sensors and two photocells. The left ToF starts high enough to clear its calibration threshold, so its compound reads 100 — "detected." Drag the sensor sliders (or double-click a compound in the app to inspect its shared body) and watch each instance apply the identical dead-zone-then-threshold calibration.
+
+<InteractiveDiagram
+  initialInputs={{ 'tof-l': 55, 'tof-r': 8, 'photo-l': 40, 'photo-r': 5 }}
+  diagram={{
+    compoundTypes: [
+      {
+        id: 'calibrated-sensor',
+        displayName: 'Calibrated Sensor',
+        body: {
+          nodes: [
+            { id: 'in-port', type: 'compound-input', label: 'In', x: 60, y: 20 },
+            { id: 'in-sum', type: 'compute-summation', label: 'In', x: 60, y: 140 },
+            { id: 'detected', type: 'compute-threshold', label: 'Detected', x: 60, y: 260, threshold: 30 },
+            { id: 'out-port', type: 'compound-output', label: 'Detected', x: 60, y: 380 },
+          ],
+          connections: [
+            { id: 'b1', from: 'in-port', to: 'in-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'b2', from: 'in-sum', to: 'detected', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 15, y: 0 }, { x: 100, y: 100 }] },
+            { id: 'b3', from: 'detected', to: 'out-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, xshutPin: '8' },
+      { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 200, y: 20, xshutPin: '12' },
+      { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 380, y: 20, arduinoPort: 'A0' },
+      { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 560, y: 20, arduinoPort: 'A1' },
+      { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-2', type: 'compound', label: 'Calibrated', x: 200, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-3', type: 'compound', label: 'Calibrated', x: 380, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-4', type: 'compound', label: 'Calibrated', x: 560, y: 200, compoundTypeId: 'calibrated-sensor' },
+    ],
+    connections: [
+      { id: 'c1', from: 'tof-l', to: 'cal-1', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'tof-r', to: 'cal-2', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'photo-l', to: 'cal-3', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'photo-r', to: 'cal-4', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="One 'Calibrated Sensor' compound, four instances — reused across two different sensor types. The left ToF is above threshold, so its calibrated output reads 100."
 />
 
 With compounds, you build the preprocessing once, group it, and drag out four instances — one for each physical sensor.

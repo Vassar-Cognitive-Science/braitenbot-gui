@@ -20,34 +20,36 @@ Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled o
 
 Because both sensors sit on the same I2C bus and ship with the same default address, each needs its own **XSHUT** pin so BraitenBot can wake them one at a time at startup and give each a unique address (see [Supported Hardware](../hardware/supported-hardware)). Note that, unlike a raw analog proximity sensor, the ToF reading is clean and genuinely proportional to distance — so why introduce a Threshold at all? Because for *avoidance* you rarely want a proportional response; you want a crisp decision: is something close enough to worry about? The Threshold node turns the continuous distance into exactly that yes/no.
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-<DiagramView
-  width={600}
-  height={400}
-  robot={{ x: 300, y: 320, radius: 70 }}
-  nodes={[
-    { id: 'left-sensor', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, meta: 'XSHUT D8' },
-    { id: 'right-sensor', type: 'sensor-tof', label: 'Right ToF Distance', x: 400, y: 20, meta: 'XSHUT D12' },
-    { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 120, meta: '> 60' },
-    { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 120, meta: '> 60' },
-    { id: 'constant', type: 'constant', label: 'Forward (50)', x: 210, y: 80, meta: '50' },
-    { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 220 },
-    { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 220 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 155, y: 320 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 315, y: 320 },
-  ]}
-  connections={[
-    { from: 'left-sensor', to: 'left-thresh', weight: 1.0 },
-    { from: 'right-sensor', to: 'right-thresh', weight: 1.0 },
-    { from: 'constant', to: 'left-sum', weight: 1.0 },
-    { from: 'constant', to: 'right-sum', weight: 1.0 },
-    { from: 'left-thresh', to: 'right-sum', weight: -1.0, label: '-1.0' },
-    { from: 'right-thresh', to: 'left-sum', weight: -1.0, label: '-1.0' },
-    { from: 'left-sum', to: 'left-motor', weight: 1.0 },
-    { from: 'right-sum', to: 'right-motor', weight: 1.0 },
-  ]}
-  caption="Obstacle avoidance: constant forward drive with cross-wired threshold inhibition"
+The finished circuit is below, running live. The left sensor starts high (an obstacle close on the left): watch Left Detect fire and drive the **right** wheel into reverse while the left wheel keeps cruising — the robot pivots away. Drag the sensor sliders to explore the other cases the prose walks through.
+
+<InteractiveDiagram
+  initialInputs={{ 'left-sensor': 80, 'right-sensor': 10 }}
+  diagram={{
+    nodes: [
+      { id: 'left-sensor', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, xshutPin: '8' },
+      { id: 'right-sensor', type: 'sensor-tof', label: 'Right ToF Distance', x: 400, y: 20, xshutPin: '12' },
+      { id: 'left-thresh', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 140, threshold: 60 },
+      { id: 'right-thresh', type: 'compute-threshold', label: 'Right Detect', x: 400, y: 140, threshold: 60 },
+      { id: 'constant', type: 'constant', label: 'Forward', x: 210, y: 90, constantValue: 50 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 130, y: 250 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 310, y: 250 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 130, y: 370, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 310, y: 370, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-sensor', to: 'left-thresh', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-sensor', to: 'right-thresh', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'constant', to: 'left-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'constant', to: 'right-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'left-thresh', to: 'right-sum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'right-thresh', to: 'left-sum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'left-sum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Obstacle avoidance: constant forward drive with cross-wired threshold inhibition. The left sensor is high, so the right wheel reverses and the robot turns away."
 />
 
 ## How it works

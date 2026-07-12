@@ -31,24 +31,27 @@ The bumper is a momentary switch — it's only pressed for a few loop iterations
 
 A latch is a feedback loop: a Summation node sends its output through a Delay node, which feeds the value back into the Summation one iteration later.
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-<DiagramView
-  width={500}
-  height={300}
-  nodes={[
-    { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, meta: 'D2' },
-    { id: 'sum', type: 'compute-summation', label: 'Latch', x: 176, y: 30 },
-    { id: 'delay', type: 'compute-delay', label: 'Delay', x: 176, y: 170, meta: '20 ms' },
-    { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 340, y: 30 },
-  ]}
-  connections={[
-    { from: 'bumper', to: 'sum', weight: 1.0 },
-    { from: 'sum', to: 'motor', weight: 0.5 },
-    { from: 'sum', to: 'delay', weight: 1.0 },
-    { from: 'delay', to: 'sum', weight: 1.0, label: 'feedback' },
-  ]}
-  caption="Basic latch: summation + delay feedback loop"
+Try it live below: click the **pulse button** (▶) on the Bumper to "tap" it for a moment, then watch the Latch jump to 100 and *stay* there after the bumper releases — the motor keeps driving. The feedback loop is holding the signal alive on its own. (You'll also see the runaway climb the prose warns about next.) Hit **Reset** to clear it.
+
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Basic latch: summation + delay feedback loop. Pulse the bumper and the latch holds after it releases."
 />
 
 Walk through the loop iterations:

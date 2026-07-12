@@ -18,40 +18,42 @@ Mount the **TCS34725 color sensor** on the underside of the robot, facing straig
 
 Lay out some colored paper patches on the floor: a red one, a blue one, and (to keep us honest later) a plain white one. The robot will cruise forward and react as it rolls over each.
 
-import DiagramView from '@site/src/components/DiagramView';
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
-<DiagramView
-  width={660}
-  height={480}
-  robot={{ x: 300, y: 430, radius: 62 }}
-  nodes={[
-    { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10, meta: 'TCS34725' },
-    { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 120, meta: 'red − blue' },
-    { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 120, meta: 'blue − red' },
-    { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 225, meta: '> 15' },
-    { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 225, meta: '> 15' },
-    { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 240, meta: '40' },
-    { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 330 },
-    { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 330 },
-    { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 195, y: 430 },
-    { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 325, y: 430 },
-  ]}
-  connections={[
-    { from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, label: '+1.0' },
-    { from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, label: '−1.0' },
-    { from: 'color', fromPort: 'blue', to: 'blueness', weight: 1.0, label: '+1.0' },
-    { from: 'color', fromPort: 'red', to: 'blueness', weight: -1.0, label: '−1.0' },
-    { from: 'redness', to: 'see-red', weight: 1.0 },
-    { from: 'blueness', to: 'see-blue', weight: 1.0 },
-    { from: 'forward', to: 'left-sum', weight: 1.0 },
-    { from: 'forward', to: 'right-sum', weight: 1.0 },
-    { from: 'see-red', to: 'left-sum', weight: 0.4, label: '+0.4' },
-    { from: 'see-red', to: 'right-sum', weight: 0.4, label: '+0.4' },
-    { from: 'see-blue', to: 'left-sum', weight: -1.0, label: '−1.0' },
-    { from: 'left-sum', to: 'left-motor', weight: 1.0 },
-    { from: 'right-sum', to: 'right-motor', weight: 1.0 },
-  ]}
-  caption="Likes red, fears blue: the two colored ports are compared, thresholded, and wired to different wheel behaviors"
+The finished vehicle is below, running live over a **red patch** (red channel 45, blue 12). See Red fires, both wheels surge to 80, and the robot lunges forward. Try the color-channel sliders to reproduce the blue-patch and white-paper cases from the walkthrough further down.
+
+<InteractiveDiagram
+  initialInputs={{ 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 150 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 150 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 270, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 270, threshold: 15 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 290, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 410 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 410 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 530, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 530, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'color', fromPort: 'blue', to: 'blueness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'color', fromPort: 'red', to: 'blueness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'redness', to: 'see-red', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'blueness', to: 'see-blue', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'forward', to: 'left-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'forward', to: 'right-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'see-red', to: 'left-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', from: 'see-red', to: 'right-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', from: 'see-blue', to: 'left-sum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', from: 'left-sum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Likes red, fears blue: the two colored ports are compared, thresholded, and wired to different wheel behaviors. Shown over a red patch — both wheels accelerate."
 />
 
 ## Four sensors sharing one eye
@@ -95,18 +97,19 @@ This is exactly what your own retina does. It doesn't ship the brain a raw brigh
 
 We build the comparison with a **Summation** node — the same node from obstacle avoidance, but now we exploit its ability to add *negatively-weighted* inputs. Wire the red channel in at weight +1.0 and the blue channel in at weight −1.0, and the summation outputs `red − blue`. This is the moment you draw two connections *from the same sensor*, each leaving a different colored port:
 
-<DiagramView
-  width={420}
-  height={260}
-  nodes={[
-    { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 135, y: 10, meta: 'TCS34725' },
-    { id: 'redness', type: 'compute-summation', label: 'Redness', x: 135, y: 150, meta: 'red − blue' },
-  ]}
-  connections={[
-    { from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, label: '+1.0' },
-    { from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, label: '−1.0' },
-  ]}
-  caption="Two wires from one eye: red at +1.0 and blue at −1.0 make an opponent 'redness' signal"
+<InteractiveDiagram
+  initialInputs={{ 'color2:red': 45, 'color2:green': 15, 'color2:blue': 12, 'color2:clear': 25 }}
+  diagram={{
+    nodes: [
+      { id: 'color2', type: 'sensor-color', label: 'Floor Color', x: 135, y: 10 },
+      { id: 'redness2', type: 'compute-summation', label: 'Redness', x: 135, y: 180 },
+    ],
+    connections: [
+      { id: 'r1', from: 'color2', fromPort: 'red', to: 'redness2', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'r2', from: 'color2', fromPort: 'blue', to: 'redness2', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Two wires from one eye: red at +1.0 and blue at −1.0 make an opponent 'redness' signal. Drag the red and blue channel sliders and watch Redness track their difference."
 />
 
 ## Step 1: Build the two opponent signals
