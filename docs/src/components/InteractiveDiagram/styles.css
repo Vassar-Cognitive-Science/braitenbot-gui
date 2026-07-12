@@ -34,9 +34,9 @@
 .id-canvas {
   position: relative;
   width: 100%;
-  /* Height is set inline (auto-derived or overridden). No horizontal scroll by
-     default — the world is scaled to fit; only the `-scroll` variant (MIN_SCALE
-     floor forced overflow) allows it. */
+  /* Height is set inline (auto-derived or overridden). No scroll by default —
+     the world is scaled to fit within the fixed viewport. The -scroll-x and
+     -scroll-y variants enable scrolling when content grows beyond the viewport. */
   overflow: hidden;
   /* Match the app canvas surface (App.css `.diagram-canvas`) — same 16px
      graph-paper grid over the same dark surface — so the embedded panel
@@ -48,9 +48,14 @@
   outline: none;
 }
 
-.id-canvas-scroll {
+/* Horizontal scroll: MIN_SCALE floor forced the content wider than the viewport. */
+.id-canvas-scroll-x {
   overflow-x: auto;
-  overflow-y: hidden;
+}
+
+/* Vertical scroll: editable content grew below the fixed viewport height. */
+.id-canvas-scroll-y {
+  overflow-y: auto;
 }
 
 /* Keyboard focus stays discoverable without a big bright frame: a restrained

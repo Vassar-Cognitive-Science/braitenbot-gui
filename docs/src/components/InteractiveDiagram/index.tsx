@@ -87,9 +87,6 @@ export interface InteractiveDiagramProps {
 
 /** Symmetric world padding around the node bounds (world px, pre-scale). */
 const PAD = 48;
-/** Extra working room below the content in editable embeds, so there's space to
- *  drop and drag palette nodes without an immediate rescale (world px). */
-const EDIT_MARGIN = 120;
 /** Extra bottom room in trace mode: trace-expanded sensor nodes render taller
  *  than their NODE_H box (86 vs 64 px), so allow for that plus the value
  *  readout below the output handle, keeping the toggle from clipping/jumping. */
@@ -113,13 +110,12 @@ interface Layout {
 
 /**
  * World-space content box: the node bounds (min/max x,y grown by NODE_W/NODE_H)
- * expanded by symmetric `PAD`, plus an optional extra `bottomMargin` of working
- * room below the content (editable embeds). `offsetX/Y` shift raw node
- * coordinates so the padded content sits at the world origin.
+ * expanded by symmetric `PAD`. `offsetX/Y` shift raw node coordinates so the
+ * padded content sits at the world origin.
  */
-function computeLayout(nodes: DiagramNode[], bottomMargin = 0): Layout {
+function computeLayout(nodes: DiagramNode[]): Layout {
   if (nodes.length === 0) {
-    return { offsetX: PAD, offsetY: PAD, contentW: 400, contentH: 300 + bottomMargin };
+    return { offsetX: PAD, offsetY: PAD, contentW: 400, contentH: 300 };
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of nodes) {
@@ -132,8 +128,33 @@ function computeLayout(nodes: DiagramNode[], bottomMargin = 0): Layout {
     offsetX: -minX + PAD,
     offsetY: -minY + PAD,
     contentW: maxX - minX + PAD * 2,
-    contentH: maxY - minY + PAD * 2 + bottomMargin,
+    contentH: maxY - minY + PAD * 2,
   };
+}
+
+/**
+ * Compute the scaled content dimensions and viewport height from an epoch layout
+ * and available width.
+ */
+function computeEpochFit(
+  layout: Layout,
+  availW: number,
+  traceMode: boolean,
+  heightOverride?: number,
+): {
+  scale: number;
+  worldOffsetX: number;
+  overflowsX: boolean;
+  viewportH: number;
+} {
+  const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
+  const scaledW = layout.contentW * scale;
+  const scaledH = (layout.contentH + (traceMode ? TRACE_MARGIN : 0)) * scale;
+  const overflowsX = scaledW > availW + 0.5;
+  const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
+  const viewportH =
+    heightOverride ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(scaledH)));
+  return { scale, worldOffsetX, overflowsX, viewportH };
 }
 
 // View-only embed: the graph structure is not editable (the shared canvas
@@ -233,6 +254,23 @@ interface DiagramPanelProps {
   onReset?: () => void;
   /** True when reset would change something (an edit or non-default input). */
   canReset?: boolean;
+  /**
+   * Epoch layout: stable fit computed at mount (or on Reset / container resize).
+   * Editable panels receive this from LiveDiagram so drag, add, and delete never
+   * retrigger a re-fit. Omit for view-only / SSR panels (they compute it inline).
+   */
+  epochLayout?: {
+    layout: Layout;
+    scale: number;
+    worldOffsetX: number;
+    overflowsX: boolean;
+    viewportH: number;
+  };
+  /**
+   * Callback to notify that the container width was measured (so LiveDiagram can
+   * recompute epoch layout on resize).
+   */
+  onAvailWMeasured?: (w: number) => void;
 }
 
 function DiagramPanel({
@@ -264,30 +302,35 @@ function DiagramPanel({
   onDeleteConnection,
   onReset,
   canReset = false,
+  epochLayout,
+  onAvailWMeasured,
 }: DiagramPanelProps) {
-  // Bottom working room: editable embeds get room to drop palette nodes; trace
-  // mode adds a small allowance because trace-expanded sensor nodes render
-  // ~22px taller than their NODE_H box, so a bottom-most sensor won't clip and
-  // toggling trace doesn't jump the derived height much.
-  const bottomMargin = (editable ? EDIT_MARGIN : 0) + (traceMode ? TRACE_MARGIN : 0);
-  const layout = useMemo(
-    () => computeLayout(nodes, bottomMargin),
-    [nodes, bottomMargin],
-  );
-
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Measure the viewport's available width (the figure content column). The
-  // world is CSS-scaled to fit this; recompute on mount, on resize, and when the
-  // content bounds change (readers add/drag nodes). Seed with the content width
-  // so SSR / first paint isn't scaled to 0.
-  const [availW, setAvailW] = useState(layout.contentW);
+  // For view-only embeds (no epochLayout prop), compute layout + fit inline,
+  // responding to both node positions and container width (ResizeObserver).
+  // For editable embeds, the epoch values come from the parent LiveDiagram and
+  // are stable across drags/adds/deletes.
+  const inlineLayout = useMemo(
+    () => (!epochLayout ? computeLayout(nodes) : null),
+    // Intentionally re-runs when nodes change, but only for view-only panels.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [epochLayout, nodes],
+  );
+
+  // availW is needed only for view-only panels (to compute inline fit). For
+  // editable panels, availW measurements are forwarded to LiveDiagram via
+  // onAvailWMeasured instead.
+  const [availW, setAvailW] = useState(() => inlineLayout?.contentW ?? 400);
+
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
     const measure = () => {
       const w = el.clientWidth;
-      if (w > 0) setAvailW(w);
+      if (w <= 0) return;
+      setAvailW(w);
+      onAvailWMeasured?.(w);
     };
     measure();
     if (typeof ResizeObserver === 'undefined') {
@@ -297,140 +340,104 @@ function DiagramPanel({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fit-to-width, but never shrink past MIN_SCALE (readability). Because
-  // CSS `transform: scale()` does not shrink the element's layout box, the
-  // world div carries its unscaled `contentW/contentH` as its box size and the
-  // scale is applied purely visually — so we size the viewport ourselves rather
-  // than let the scaled world dictate it.
-  const liveScale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
-  const liveScaledW = layout.contentW * liveScale;
-  const liveScaledH = layout.contentH * liveScale;
-  const liveOverflowsX = liveScaledW > availW + 0.5;
-  const liveWorldOffsetX = liveOverflowsX ? 0 : Math.max(0, (availW - liveScaledW) / 2);
+  // Resolve the effective fit values — either epoch-stable (editable) or
+  // inline-derived (view-only).
+  let scale: number;
+  let worldOffsetX: number;
+  let overflowsX: boolean;
+  let viewportH: number;
+  let epochOffsetX: number;
+  let epochOffsetY: number;
 
-  // ── Drag-latch: freeze the stage layout for the duration of a node drag ──
-  //
-  // During a node drag, `onNodeMove` updates positions on every mousemove →
-  // `layout` recomputes → `scale`/`worldOffsetX` change → `clientToWorld` maps
-  // the same pointer to a different world coordinate → the node teleports →
-  // runaway rescale. Fix: latch all layout-derived values on drag-start and
-  // hold them until drag-end; only then let bounds/scale/height reflow from
-  // the final positions.
-  //
-  // `latchedLayout` is null while not dragging (live values are used).
-  // During a drag it holds the snapshot of { scale, offsetX, offsetY,
-  // worldOffsetX, contentW, contentH, viewportH, overflowsX } that was current
-  // at drag-start. All resolver callbacks (clientToLayer/World, nodeWorldPos)
-  // read from a ref so DiagramCanvas's stableRef always sees the current
-  // latched values without needing new function identities.
-  interface LayoutSnapshot {
-    scale: number;
-    offsetX: number;
-    offsetY: number;
-    worldOffsetX: number;
-    contentW: number;
-    contentH: number;
-    viewportH: number;
-    overflowsX: boolean;
+  if (epochLayout) {
+    scale = epochLayout.scale;
+    worldOffsetX = epochLayout.worldOffsetX;
+    overflowsX = epochLayout.overflowsX;
+    viewportH = height ?? epochLayout.viewportH;
+    epochOffsetX = epochLayout.layout.offsetX;
+    epochOffsetY = epochLayout.layout.offsetY;
+  } else {
+    // View-only: fit from current nodes + current availW.
+    const fit = computeEpochFit(inlineLayout!, availW, traceMode, height);
+    scale = fit.scale;
+    worldOffsetX = fit.worldOffsetX;
+    overflowsX = fit.overflowsX;
+    viewportH = fit.viewportH;
+    epochOffsetX = inlineLayout!.offsetX;
+    epochOffsetY = inlineLayout!.offsetY;
   }
-  const [latchedLayout, setLatchedLayout] = useState<LayoutSnapshot | null>(null);
-  // A ref that always mirrors `latchedLayout` so stable callbacks can read it.
-  const latchRef = useRef<LayoutSnapshot | null>(null);
-  latchRef.current = latchedLayout;
 
-  // Live layout values also in a ref so drag-start can snapshot them without a
-  // stale-closure hazard (latchRef is read at call time, inside the callback).
-  const liveLayoutRef = useRef<LayoutSnapshot>({
-    scale: liveScale,
-    offsetX: layout.offsetX,
-    offsetY: layout.offsetY,
-    worldOffsetX: liveWorldOffsetX,
-    contentW: layout.contentW,
-    contentH: layout.contentH,
-    viewportH: height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(liveScaledH))),
-    overflowsX: liveOverflowsX,
-  });
-  // Update the live snapshot every render so drag-start always captures the
-  // most recent pre-drag values (no stale closure).
-  liveLayoutRef.current = {
-    scale: liveScale,
-    offsetX: layout.offsetX,
-    offsetY: layout.offsetY,
-    worldOffsetX: liveWorldOffsetX,
-    contentW: layout.contentW,
-    contentH: layout.contentH,
-    viewportH: height ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(liveScaledH))),
-    overflowsX: liveOverflowsX,
-  };
+  // ── World div sizing: grows with current content extents (enables scroll) ──
+  //
+  // The epoch layout (offsetX/Y, scale) is fixed. The world div's unscaled
+  // dimensions grow right/down as nodes are added or dragged. Multiplied by
+  // scale gives the scrollable extent inside the viewport.
+  //
+  // For editable embeds we track the current node extents independently of the
+  // epoch so the world grows without triggering a re-fit.
+  const currentExtentW = useMemo(() => {
+    if (nodes.length === 0) return epochLayout?.layout.contentW ?? inlineLayout!.contentW;
+    let maxX = -Infinity;
+    for (const n of nodes) maxX = Math.max(maxX, n.x + NODE_W);
+    // Extent = epochOffsetX brings node coords into world space, plus right PAD.
+    return maxX + epochOffsetX + PAD;
+  }, [nodes, epochOffsetX, epochLayout, inlineLayout]);
 
-  // Effective (rendered) layout: latched if dragging, otherwise live.
-  const effective = latchedLayout ?? liveLayoutRef.current;
-  const scale = effective.scale;
-  const worldOffsetX = effective.worldOffsetX;
-  const overflowsX = effective.overflowsX;
-  const viewportH = effective.viewportH;
-  // World div sizing mirrors the effective layout so it doesn't change mid-drag.
-  const effectiveContentW = effective.contentW;
-  const effectiveContentH = effective.contentH;
+  const currentExtentH = useMemo(() => {
+    if (nodes.length === 0) return epochLayout?.layout.contentH ?? inlineLayout!.contentH;
+    let maxY = -Infinity;
+    for (const n of nodes) maxY = Math.max(maxY, n.y + NODE_H);
+    return maxY + epochOffsetY + PAD + (traceMode ? TRACE_MARGIN : 0);
+  }, [nodes, epochOffsetY, traceMode, epochLayout, inlineLayout]);
 
-  const onNodeDragStart = useCallback(() => {
-    // Latch the pre-drag layout snapshot so neither scale, offsets, nor
-    // viewport height reflow while the drag is in progress.
-    setLatchedLayout({ ...liveLayoutRef.current });
-  }, []);
+  // A ref that always holds the current epoch values so stable callbacks can
+  // read them without needing new function identities.
+  const epochRef = useRef({ scale, worldOffsetX, offsetX: epochOffsetX, offsetY: epochOffsetY });
+  epochRef.current = { scale, worldOffsetX, offsetX: epochOffsetX, offsetY: epochOffsetY };
 
-  const onNodeDragEnd = useCallback(() => {
-    // Release the latch — one reflow from the final node positions.
-    setLatchedLayout(null);
-  }, []);
-
-  const [rejectedNotice, setRejectedNotice] = useState<string | null>(null);
-  const noticeTimerRef = useRef<number | null>(null);
-
-  // Node world position = raw node coordinate + layout offset (docs have no
-  // zoom / block-scale; the fit-to-width scale is a CSS transform on the
-  // wrapper, outside the canvas's coordinate space).
-  // Reads from latchRef so it's always stable but always current (no new
-  // function identity needed as latch changes).
+  // Node world position = raw node coordinate + epoch offset.
+  // Reads from epochRef so it's always stable and always current.
   const nodeWorldPos = useCallback(
     (node: DiagramNode) => {
-      const l = latchRef.current ?? liveLayoutRef.current;
-      return { x: node.x + l.offsetX, y: node.y + l.offsetY };
+      const e = epochRef.current;
+      return { x: node.x + e.offsetX, y: node.y + e.offsetY };
     },
-    // Stable: reads latchRef/liveLayoutRef at call time.
+    // Stable: reads epochRef at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
-  // clientToLayer: client px → world-div (unscaled layer) px. The world div is
-  // CSS-scaled by `scale`, so undo it. clientToWorld: same, minus the layout
-  // offset, so it matches node.x/y.
-  // Both callbacks are stable references that read latchRef at call time, so
-  // DiagramCanvas's stateRef always gets the current (latched or live) values
-  // without the resolver identities changing on every render.
+  // clientToLayer: client px → world-div (unscaled layer) px.
+  // clientToWorld: same, minus the epoch offset → matches node.x/y.
+  // Both are stable and read epochRef at call time.
   const clientToLayer = useCallback(
     (clientX: number, clientY: number) => {
-      const l = latchRef.current ?? liveLayoutRef.current;
+      const e = epochRef.current;
       const rect = canvasRef.current?.getBoundingClientRect();
-      const left = (rect?.left ?? 0) + l.worldOffsetX;
-      const top = rect?.top ?? 0;
-      return { x: (clientX - left) / l.scale, y: (clientY - top) / l.scale };
+      // Horizontal scroll offset inside the canvas (for overflow-x: auto panels).
+      const scrollLeft = canvasRef.current?.scrollLeft ?? 0;
+      const left = (rect?.left ?? 0) + e.worldOffsetX - scrollLeft;
+      const scrollTop = canvasRef.current?.scrollTop ?? 0;
+      const top = (rect?.top ?? 0) - scrollTop;
+      return { x: (clientX - left) / e.scale, y: (clientY - top) / e.scale };
     },
-    // Stable: reads latchRef/liveLayoutRef at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
   const clientToWorld = useCallback(
     (clientX: number, clientY: number) => {
-      const l = latchRef.current ?? liveLayoutRef.current;
+      const e = epochRef.current;
       const layer = clientToLayer(clientX, clientY);
-      return { x: layer.x - l.offsetX, y: layer.y - l.offsetY };
+      return { x: layer.x - e.offsetX, y: layer.y - e.offsetY };
     },
-    // clientToLayer is stable above.
     [clientToLayer],
   );
+
+  const [rejectedNotice, setRejectedNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
 
   const showRejected = useCallback((message: string) => {
     setRejectedNotice(message);
@@ -507,6 +514,11 @@ function DiagramPanel({
     editable && selectedNodeIds && selectedNodeIds.size === 1 ? [...selectedNodeIds][0] : null;
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
 
+  // Vertical scroll: if the current content extents exceed the fixed viewport
+  // height we want overflow-y: auto so the user can scroll to see everything.
+  const scaledCurrentH = currentExtentH * scale;
+  const overflowsY = editable && scaledCurrentH > viewportH + 0.5;
+
   return (
     <div className="id-frame">
       {editable && palette && palette.length > 0 && (
@@ -530,7 +542,7 @@ function DiagramPanel({
       )}
 
       <div
-        className={`id-canvas${overflowsX ? ' id-canvas-scroll' : ''}`}
+        className={`id-canvas${overflowsX ? ' id-canvas-scroll-x' : ''}${overflowsY ? ' id-canvas-scroll-y' : ''}`}
         style={{ height: viewportH }}
         ref={canvasRef}
         tabIndex={editable ? 0 : undefined}
@@ -552,8 +564,8 @@ function DiagramPanel({
           style={{
             transform: `scale(${scale})`,
             transformOrigin: '0 0',
-            width: effectiveContentW,
-            height: effectiveContentH,
+            width: currentExtentW,
+            height: currentExtentH,
             left: worldOffsetX,
           }}
         >
@@ -578,8 +590,8 @@ function DiagramPanel({
             configTarget={configTarget}
             setConfigTarget={setConfigTarget ?? NOOP_SET_CONFIG}
             onNodeMove={editable ? onNodeMove : undefined}
-            onNodeDragStart={editable ? onNodeDragStart : undefined}
-            onNodeDragEnd={editable ? onNodeDragEnd : undefined}
+            onNodeDragStart={undefined}
+            onNodeDragEnd={undefined}
             onConnectionCreate={editable ? onConnectionCreate : undefined}
             onConnectionRejected={editable ? handleConnectionRejected : undefined}
             onConnectionLabelT={editable ? onConnectionLabelT : undefined}
@@ -722,6 +734,36 @@ function LiveDiagram({
   // their always-simulating behavior).
   const [traceOn, setTraceOn] = useState(initialTrace);
 
+  // ── Epoch layout: stable fit, computed only at mount / Reset / resize ─────
+  //
+  // The epoch is derived from the INITIAL nodes (diagram.nodes) and the
+  // measured container width. It stays fixed while the user edits (drags,
+  // adds, deletes), so scale/offsets/viewportH never change in response to
+  // user edits. Reset restores the epoch to the initial fit. Container width
+  // changes (ResizeObserver) recompute the epoch from the CURRENT initial
+  // nodes (diagram.nodes, not the live editNodes).
+  //
+  // `null` before the first width measurement; the panel seed-renders with a
+  // fallback until the ResizeObserver fires.
+  const [epochAvailW, setEpochAvailW] = useState<number | null>(null);
+  const [epochLayout, setEpochLayout] = useState<Layout>(() => computeLayout(diagram.nodes));
+  // Epoch trace mode tracks the trace state AT THE TIME the epoch was computed
+  // (mount), so the trace-margin bottom-room in the viewport height matches
+  // the initial render. View-only embeds don't need this because they re-derive
+  // inline; editable embeds freeze it.
+  const [epochTraceMode] = useState(initialTrace);
+
+  // Recompute epoch when the container width is measured/changes.
+  const handleAvailWMeasured = useCallback((w: number) => {
+    setEpochAvailW(w);
+  }, []);
+
+  // The derived epoch fit (scale, offsets, viewportH) from current epochLayout + availW.
+  const epochFit = useMemo(() => {
+    if (epochAvailW === null) return null;
+    return computeEpochFit(epochLayout, epochAvailW, epochTraceMode, height);
+  }, [epochLayout, epochAvailW, epochTraceMode, height]);
+
   const setSensor = (key: string, value: number) => {
     setSensorValues((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
@@ -762,11 +804,35 @@ function LiveDiagram({
     }, pulseDurationMs);
   };
 
+  // ── Epoch clamp helpers ───────────────────────────────────────────────────
+  //
+  // Nodes must not be dragged left or up past the visible origin (given the
+  // fixed epoch offsets). The world div doesn't extend left/up, so a node
+  // placed there would be unreachable. Clamp coordinates so node.x/y ≥ 0
+  // in world space (≥ -epochOffsetX / -epochOffsetY in raw space), with a
+  // small PAD inset to keep the node visually reachable.
+  const epochOffsetX = epochLayout.offsetX;
+  const epochOffsetY = epochLayout.offsetY;
+  // Minimum raw x/y so that the world-space position ≥ small buffer.
+  const clampX = useCallback(
+    (x: number) => Math.max(-epochOffsetX + PAD / 2, x),
+    [epochOffsetX],
+  );
+  const clampY = useCallback(
+    (y: number) => Math.max(-epochOffsetY + PAD / 2, y),
+    [epochOffsetY],
+  );
+
   // ── editing mutations (structure lives in state) ─────────────────────────
-  const onNodeMove = useCallback((id: string, x: number, y: number) => {
-    setEditNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
-    setDirty(true);
-  }, []);
+  const onNodeMove = useCallback(
+    (id: string, x: number, y: number) => {
+      setEditNodes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, x: clampX(x), y: clampY(y) } : n)),
+      );
+      setDirty(true);
+    },
+    [clampX, clampY],
+  );
 
   const onConnectionCreate = useCallback(
     (edge: { from: string; fromPort?: OutputPortId; to: string; toPort?: string }) => {
@@ -823,15 +889,20 @@ function LiveDiagram({
   const onAddNode = useCallback(
     (type: NodeTypeId) => {
       setEditNodes((prev) => {
-        // Placement heuristic: drop below the current node stack, left-aligned to
-        // the leftmost node, nudging right to avoid overlapping an existing node.
-        const minX = prev.length ? Math.min(...prev.map((n) => n.x)) : 40;
-        const maxY = prev.length ? Math.max(...prev.map((n) => n.y + NODE_H)) : 40;
+        // Placement: drop the new node within the currently visible area.
+        // The visible origin in raw node coordinates is -epochOffsetX + PAD/2,
+        // -epochOffsetY + PAD/2 (the clamped minimum). We place below the
+        // current node stack but within a reasonable distance from the top.
+        const minX = prev.length ? Math.min(...prev.map((n) => n.x)) : -epochOffsetX + PAD;
+        const maxY = prev.length
+          ? Math.max(...prev.map((n) => n.y + NODE_H))
+          : -epochOffsetY + PAD;
         let x = minX;
-        const y = maxY + 32;
+        const y = clampY(maxY + 32);
         const collides = (px: number) =>
           prev.some((n) => Math.abs(n.y - y) < NODE_H && Math.abs(n.x - px) < NODE_W + 12);
         while (collides(x)) x += NODE_W + 24;
+        x = clampX(x);
         const count = prev.filter((n) => n.type === type).length + 1;
         const node = defaultNode(type, x, y, `${TYPE_BY_ID[type].displayName} ${count}`);
         setSelectedNodeIds(new Set([node.id]));
@@ -840,11 +911,12 @@ function LiveDiagram({
       });
       setDirty(true);
     },
-    [],
+    [epochOffsetX, epochOffsetY, clampX, clampY],
   );
 
-  // Reset restores the pristine initial state, including the trace toggle, so
-  // the embed looks exactly as first loaded — least surprising for the reader.
+  // Reset restores the pristine initial state, including the trace toggle and
+  // the epoch layout (re-derived from the initial nodes), so the embed looks
+  // exactly as first loaded — least surprising for the reader.
   const onReset = useCallback(() => {
     setEditNodes(cloneNodes(diagram.nodes));
     setEditConnections(cloneConnections(diagram.connections));
@@ -854,8 +926,16 @@ function LiveDiagram({
     setConfigTarget(null);
     setPulsingId(null);
     setTraceOn(initialTrace);
+    // Recompute the epoch layout from the initial nodes (restores the exact
+    // fit the reader saw on first load).
+    setEpochLayout(computeLayout(diagram.nodes));
     setDirty(false);
   }, [diagram.nodes, diagram.connections, initialInputs, initialTrace]);
+
+  // Build the epochLayout prop for DiagramPanel: null until first measurement.
+  const epochLayoutProp = epochFit
+    ? { layout: epochLayout, ...epochFit }
+    : undefined;
 
   return (
     <DiagramPanel
@@ -887,6 +967,8 @@ function LiveDiagram({
       onDeleteConnection={onDeleteConnection}
       onReset={onReset}
       canReset={dirty || traceOn !== initialTrace}
+      epochLayout={epochLayoutProp}
+      onAvailWMeasured={handleAvailWMeasured}
     />
   );
 }
