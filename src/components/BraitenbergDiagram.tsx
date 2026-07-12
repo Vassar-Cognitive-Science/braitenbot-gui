@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, MouseEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { DiagramNode, DiagramConnection, OutputPortId } from '../types/diagram';
-import { TYPE_BY_ID, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import { TYPE_BY_ID, DEFAULT_TOF_MAX_MM, DEFAULT_COMMENT_WIDTH, DEFAULT_COMMENT_HEIGHT } from '../types/diagram';
 import { validateGraph, buildGraph, generateSketch } from '../codegen';
 import type { ValidationError } from '../codegen';
 import { NodePalette, NODE_DRAG_MIME } from './NodePalette';
@@ -29,6 +29,7 @@ import type { useArduino } from '../hooks/useArduino';
 import { useSerialMonitor } from '../hooks/useSerialMonitor';
 import {
   ChevronDownIcon,
+  CommentIcon,
   GroupIcon,
   SearchIcon,
   UngroupIcon,
@@ -38,6 +39,7 @@ import type { PrimaryAction } from '../lib/primaryAction';
 import { loadPrimaryAction, savePrimaryAction } from '../lib/primaryAction';
 import { NODE_H, NODE_W } from './connectionGeometry';
 import { DiagramCanvas } from './DiagramCanvas';
+import { CommentView } from './CommentView';
 import './diagram.css';
 
 const DEFAULT_CONNECTION_WEIGHT = 1;
@@ -715,6 +717,27 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     return `${prefix}-${uuid.replace(/-/g, '').slice(0, 12)}`;
   }, []);
 
+  // Drop a fresh comment box at the center of the current viewport. Comments
+  // are top-level only, so the toolbar button is disabled while a compound
+  // body is open.
+  const handleAddComment = useCallback(() => {
+    if (isViewOnly) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const screenCx = rect ? rect.width / 2 : 320;
+    const screenCy = rect ? rect.height / 2 : 220;
+    const x = (screenCx - pan.x) / zoom - DEFAULT_COMMENT_WIDTH / 2;
+    const y = (screenCy - pan.y) / zoom - DEFAULT_COMMENT_HEIGHT / 2;
+    store.stopCapturing();
+    store.addComment({
+      id: makeId('comment'),
+      x,
+      y,
+      width: DEFAULT_COMMENT_WIDTH,
+      height: DEFAULT_COMMENT_HEIGHT,
+      text: '',
+    });
+  }, [store, pan, zoom, isViewOnly, makeId]);
+
   const nodeMap = useMemo(
     () => Object.fromEntries(nodes.map((n) => [n.id, n])) as Record<string, DiagramNode>,
     [nodes],
@@ -1144,6 +1167,26 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         <div className="toolbar-separator" />
 
         <div className="toolbar-group">
+          <span className="toolbar-group-label">Annotate</span>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={handleAddComment}
+            disabled={isViewOnly || editingPath.length > 0}
+            title={
+              editingPath.length > 0
+                ? 'Comments can only be added on the top-level diagram.'
+                : 'Add a gray explanatory note to the canvas.'
+            }
+          >
+            <CommentIcon />
+            <span>Comment</span>
+          </button>
+        </div>
+
+        <div className="toolbar-separator" />
+
+        <div className="toolbar-group">
           <span className="toolbar-group-label">Simulate</span>
           <button
             className={`toolbar-btn toolbar-secondary toolbar-trace ${traceMode ? 'active' : ''}`}
@@ -1470,6 +1513,23 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           }}
           aria-hidden="true"
         />
+
+        {/* Comments render before the canvas so they sit behind the links and
+            nodes. Top-level only — hidden while a compound body is open. */}
+        {editingPath.length === 0 &&
+          comments.map((comment) => (
+            <CommentView
+              key={comment.id}
+              comment={comment}
+              zoom={zoom}
+              readOnly={isViewOnly}
+              onMove={(id, x, y) => store.moveComment(id, x, y)}
+              onResize={(id, width, height) => store.patchComment(id, { width, height })}
+              onChangeText={(id, text) => store.patchComment(id, { text })}
+              onDelete={(id) => store.removeComment(id)}
+              onInteractStart={() => store.stopCapturing()}
+            />
+          ))}
 
         <DiagramCanvas
           nodes={nodes}
