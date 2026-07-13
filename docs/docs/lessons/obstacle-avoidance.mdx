@@ -5,11 +5,11 @@ title: "3. Don't"
 
 # Don't
 
-The light chaser from the last lesson has a flaw you can see coming: it drives straight into things. Put a box between it and the light and it plows right in. Every wire you've drawn so far says *go* — louder or softer, left or right, but always go. The vehicle has no word for "no."
+The light chaser from the last lesson has a flaw you can see coming: it drives straight into things. Put a box between it and the light and it plows right in. Every wire you've drawn so far says *go*, whether loud or soft, left or right. The vehicle has no word for "no."
 
-This lesson adds that word. The mechanism is **inhibition**: a constant node supplies a standing urge to move forward, and negative weights let obstacles argue against it. In Lesson 1 you flipped a whole personality by making every wire negative; here the minus sign gets surgical. One wire pushes, another pushes back, and a summation node holds the argument. That small change — subtraction, in the right place — is the seed of something that looks a lot like an aversion, a preference, a "don't." Watch how quickly "avoids walls" starts to feel like "doesn't want to crash," when all you've really added is a negative number.
+This lesson adds that word. The mechanism is **inhibition**: a constant node supplies a standing urge to move forward, and negative weights let obstacles argue against it. In Lesson 1 you flipped a whole personality by making every wire negative; here the minus sign gets surgical. One wire pushes, another pushes back, and a summation node holds the argument. That small change, subtraction in the right place, produces something that looks like an aversion. "Avoids walls" starts to feel like "doesn't want to crash," even though all you've added is a negative number.
 
-The eyes are new too: **ToF distance sensors**, which read *higher* the closer something is — 0 with nothing in range, near 100 when almost touching. Here's the finished creature, live. Its left eye has just caught a wall.
+The eyes are new too: **ToF distance sensors**, which read *higher* the closer something is (0 with nothing in range, near 100 when almost touching). Here's the finished creature, live. Its left eye has just caught a wall.
 
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
@@ -38,16 +38,16 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
       { id: 'c8', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="Caught mid-swerve: a wall on its left, and its first 'no.' Drag the sensors — try to make it crash."
+  caption="Caught mid-swerve: a wall on its left, and its first 'no.' Drag the sensors and try to make it crash."
 />
 
-Two ideas are stacked here. A **Constant** node feeds both wheel summations at 50, so the robot always wants to cruise forward. And each **Threshold** node watches a distance sensor: when its input climbs past 60 it snaps from 0 to 100, and a **−1.0 weight** carries that 100 to the *opposite* wheel's summation as −100. The math at that wheel becomes 50 + (−100) = −50 — the wheel reverses, and the robot pivots away. Why a threshold rather than wiring the sensor in directly? Because for avoidance you rarely want a proportional response; you want a crisp decision — *is something close enough to worry about?* — and the threshold turns a smooth distance reading into exactly that yes/no.
+Two ideas are stacked here. A **Constant** node feeds both wheel summations at 50, so the robot always wants to cruise forward. And each **Threshold** node watches a distance sensor: when its input climbs past 60 it snaps from 0 to 100, and a **−1.0 weight** carries that 100 to the *opposite* wheel's summation as −100. The math at that wheel becomes 50 + (−100) = −50, so the wheel reverses and the robot pivots away. A threshold works better here than wiring the sensor in directly, because avoidance calls for a crisp decision (*is something close enough to worry about?*) rather than a proportional response, and the threshold turns a smooth distance reading into exactly that yes/no.
 
 Now build the "no" yourself, one wire at a time.
 
-## Puzzle 1 — Flip the no
+## Puzzle 1: Flip the no
 
-Someone built this vehicle with the right parts and the wrong sign. The left eye and its threshold are wired up, but the wire into the right wheel's summation carries **+1.0** — so when a wall appears on the left, the right wheel gets 50 + 100 and *lunges at it*. One number stands between this machine and self-preservation.
+Someone built this vehicle with the right parts and the wrong sign. The left eye and its threshold are wired up, but the wire into the right wheel's summation carries **+1.0**, so when a wall appears on the left, the right wheel gets 50 + 100 and *lunges at it*. Changing that one wire's sign fixes it.
 
 Click the weight badge on the Left Detect → Right Sum wire and drag it to **−1.0**.
 
@@ -94,14 +94,14 @@ Click the weight badge on the Left Detect → Right Sum wire and drag it to **�
       { id: 'c6', from: 'rsum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="One badge, one drag. The minus sign is the entire lesson."
+  caption="Click the weight badge on the wire and drag it to −1.0."
 />
 
-That's inhibition: the same wire, the same threshold, the same wall — but the signal now *argues against* the urge to go instead of amplifying it. At −1.0 the wall wins outright: 50 + (−100) = −50 and the wheel reverses hard. Try −0.5 on the way down and watch the wheel merely stall at 0 instead — a gentler, wide-turning "no." Note that the slider stops at −1.0; that is the sharpest single-wire inhibition there is. If you ever need a harder turn than −1.0 gives you, don't wish for −2 — lower the Constant instead, so there's less forward urge for the wall to overcome.
+That's inhibition: the same wiring as before, except the signal now *argues against* the urge to go instead of amplifying it. At −1.0 the wall wins outright: 50 + (−100) = −50 and the wheel reverses hard. Try −0.5 on the way down and watch the wheel merely stall at 0 instead, a gentler, wide-turning "no." The slider stops at −1.0, which is the sharpest single-wire inhibition available. For a harder turn than −1.0 gives you, lower the Constant instead, so there's less forward urge for the wall to overcome.
 
-## Puzzle 2 — Mirror the reflex
+## Puzzle 2: Mirror the reflex
 
-Your vehicle now refuses walls on its left — and is completely blind on its right. Slide the right eye up in the puzzle below and watch it cruise serenely toward the crash. The parts are already on the canvas, unwired.
+Your vehicle now refuses walls on its left, but is completely blind on its right. Slide the right eye up in the puzzle below and watch it cruise serenely toward the crash. The parts are already on the canvas, unwired.
 
 Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0 is what you want), wire Right Detect → **Left** Sum, and set that second wire to **−1.0**. Remember the cross: the right eye must brake the *left* wheel, so the robot turns away from what it sees.
 
@@ -161,22 +161,22 @@ Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0
   caption="The right eye and its threshold are placed but disconnected. Wire the mirror image of what already works."
 />
 
-With both sides wired you've rebuilt the cold open. Check the corner case the goal doesn't ask about: push *both* sensors high. Both thresholds fire, both wheels get 50 − 100 = −50, and the robot backs straight up until its eyes clear — a dead-ahead wall produces retreat with no special "back up" rule anywhere in the circuit.
+With both sides wired you've rebuilt the cold open. Check the corner case the goal doesn't ask about: push *both* sensors high. Both thresholds fire, both wheels get 50 − 100 = −50, and the robot backs straight up until its eyes clear. A dead-ahead wall produces retreat with no special "back up" rule anywhere in the circuit.
 
 :::note[Where does "wanting to explore" come from?]
 
-Watch this robot for a while and you'll narrate it generously: it *explores* the room, *wary* of walls, *drawn* to open space. But there is no exploration drive anywhere in the circuit — only a constant pushing it forward and a pair of negative wires pushing back when something's close. "Exploration" is simply what forward-plus-avoid *looks like* from the outside.
+Watch this robot for a while and you'll narrate it generously: it *explores* the room, *wary* of walls. But there is no exploration drive anywhere in the circuit, only a constant pushing it forward and a pair of negative wires pushing back when something's close. "Exploration" is what forward-plus-avoid *looks like* from the outside.
 
-This is inhibition doing the work that, in our own heads, we file under motives and values. A negative number isn't a fear or a dislike — but wire enough of them together and you get a vehicle whose behavior is most easily *described* in the language of fears and dislikes. Braitenberg's wager is that this isn't a cheat or a coincidence: it's a hint about where our own preferences might bottom out.
+This is inhibition doing the work that, in our own heads, we file under motives and values. A negative number isn't a fear or a dislike, but wire enough of them together and you get a vehicle whose behavior is most easily *described* in the language of fears and dislikes. Braitenberg's wager is that this points at something real about where our own preferences might bottom out.
 :::
 
-## Puzzle 3 — Stop the twitch
+## Puzzle 3: Stop the twitch
 
-A different kind of "don't" now — not *don't hit the wall*, but *don't react to nothing*.
+This puzzle covers a different kind of "don't": don't react to nothing.
 
-Real sensors never read a clean zero. Ambient light, electrical noise, and drift keep a photocell muttering small numbers even in a dark room, and with a plain wire to the motor, every mutter becomes a twitch of the wheel. The circuit below models that honestly: a noise node adds ±15 of jitter to the photocell's reading, and the wire carries all of it straight to the wheel. Watch the motor in the dark — it can't sit still.
+Real sensors never read a clean zero. Ambient light, electrical noise, and drift keep a photocell muttering small numbers even in a dark room, and with a plain wire to the motor, every mutter becomes a twitch of the wheel. The circuit below models that honestly: a noise node adds ±15 of jitter to the photocell's reading, and the wire carries all of it straight to the wheel. Watch the motor in the dark. It can't sit still.
 
-A pre-placed threshold ("Really bright?", set to 25 — safely above the noise floor) is waiting, unwired. Three moves: **delete** the Reading → Right Wheel wire, then route the signal *through* the decision instead — Reading → Really bright?, and Really bright? → Right Wheel.
+A pre-placed threshold ("Really bright?", set to 25, safely above the noise floor) is waiting, unwired. Three moves: **delete** the Reading → Right Wheel wire, then route the signal *through* the decision instead: Reading → Really bright?, and Really bright? → Right Wheel.
 
 <InteractiveDiagram
   editable
@@ -210,16 +210,16 @@ A pre-placed threshold ("Really bright?", set to 25 — safely above the noise f
       { id: 'c3', from: 'reading', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="Click the Reading → Right Wheel wire and delete it, then draw the detour through the threshold. The noise never stops — your wiring just stops listening to it."
+  caption="Click the Reading → Right Wheel wire and delete it, then draw the detour through the threshold."
 />
 
-The noise didn't go anywhere — the threshold simply refuses to dignify it. Anything below 25 is treated as *nothing happened*; anything above is treated as *fully happened*. That's the threshold's whole character: it converts a wobbling continuous signal into a decision, and decisions don't twitch.
+The noise didn't go anywhere; the threshold simply ignores it. Anything below 25 is treated as *nothing happened*, and anything above is treated as *fully happened*. That's the threshold's whole character: it converts a wobbling continuous signal into a decision.
 
-But notice the price. At light 30 and light 100 the wheel now runs at exactly the same speed — the threshold threw away *how bright* along with the noise. All-or-nothing is perfect for "is there a wall?"; it's heavy-handed for "how fast should I chase this light?"
+But notice the price. At light 30 and light 100 the wheel now runs at exactly the same speed, because the threshold threw away *how bright* along with the noise. All-or-nothing works well for "is there a wall?" but is heavy-handed for "how fast should I chase this light?"
 
-### The dead zone — a softer no
+### The dead zone: a softer no
 
-There's a middle path: say "no" to small signals without flattening the large ones. A connection's response doesn't have to be a straight line — it can be a **curve**, and a curve can have a *dead zone*: flat at zero across the noise floor, then rising proportionally above it. Compare these two vehicles, both sitting in the same noisy dark:
+There's a middle path: say "no" to small signals without flattening the large ones. A connection's response doesn't have to be a straight line. It can be a **curve**, and a curve can have a *dead zone*: flat at zero across the noise floor, then rising proportionally above it. Compare these two vehicles, both sitting in the same noisy dark:
 
 <InteractiveDiagram
   initialInputs={{ 'photo': 0 }}
@@ -257,30 +257,26 @@ There's a middle path: say "no" to small signals without flattening the large on
   caption="Dead-zone curve on the same wire: silent below 20, proportional above it. Slide the light up and compare."
 />
 
-A threshold is a *decision*: everything becomes 0 or 100, and the magnitude of the input is discarded. A dead zone is a *filter*: it discards only the bottom of the range and keeps proportionality above it, so the vehicle still runs faster toward brighter light — it just no longer flinches at static. Same refusal of noise, opposite treatment of information.
+A threshold is a *decision*: everything becomes 0 or 100, and the magnitude of the input is discarded. A dead zone is a *filter*: it discards only the bottom of the range and keeps proportionality above it, so the vehicle still runs faster toward brighter light and no longer flinches at static.
 
-Curves like this are drawn per-connection in the desktop app's curve editor — see [transfer functions](../guide/transfer-functions) for the full palette of shapes. One shape worth knowing about now: a *step-shaped* curve puts an entire threshold-style decision on a single wire, no extra node required — that trick is in the same guide.
-
-## Building it in the app
-
-Everything on this page transfers directly to the desktop app: the ToF sensors live in the palette's **Kit sensors** group, Threshold and Summation in the **Basic** tab's Compute group, and Constant on the **Advanced** tab. Wire, set the two cross-weights to −1.0, and use **Trace Signal Flow** to walk the same scenarios you just tested here. The [editor guide](../getting-started/editor) covers the interface.
+Curves like this are drawn per-connection in the desktop app's curve editor. See [transfer functions](../guide/transfer-functions) for the full palette of shapes. One shape worth knowing about now: a *step-shaped* curve puts an entire threshold-style decision on a single wire with no extra node required; that trick is in the same guide.
 
 ## What you've learned
 
 Three kinds of "no," all built from the same two parts:
 
-- **Threshold nodes** convert a continuous reading into a binary decision — a smooth distance becomes a crisp "too close?", and a noisy photocell becomes a silent-or-committed motor.
-- **Negative weights** create inhibition — one part of the circuit suppressing another. A constant supplies the urge; negative wires veto it. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
+- **Threshold nodes** convert a continuous reading into a binary decision: a smooth distance becomes a crisp "too close?", and a noisy photocell becomes a silent-or-committed motor.
+- **Negative weights** create inhibition, one part of the circuit suppressing another. A constant supplies the urge; negative wires veto it. This is the basis for more complex behaviors like priority arbitration in [subsumption architectures](./subsumption-architecture).
 - **Dead-zone curves** are the soft alternative: refuse the noise, keep the proportionality.
 
 ### Questions to sit with
 
 - The robot "explores" with no urge to explore. How many of your own behaviors might be side effects of simpler pushes and pulls, rather than the goals you'd name for them?
-- A positive wire is "approach" and a negative wire is "avoid." Is there anything more to a value than which way it points the motors — or is that genuinely all a value is, at the bottom?
+- A positive wire is "approach" and a negative wire is "avoid." Is there anything more to a value than which way it points the motors, or is that genuinely all a value is, at the bottom?
 - The robot never decides to turn; the numbers just sum to a turn. Did *anything* in there make a choice? If not, what would have to change before you'd say it did?
 
 ## What's next
 
-[4. Taste](./color-discrimination) — from avoiding to preferring: a vehicle with opinions.
+[4. Taste](./color-discrimination): from avoiding to preferring, a vehicle with opinions.
 
 Have the kit? [Rangefinders & Bumpers](../on-the-robot/tof-and-bumpers) mounts and calibrates the real ToF sensors.

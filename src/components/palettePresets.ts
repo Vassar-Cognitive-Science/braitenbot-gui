@@ -35,5 +35,8 @@ export const KIT_OUTPUTS: KitPreset[] = [
   { key: 'display', type: 'display-tm1637', label: '7-Segment Display', meta: 'CLK D9 / DIO D10', kind: 'output', params: { clkPin: '9', gpioPin: '10' } },
 ];
 
-/** Generic starter compute nodes shown on the Basic tab (no preset params). */
-export const BASIC_COMPUTE_TYPES: NodeTypeId[] = ['compute-threshold', 'compute-summation', 'compute-multiply', 'compute-delay'];
+/** Generic starter compute nodes shown on the Basic tab (no preset params).
+ *  Includes `constant` — the lessons use it (a "Forward"/"Cruise" drive), so it
+ *  belongs in the basic kit. It renders in the Basic compute group (see
+ *  NodePalette's kind→'compute' mapping for constants). */
+export const BASIC_COMPUTE_TYPES: NodeTypeId[] = ['compute-threshold', 'compute-summation', 'compute-multiply', 'compute-delay', 'constant'];
