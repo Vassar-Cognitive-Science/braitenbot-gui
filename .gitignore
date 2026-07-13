@@ -3,6 +3,9 @@ dist
 dist-ssr
 *.local
 
+# Generated diagram-render gallery (docs/scripts/render-diagrams.ts)
+docs/scripts/out/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

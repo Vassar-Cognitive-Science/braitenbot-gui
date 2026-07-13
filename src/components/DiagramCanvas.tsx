@@ -13,10 +13,12 @@ import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { DiagramNodeView } from './DiagramNodeView';
 import { ConnectionLayer } from './ConnectionLayer';
 import {
+  NODE_W,
   computeConnectionPaths,
   makePath,
   nearestTOnCurve,
   nodeRenderHeight,
+  occludedSpans,
   portOffsetX,
 } from './connectionGeometry';
 
@@ -412,6 +414,41 @@ export function DiagramCanvas({
     [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale, traceMode],
   );
 
+  // Emphasize the wires touching a selected node so they're easy to trace.
+  const emphasizedConnectionIds = useMemo(() => {
+    if (selectedNodeIds.size === 0) return null;
+    const ids = new Set<string>();
+    for (const c of connections) {
+      if (selectedNodeIds.has(c.from) || selectedNodeIds.has(c.to)) ids.add(c.id);
+    }
+    return ids;
+  }, [connections, selectedNodeIds]);
+
+  // A wire passing behind an opaque node box is invisible; compute the hidden
+  // spans so ConnectionLayer can redraw them dashed on top of the nodes.
+  const occludedPaths = useMemo(() => {
+    const rects = connections.length
+      ? Object.fromEntries(
+          Object.values(nodeMap).map((n) => {
+            const w = nodeWorldPos(n);
+            return [n.id, { x: w.x, y: w.y, w: NODE_W * blockScale, h: nodeRenderHeight(n, traceMode) * blockScale }];
+          }),
+        )
+      : {};
+    const out: Array<{ id: string; d: string }> = [];
+    for (const conn of connections) {
+      const datum = connectionPaths.find((p) => p.id === conn.id);
+      if (!datum) continue;
+      const others = Object.entries(rects)
+        .filter(([id]) => id !== conn.from && id !== conn.to)
+        .map(([, r]) => r);
+      for (const d of occludedSpans(datum.x1, datum.y1, datum.x2, datum.y2, others)) {
+        out.push({ id: conn.id, d });
+      }
+    }
+    return out;
+  }, [connections, connectionPaths, nodeMap, nodeWorldPos, blockScale, traceMode]);
+
   const draftSrc = linkDraft ? nodeMap[linkDraft.id] : undefined;
 
   return (
@@ -420,6 +457,8 @@ export function DiagramCanvas({
         paths={connectionPaths}
         edgeSignals={traceMode ? traceResult?.edgeSignals : undefined}
         selectedConnectionId={selectedConnectionId}
+        emphasizedConnectionIds={emphasizedConnectionIds}
+        occludedPaths={occludedPaths}
         remoteHighlight={remoteHighlight}
         draggingBadgeId={draggingBadgeId}
         onBadgePointerDown={onConnectionLabelT ? beginBadgeDrag : undefined}

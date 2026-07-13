@@ -776,25 +776,9 @@ select,
   text-align: center;
 }
 
-/* Thumbnail curve shown on a non-linear connection badge. The path inherits
-   the badge's text color (currentColor), so it brightens with the badge when
-   selected/hovered. */
-.mini-transfer-curve {
-  display: block;
-}
-
-.mini-transfer-curve .mini-curve-axis {
-  stroke: var(--line);
-  stroke-width: 0.75;
-  opacity: 0.6;
-}
-
-.mini-transfer-curve .mini-curve-path {
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
+/* The non-linear connection-badge curve thumbnail (`.mini-transfer-curve`) is
+   styled in the shared components/diagram.css, scoped under `.bb-diagram`, so
+   the docs embed renders it too. */
 
 /* Serial connection controls */
 

@@ -177,6 +177,43 @@ export function signalToStroke(signal: number): { color: string; width: number; 
   }
 }
 
+/** A node's occupied box in canvas space (for occlusion tests). */
+export interface NodeRect { x: number; y: number; w: number; h: number }
+
+/**
+ * The portions of a connection's curve that pass *behind* an opaque node box,
+ * returned as polyline path `d` strings so the caller can redraw them dashed
+ * on a layer above the nodes (a wire hidden under a node is otherwise
+ * invisible). `rects` must already exclude the connection's own endpoint nodes.
+ *
+ * Samples the bézier and collects maximal runs of samples that fall inside some
+ * rect; a short polyline through the sampled points reads as a smooth dashed
+ * arc at these sizes.
+ */
+export function occludedSpans(
+  x1: number, y1: number, x2: number, y2: number, rects: NodeRect[],
+): string[] {
+  if (rects.length === 0) return [];
+  const SAMPLES = 48;
+  const inside = (p: { x: number; y: number }) =>
+    rects.some((r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h);
+  const spans: string[] = [];
+  let run: Array<{ x: number; y: number }> = [];
+  const flush = () => {
+    if (run.length >= 2) {
+      spans.push(run.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' '));
+    }
+    run = [];
+  };
+  for (let i = 0; i <= SAMPLES; i++) {
+    const p = bezierPointAt(x1, y1, x2, y2, i / SAMPLES);
+    if (inside(p)) run.push(p);
+    else flush();
+  }
+  flush();
+  return spans;
+}
+
 /** Rendered geometry for one connection: bézier path plus badge anchor. */
 export interface ConnectionPathDatum {
   id: string;

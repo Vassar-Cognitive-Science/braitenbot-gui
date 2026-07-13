@@ -82,6 +82,44 @@
   opacity: 1;
 }
 
+/* Selecting a node lifts the wires touching it and fades the rest, so a single
+   connection is easy to follow through a busy diagram. */
+.bb-diagram .diagram-links .connection-link.emphasized {
+  stroke-width: 2.6;
+  opacity: 1;
+}
+
+.bb-diagram .diagram-links .connection-link.dimmed {
+  opacity: 0.3;
+}
+
+/* Dashed overlay for the spans of a wire hidden behind opaque node boxes,
+   drawn above the node layer (z-index 2) so an occluded connection stays
+   traceable. pointer-events stay off so nodes/badges remain interactive. */
+.bb-diagram .diagram-links-occluded {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 4;
+}
+
+.bb-diagram .diagram-links-occluded .connection-occluded {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.bb-diagram .diagram-links-occluded .connection-occluded.emphasized {
+  stroke: #d4bc78;
+  stroke-width: 2;
+  opacity: 0.95;
+}
+
 .bb-diagram .connection-config-trigger {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -110,6 +148,40 @@
   line-height: 0;
 }
 
+/* In trace mode a non-linear edge shows both its curve thumbnail and the live
+   signal, so the reader can see the shape and the value at once. */
+.bb-diagram .connection-config-trigger.has-curve-trace {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+}
+
+.bb-diagram .connection-config-trigger.has-curve-trace .badge-curve-value {
+  line-height: 1;
+}
+
+/* Non-linear transfer-curve thumbnail drawn inside a connection badge. The
+   axes use the diagram line color; the path inherits the badge's text color
+   (currentColor) so it brightens with the badge on select/hover. Shared here
+   (not App.css) so the docs embed renders the curve too. */
+.bb-diagram .mini-transfer-curve {
+  display: block;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-axis {
+  stroke: var(--line);
+  stroke-width: 0.75;
+  opacity: 0.6;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-path {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .bb-diagram .connection-config-trigger.selected {
   border-color: #d4bc78;
   color: #d4bc78;
@@ -119,6 +191,16 @@
 .bb-diagram .connection-config-trigger.trace-signal {
   border-color: rgba(196, 168, 98, 0.5);
   color: #d4bc78;
+}
+
+/* Badge emphasis mirrors the wire emphasis when a node is selected. */
+.bb-diagram .connection-config-trigger.emphasized {
+  border-color: #d4bc78;
+  z-index: 5;
+}
+
+.bb-diagram .connection-config-trigger.dimmed {
+  opacity: 0.45;
 }
 
 /* Remote-selection halo under a connection path. */
@@ -518,6 +600,65 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Color-sensor picker: a color well + brightness slider, a row of impure
+   rainbow swatches, and the exact per-channel sliders tucked in a disclosure. */
+.bb-diagram .trace-color-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.bb-diagram .trace-color-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bb-diagram .trace-color-picker {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.bb-diagram .trace-color-swatches {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.bb-diagram .trace-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  padding: 0;
+  cursor: pointer;
+}
+
+.bb-diagram .trace-color-swatch:hover {
+  outline: 1px solid var(--accent);
+}
+
+.bb-diagram .trace-color-advanced > summary {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+/* Inward "reception" arcs for light/distance sensors — see SensorReception. */
+.bb-diagram .sensor-reception {
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 /* Disconnected nodes in trace mode */

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { CompoundTypeDefinition, DiagramNode, DiagramConnection, TransferPoint } from '../types/diagram';
-import { TYPE_BY_ID, getOutputPorts } from '../types/diagram';
+import { TYPE_BY_ID, compareThreshold, getOutputPorts } from '../types/diagram';
 import { flattenCompounds } from '../codegen/flatten';
 import { toposort } from '../codegen/toposort';
 
@@ -384,7 +384,7 @@ export function simulateGraph(
       nodeValues[nodeId] = clamp(sum, -100, 100);
     } else if (typeDef.mode === 'threshold') {
       const thresh = node.threshold ?? 50;
-      nodeValues[nodeId] = sum > thresh ? 100 : 0;
+      nodeValues[nodeId] = compareThreshold(sum, thresh, node.thresholdOp) ? 100 : 0;
     } else if (typeDef.mode === 'multiply') {
       nodeValues[nodeId] = inputs.reduce((a, b) => a * b, 1);
     } else if (typeDef.mode === 'min') {

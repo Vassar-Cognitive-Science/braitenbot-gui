@@ -2,6 +2,21 @@ export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound'
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'min' | 'max' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
+/** Comparison operators a threshold node can apply. The strings double as the
+ *  emitted C++ operators, so codegen can interpolate them directly. */
+export type ThresholdOp = '>' | '<' | '>=' | '<=';
+export const THRESHOLD_OPS: readonly ThresholdOp[] = ['>', '<', '>=', '<='];
+export const DEFAULT_THRESHOLD_OP: ThresholdOp = '>';
+/** Evaluate `value {op} threshold` — the single source of truth shared by the
+ *  emitter (C++) and the trace simulation (JS) so they never diverge. */
+export function compareThreshold(value: number, threshold: number, op: ThresholdOp = DEFAULT_THRESHOLD_OP): boolean {
+  switch (op) {
+    case '<': return value < threshold;
+    case '>=': return value >= threshold;
+    case '<=': return value <= threshold;
+    default: return value > threshold;
+  }
+}
 /** User-facing labels for the color-sensor channels. The internal ids stay
  *  'clear'/'red'/'green'/'blue' (used by codegen and the trace sim); only the
  *  display differs. The unfiltered "clear" photodiode reads the total light
@@ -100,6 +115,10 @@ export interface DiagramNode {
    *  DEFAULT_TOF_MAX_MM. Ignored for non-ToF sensors. */
   maxDistanceMm?: number;
   threshold?: number;
+  /** Comparison a threshold node applies against its `threshold` value. Fires
+   *  (outputs 100) when `input {op} threshold` holds. Defaults to '>' when
+   *  unset. Ignored for non-threshold nodes. */
+  thresholdOp?: ThresholdOp;
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
-import type { DiagramConnection, DiagramNode, TransferPoint } from '../types/diagram';
-import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import type { DiagramConnection, DiagramNode, ThresholdOp, TransferPoint } from '../types/diagram';
+import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM, DEFAULT_THRESHOLD_OP } from '../types/diagram';
 import type { DiagramStore } from '../doc/DiagramStore';
 import { TransferCurveEditor } from './TransferCurveEditor';
 import { NumberInput } from './NumberInput';
@@ -274,16 +274,35 @@ export function ConfigPanel({
           )}
 
           {TYPE_BY_ID[selectedNode.type].mode === 'threshold' && (
-            <label>
-              Threshold Value
-              <NumberInput
-                min={-100}
-                max={100}
-                step={1}
-                value={selectedNode.threshold ?? 50}
-                onChange={(value) => patchNode(selectedNode.id, { threshold: value })}
-              />
-            </label>
+            <>
+              <label>
+                Comparison
+                <select
+                  value={selectedNode.thresholdOp ?? DEFAULT_THRESHOLD_OP}
+                  onChange={(e) =>
+                    patchNode(selectedNode.id, { thresholdOp: e.target.value as ThresholdOp })
+                  }
+                >
+                  <option value=">">input &gt; threshold</option>
+                  <option value="<">input &lt; threshold</option>
+                  <option value=">=">input ≥ threshold</option>
+                  <option value="<=">input ≤ threshold</option>
+                </select>
+              </label>
+              <label>
+                Threshold Value
+                <NumberInput
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={selectedNode.threshold ?? 50}
+                  onChange={(value) => patchNode(selectedNode.id, { threshold: value })}
+                />
+              </label>
+              <p className="config-description">
+                Fires (outputs 100) while <b>input {selectedNode.thresholdOp ?? DEFAULT_THRESHOLD_OP} {selectedNode.threshold ?? 50}</b>, else 0.
+              </p>
+            </>
           )}
 
           {TYPE_BY_ID[selectedNode.type].mode === 'delay' && (

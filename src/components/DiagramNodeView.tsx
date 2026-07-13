@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, MouseEvent, MutableRefObject, SetStateAction } from 'react';
 import type { ColorChannel, CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
-import { COLOR_CHANNEL_LABELS, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
+import { COLOR_CHANNEL_LABELS, DEFAULT_THRESHOLD_OP, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
 import type { NodeTypeId } from '../types/diagram';
+import type { ColorChannels } from '../lib/colorSensor';
+import { COLOR_SWATCHES, channelsToHue, hueToChannels } from '../lib/colorSensor';
 import type { IconProps } from './icons';
 import {
   AsteriskIcon,
@@ -53,6 +55,32 @@ const NODE_TYPE_ICONS: Record<NodeTypeId, (props: IconProps) => React.ReactEleme
   'compound-input': LogInIcon,
   'compound-output': LogOutIcon,
 };
+
+/**
+ * A "reception" glyph for light/distance sensors: concentric arcs opening
+ * toward the sensor that light up as the reading rises. It reads as the sensor
+ * *detecting* something in the world (waves arriving), deliberately unlike the
+ * wheel-drive arrows that grow *outward* to show a motor emitting motion — so a
+ * bright light or a near object never looks like the sensor is emitting light.
+ */
+function SensorReception({ value }: { value: number }) {
+  const lit = (min: number) => (value >= min ? 1 : 0.18);
+  return (
+    <svg
+      className="sensor-reception"
+      width="15"
+      height="18"
+      viewBox="0 0 15 18"
+      role="img"
+      aria-label={`reading ${Math.round(value)}`}
+    >
+      <circle cx="13" cy="9" r="1.5" fill="currentColor" />
+      <path d="M10 4.5 A 5.5 5.5 0 0 0 10 13.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(15)} />
+      <path d="M7 2.5 A 8.5 8.5 0 0 0 7 15.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(50)} />
+      <path d="M4 1 A 11.5 11.5 0 0 0 4 17" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(82)} />
+    </svg>
+  );
+}
 
 interface DiagramNodeViewProps {
   node: DiagramNode;
@@ -184,6 +212,11 @@ function DiagramNodeViewInner({
     nodeMeta = `output: ${traceValue}`;
   } else if (supportsArduinoPort(nodeType) && node.arduinoPort?.trim()) {
     nodeMeta = `${nodeType.metaLabel} • port ${node.arduinoPort.trim()}`;
+  } else if (nodeType.mode === 'threshold' && node.thresholdOp && node.thresholdOp !== DEFAULT_THRESHOLD_OP) {
+    // A non-default comparison is the point of the block (e.g. gating in
+    // subsumption), so spell it out: "input < 50". Plain '>' thresholds keep
+    // the compact meta so earlier lessons read unchanged.
+    nodeMeta = `input ${node.thresholdOp} ${node.threshold ?? 50}`;
   } else if (nodeType.mode === 'threshold' && node.threshold !== undefined) {
     nodeMeta = `${nodeType.metaLabel} • ${node.threshold}`;
   } else if (nodeType.mode === 'delay' && node.delayMs !== undefined) {
@@ -353,36 +386,93 @@ function DiagramNodeViewInner({
         </div>
       )}
       {hasSlider && node.type === 'sensor-color' && (() => {
-        // Decode the comma-joined per-channel values (same port order the
-        // parent used to encode them).
-        const channelValues = colorSensorValues?.split(',');
+        // The four channels are the source of truth (the sim reads them), but a
+        // color picker + brightness is far easier than dialing four sliders.
+        // Port order matches how the parent encoded the comma-joined values.
+        const ports = getOutputPorts('sensor-color')! as ColorChannel[];
+        const vals = colorSensorValues?.split(',').map(Number) ?? [];
+        const at = (c: ColorChannel) => vals[ports.indexOf(c)] ?? 0;
+        const channels: ColorChannels = {
+          clear: at('clear'), red: at('red'), green: at('green'), blue: at('blue'),
+        };
+        const { hex, brightness } = channelsToHue(channels);
+        const apply = (c: ColorChannels) => {
+          setSensorValue(`${node.id}:red`, c.red);
+          setSensorValue(`${node.id}:green`, c.green);
+          setSensorValue(`${node.id}:blue`, c.blue);
+          setSensorValue(`${node.id}:clear`, c.clear);
+        };
         return (
-        <div className="trace-color-sliders">
-          {getOutputPorts('sensor-color')!.map((ch, i) => (
-            <div className="trace-slider-row" key={ch}>
-              <span
-                className={`trace-slider-label output-port-label-${ch}`}
-                title={COLOR_CHANNEL_LABELS[ch as ColorChannel].name}
-              >
-                {COLOR_CHANNEL_LABELS[ch as ColorChannel].short}
-              </span>
-              <input
-                type="range"
-                className="trace-slider"
-                min="0"
-                max="100"
-                step="1"
+        <div className="trace-color-input">
+          <div className="trace-color-row">
+            <input
+              type="color"
+              className="trace-color-picker"
+              value={hex}
+              disabled={readOnly}
+              title="Surface color the sensor sees"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => apply(hueToChannels(e.target.value, brightness || 100))}
+            />
+            <span className="trace-slider-label" title="Brightness">☀</span>
+            <input
+              type="range"
+              className="trace-slider"
+              min="0"
+              max="100"
+              step="1"
+              disabled={readOnly}
+              value={brightness}
+              title="Brightness"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => apply(hueToChannels(hex, parseFloat(e.target.value)))}
+            />
+          </div>
+          <div className="trace-color-swatches">
+            {COLOR_SWATCHES.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                className="trace-color-swatch"
+                style={{ background: s.hex }}
                 disabled={readOnly}
-                value={Number(channelValues?.[i] ?? 0)}
+                title={s.name}
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setSensorValue(`${node.id}:${ch}`, v);
-                }}
+                onClick={(e) => { e.stopPropagation(); apply(hueToChannels(s.hex, 100)); }}
               />
+            ))}
+          </div>
+          <details className="trace-color-advanced" onMouseDown={(e) => e.stopPropagation()}>
+            <summary title="White is estimated from RGB — verify on the real sensor">
+              Exact channels
+            </summary>
+            <div className="trace-color-sliders">
+              {ports.map((ch) => (
+                <div className="trace-slider-row" key={ch}>
+                  <span
+                    className={`trace-slider-label output-port-label-${ch}`}
+                    title={COLOR_CHANNEL_LABELS[ch].name}
+                  >
+                    {COLOR_CHANNEL_LABELS[ch].short}
+                  </span>
+                  <input
+                    type="range"
+                    className="trace-slider"
+                    min="0"
+                    max="100"
+                    step="1"
+                    disabled={readOnly}
+                    value={at(ch)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setSensorValue(`${node.id}:${ch}`, parseFloat(e.target.value))}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          </details>
         </div>
         );
       })()}
@@ -393,8 +483,10 @@ function DiagramNodeViewInner({
           : isCompoundInput
             ? (sensorValue ?? 0)
             : (node.constantValue ?? 0);
+        const isDetector = node.type === 'sensor-analog' || node.type === 'sensor-tof';
         return (
         <div className="trace-slider-row">
+          {isDetector && <SensorReception value={typeof sliderValue === 'number' ? sliderValue : 0} />}
           <span className="trace-slider-label">{sliderMin}</span>
           <input
             type="range"

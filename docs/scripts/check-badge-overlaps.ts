@@ -19,7 +19,7 @@
  *   npx tsx docs/scripts/check-badge-overlaps.ts          # report only
  *   npx tsx docs/scripts/check-badge-overlaps.ts --fix    # rewrite MDX
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
   NODE_W,
@@ -28,11 +28,8 @@ import {
   nearestTOnCurve,
   nodeRenderHeight,
 } from '../../src/components/connectionGeometry';
-import type {
-  CompoundTypeDefinition,
-  DiagramConnection,
-  DiagramNode,
-} from '../../src/types/diagram';
+import type { DiagramNode } from '../../src/types/diagram';
+import { type EmbeddedDiagram, extractDiagrams, mdxFiles } from './diagramExtract';
 
 const DOCS_DIR = join(import.meta.dirname, '..', 'docs');
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
@@ -70,90 +67,6 @@ function badgeRect(cx: number, cy: number, margin = MARGIN): Rect {
     w: BADGE_W + margin * 2,
     h: BADGE_H + margin * 2,
   };
-}
-
-// ── MDX scanning ────────────────────────────────────────────────────────────
-
-/** Scan forward from `start` (an opening brace) to its balanced close,
- *  honouring string literals so quotes/braces inside captions don't derail
- *  the depth count. Returns the index AFTER the closing brace. */
-function scanBalanced(src: string, start: number): number {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = start; i < src.length; i++) {
-    const ch = src[i];
-    if (quote) {
-      if (ch === '\\') i++;
-      else if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === "'" || ch === '"' || ch === '`') quote = ch;
-    else if (ch === '{') depth++;
-    else if (ch === '}' && --depth === 0) return i + 1;
-  }
-  throw new Error(`Unbalanced braces from offset ${start}`);
-}
-
-interface EmbeddedDiagram {
-  /** Absolute char offset of the diagram object literal in the file. */
-  blockStart: number;
-  blockEnd: number;
-  line: number;
-  traceMode: boolean;
-  nodes: DiagramNode[];
-  connections: DiagramConnection[];
-  compoundTypes: CompoundTypeDefinition[];
-}
-
-function extractDiagrams(src: string): EmbeddedDiagram[] {
-  const out: EmbeddedDiagram[] = [];
-  const OPEN = '<InteractiveDiagram';
-  let from = 0;
-  for (;;) {
-    const elStart = src.indexOf(OPEN, from);
-    if (elStart === -1) break;
-    const attrStart = elStart + OPEN.length;
-    const diagAt = src.indexOf('diagram={', attrStart);
-    if (diagAt === -1) break;
-    // The JSX expression brace wraps the object literal: diagram={{ ... }}.
-    const exprStart = diagAt + 'diagram='.length;
-    const exprEnd = scanBalanced(src, exprStart);
-    const blockStart = exprStart + 1;
-    const blockEnd = exprEnd - 1;
-    const literal = src.slice(blockStart, blockEnd);
-    // The element's full text (through the closing "/>") for prop sniffing;
-    // props may follow the diagram, so scan past the expression too.
-    const elEnd = src.indexOf('/>', exprEnd);
-    const elText = src.slice(elStart, elEnd === -1 ? exprEnd : elEnd);
-    const traceMode = !/initialTrace=\{?\s*false/.test(elText);
-    // Authored object literal (numbers/strings/arrays only) — evaluate it.
-    const diagram = new Function(`return (${literal});`)() as {
-      nodes: DiagramNode[];
-      connections: DiagramConnection[];
-      compoundTypes?: CompoundTypeDefinition[];
-    };
-    out.push({
-      blockStart,
-      blockEnd,
-      line: src.slice(0, elStart).split('\n').length,
-      traceMode,
-      nodes: diagram.nodes,
-      connections: diagram.connections,
-      compoundTypes: diagram.compoundTypes ?? [],
-    });
-    from = exprEnd;
-  }
-  return out;
-}
-
-function mdxFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...mdxFiles(p));
-    else if (entry.name.endsWith('.mdx') || entry.name.endsWith('.md')) out.push(p);
-  }
-  return out;
 }
 
 // ── Geometry per diagram ────────────────────────────────────────────────────
