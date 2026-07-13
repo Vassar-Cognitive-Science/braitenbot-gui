@@ -18,6 +18,8 @@ import {
 import type { ConfigTarget } from '@app/components/diagramShared';
 import { DiagramCanvas } from '@app/components/DiagramCanvas';
 import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
+import { MiniTransferCurve } from '@app/components/MiniTransferCurve';
+import { RobotOverlay } from './RobotOverlay';
 // The app's diagram presentation layer (nodes, connections, trace UI). Scoped
 // under `.bb-diagram`, so it renders as a self-contained dark panel and leaks
 // nothing into the Docusaurus theme. Aliased CSS import resolves through the
@@ -131,6 +133,13 @@ export interface InteractiveDiagramProps {
    * solved it stays solved until Reset. Meaningless without `editable`.
    */
   goal?: DiagramGoal;
+  /**
+   * Range for the weight popover's slider, controlling both its bounds and the
+   * tick labels shown beneath it. `'signed'` (default) spans −1…1 with −1/0/1
+   * ticks; `'positive'` spans 0…1 with 0/1 ticks — use it in early lessons
+   * where negative weights haven't been introduced yet.
+   */
+  weightRange?: 'signed' | 'positive';
 }
 
 /** Symmetric world padding around the node bounds (world px, pre-scale). */
@@ -195,9 +204,16 @@ function computeEpochFit(
   overflowsX: boolean;
   viewportH: number;
 } {
-  const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
+  const contentH = layout.contentH + (traceMode ? TRACE_MARGIN : 0);
+  let scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
+  // A tall diagram scaled to width can exceed MAX_HEIGHT and get clipped (view-
+  // only embeds don't scroll). Shrink further to fit the height too, never
+  // below MIN_SCALE — past that we fall back to vertical scroll.
+  if (heightOverride === undefined && contentH * scale > MAX_HEIGHT) {
+    scale = Math.min(scale, Math.max(MIN_SCALE, MAX_HEIGHT / contentH));
+  }
   const scaledW = layout.contentW * scale;
-  const scaledH = (layout.contentH + (traceMode ? TRACE_MARGIN : 0)) * scale;
+  const scaledH = contentH * scale;
   const overflowsX = scaledW > availW + 0.5;
   const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
   const viewportH =
@@ -347,6 +363,8 @@ interface DiagramPanelProps {
   goalTitle?: string;
   /** Whether the goal is currently solved (flips the banner state). */
   goalSolved?: boolean;
+  /** Weight popover slider range + tick labels. Defaults to 'signed'. */
+  weightRange?: 'signed' | 'positive';
   // ── editing (all optional; omit → view-only) ─────────────────────────────
   editable?: boolean;
   palette?: NodeTypeId[];
@@ -399,6 +417,7 @@ function DiagramPanel({
   traceResult,
   goalTitle,
   goalSolved = false,
+  weightRange = 'signed',
   editable = false,
   palette,
   selectedNodeIds,
@@ -628,8 +647,10 @@ function DiagramPanel({
 
   // Vertical scroll: if the current content extents exceed the fixed viewport
   // height we want overflow-y: auto so the user can scroll to see everything.
+  // Applies to view-only embeds too — a tall static diagram must never clip
+  // (the fit already shrinks to height first; this is the last-resort fallback).
   const scaledCurrentH = currentExtentH * scale;
-  const overflowsY = editable && scaledCurrentH > viewportH + 0.5;
+  const overflowsY = scaledCurrentH > viewportH + 0.5;
 
   return (
     <div className="id-frame">
@@ -644,6 +665,13 @@ function DiagramPanel({
           </span>
           <span className="id-goal-text">{goalTitle}</span>
           {goalSolved && <span className="id-goal-badge">Solved</span>}
+          {goalSolved && (
+            <span className="id-goal-burst" aria-hidden="true">
+              {Array.from({ length: 10 }, (_, i) => (
+                <span key={i} style={{ ['--i' as string]: i }} />
+              ))}
+            </span>
+          )}
         </div>
       )}
       {editable && palette && palette.length > 0 && (
@@ -694,6 +722,12 @@ function DiagramPanel({
             left: worldOffsetX,
           }}
         >
+          <RobotOverlay
+            nodes={nodes}
+            worldPos={nodeWorldPos}
+            traceMode={traceMode}
+            traceResult={traceMode ? traceResult : undefined}
+          />
           <DiagramCanvas
             nodes={nodes}
             connections={connections}
@@ -750,18 +784,42 @@ function DiagramPanel({
             style={{ left: popover.left, top: popover.top }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="id-weight-row">
-              <span className="id-weight-label">weight</span>
-              <span className="id-weight-value">{popover.conn.weight.toFixed(2)}</span>
-            </div>
-            <input
-              type="range"
-              min={-1}
-              max={1}
-              step={0.05}
-              value={popover.conn.weight}
-              onChange={(e) => onSetWeight?.(popover.conn.id, Number(e.target.value))}
-            />
+            {popover.conn.transferMode === 'nonlinear' ? (
+              // A non-linear edge is shaped by its transfer curve, not a scalar
+              // weight — show the curve (read-only) so the dead-zone / clamp
+              // shape from the lesson is inspectable, plus the clamp note.
+              <>
+                <div className="id-weight-row">
+                  <span className="id-weight-label">transfer curve</span>
+                </div>
+                <div className="id-weight-curve">
+                  <MiniTransferCurve points={popover.conn.transferPoints} />
+                </div>
+                <p className="id-weight-note">Values outside −100…100 are clamped.</p>
+              </>
+            ) : (
+              <>
+                <div className="id-weight-row">
+                  <span className="id-weight-label">weight</span>
+                  <span className="id-weight-value">{popover.conn.weight.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={weightRange === 'positive' ? 0 : -1}
+                  max={1}
+                  step={0.05}
+                  value={popover.conn.weight}
+                  onChange={(e) => onSetWeight?.(popover.conn.id, Number(e.target.value))}
+                />
+                {/* Reference ticks under the slider — the range's key stops, so
+                    the scale reads at a glance (like the app's weight control). */}
+                <div className={`id-weight-ticks ${weightRange}`} aria-hidden="true">
+                  {(weightRange === 'positive' ? ['0', '1'] : ['−1', '0', '1']).map((t) => (
+                    <span key={t}>{t}</span>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               type="button"
               className="id-weight-delete"
@@ -827,6 +885,7 @@ function LiveDiagram({
   palette,
   initialTrace,
   goal,
+  weightRange,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height?: number;
@@ -836,6 +895,7 @@ function LiveDiagram({
   palette?: NodeTypeId[];
   initialTrace: boolean;
   goal?: DiagramGoal;
+  weightRange: 'signed' | 'positive';
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
@@ -1101,6 +1161,7 @@ function LiveDiagram({
       traceResult={traceResult}
       goalTitle={goal?.title}
       goalSolved={goalSolved}
+      weightRange={weightRange}
       editable={editable}
       palette={palette}
       selectedNodeIds={selectedNodeIds}
@@ -1168,6 +1229,7 @@ export default function InteractiveDiagram({
   palette,
   initialTrace = true,
   goal,
+  weightRange = 'signed',
 }: InteractiveDiagramProps) {
   // A palette implies editing.
   const isEditable = editable || (palette !== undefined && palette.length > 0);
@@ -1194,6 +1256,7 @@ export default function InteractiveDiagram({
             palette={palette}
             initialTrace={initialTrace}
             goal={goal}
+            weightRange={weightRange}
           />
         )}
       </BrowserOnly>

@@ -38,6 +38,7 @@ import {
 import type { PrimaryAction } from '../lib/primaryAction';
 import { loadPrimaryAction, savePrimaryAction } from '../lib/primaryAction';
 import { NODE_H, NODE_W } from './connectionGeometry';
+import { wheelArrowGeometry } from './wheelArrow';
 import { DiagramCanvas } from './DiagramCanvas';
 import { CommentView } from './CommentView';
 import './diagram.css';
@@ -1777,45 +1778,25 @@ export function BraitenbergDiagram({
           ]).map(([motorId, wheelCx, wheelCy]) => {
             const raw = traceResult.nodeValues[motorId];
             if (raw === undefined) return null;
-            // Magnitude 0–100. Below 1 the wheel is effectively stopped, so no
-            // arrow; at 1 the shortest arrow appears and the length grows
-            // linearly to its max at 100.
-            const mag = Math.min(100, Math.abs(raw));
-            if (mag < 1) return null;
             // Geometry is anchored to the block (scaled node box), not the
             // background wheel, so the arrow always leaves from the block edge.
-            const blockHalfH = (NODE_H / 2) * blockScale;
-            const maxLen = NODE_H * blockScale * 1.3;
-            const minLen = maxLen * 0.16; // shortest (visible) arrow at value 1
-            const len = minLen + ((mag - 1) / 99) * (maxLen - minLen);
-            // Arrowhead and shaft scale with length so it reads as an arrow at
-            // every size instead of a fixed head swamping a short shaft.
-            const headLen = len * 0.32;
-            const headHalf = Math.max(2, len * 0.22);
-            const strokeW = Math.max(1.5, len * 0.14);
-            const dir = raw > 0 ? -1 : 1; // screen-y: up (forward) is negative
-            const reach = blockHalfH + maxLen + 2;
-            const svgHalfW = maxLen * 0.22 + 4;
-            const cx = svgHalfW;
-            const centerY = reach; // block center within the SVG
-            const base = centerY + dir * blockHalfH; // start at the block edge
-            const tipY = base + dir * len;
-            const shaftEndY = tipY - dir * headLen;
+            const g = wheelArrowGeometry(raw, blockScale);
+            if (!g) return null;
             return (
               <svg
                 key={`${motorId}-drive`}
-                className={`wheel-drive-arrow ${raw > 0 ? 'forward' : 'reverse'}`}
+                className={`wheel-drive-arrow ${g.forward ? 'forward' : 'reverse'}`}
                 style={{
-                  left: `${wheelCx * zoom - svgHalfW}px`,
-                  top: `${wheelCy * zoom - reach}px`,
-                  width: `${svgHalfW * 2}px`,
-                  height: `${reach * 2}px`,
+                  left: `${wheelCx * zoom - g.svgHalfW}px`,
+                  top: `${wheelCy * zoom - g.reach}px`,
+                  width: `${g.svgHalfW * 2}px`,
+                  height: `${g.reach * 2}px`,
                 }}
                 aria-hidden="true"
               >
-                <line x1={cx} y1={base} x2={cx} y2={shaftEndY} strokeWidth={strokeW} />
+                <line x1={g.cx} y1={g.base} x2={g.cx} y2={g.shaftEndY} strokeWidth={g.strokeW} />
                 <polygon
-                  points={`${cx},${tipY} ${cx - headHalf},${shaftEndY} ${cx + headHalf},${shaftEndY}`}
+                  points={`${g.cx},${g.tipY} ${g.cx - g.headHalf},${g.shaftEndY} ${g.cx + g.headHalf},${g.shaftEndY}`}
                 />
               </svg>
             );

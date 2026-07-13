@@ -337,7 +337,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
 
       <div className="transfer-curve-hint">
         Click empty space to add a point. Drag to move. Click a point to edit its
-        coordinates. Double-click to remove.
+        coordinates. Double-click to remove. Values outside −100…100 are clamped.
       </div>
     </div>
   );
