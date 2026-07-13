@@ -5,6 +5,8 @@ import type { DiagramState } from '../../lib/diagramFile';
 
 const sample: DiagramState = {
   loopPeriodMs: 25,
+  capWeights: false,
+  pulseDurationMs: 350,
   comments: [
     { id: 'comment-1', x: 10, y: 20, width: 220, height: 120, text: 'Light-seeking layer' },
   ],
@@ -58,6 +60,8 @@ describe('serialize round-trip through the store', () => {
       nodes: snap.topNodes,
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
+      capWeights: snap.capWeights,
+      pulseDurationMs: snap.pulseDurationMs,
       compoundTypes: snap.compoundTypes,
       comments: snap.comments,
     };
@@ -66,6 +70,8 @@ describe('serialize round-trip through the store', () => {
     const byId = <T extends { id: string }>(items: T[]) =>
       [...items].sort((a, b) => a.id.localeCompare(b.id));
     expect(reparsed.loopPeriodMs).toBe(sample.loopPeriodMs);
+    expect(reparsed.capWeights).toBe(sample.capWeights);
+    expect(reparsed.pulseDurationMs).toBe(sample.pulseDurationMs);
     expect(reparsed.comments).toEqual(sample.comments);
     // Store reads come back sorted by id (deterministic cross-peer order), so
     // compare contents modulo array order.
@@ -102,6 +108,8 @@ describe('group / ungroup through the store', () => {
         { id: 'e2', from: 'sum', to: 'motor-left', weight: 0.7, transferMode: 'linear', transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }] },
       ],
       loopPeriodMs: 20,
+      capWeights: true,
+      pulseDurationMs: 200,
       compoundTypes: [],
       comments: [],
     });

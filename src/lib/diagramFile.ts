@@ -7,6 +7,8 @@ import type {
 
 export interface DiagramFile {
   loopPeriodMs: number;
+  capWeights: boolean;
+  pulseDurationMs: number;
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
@@ -17,6 +19,12 @@ export interface DiagramState {
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   loopPeriodMs: number;
+  /** Whether connection weights are constrained to [-1, 1]. A diagram-level
+   *  preference: it travels with the document (shared live, saved to file). */
+  capWeights: boolean;
+  /** Trace ▶ pulse hold duration (ms). Diagram-level so a shared/opened diagram
+   *  carries the author's chosen timing. */
+  pulseDurationMs: number;
   compoundTypes: CompoundTypeDefinition[];
   comments: DiagramComment[];
 }
@@ -24,6 +32,8 @@ export interface DiagramState {
 export function serialize(state: DiagramState): string {
   const file: DiagramFile = {
     loopPeriodMs: state.loopPeriodMs,
+    capWeights: state.capWeights,
+    pulseDurationMs: state.pulseDurationMs,
     nodes: state.nodes,
     connections: state.connections,
     compoundTypes: state.compoundTypes,
@@ -145,8 +155,18 @@ export function parse(text: string): DiagramFile {
   const comments = Array.isArray(raw.comments)
     ? raw.comments.map(validateComment)
     : [];
+  // capWeights / pulseDurationMs are optional — files saved before these
+  // diagram-level prefs existed load with sensible defaults. Alpha policy: no
+  // migration, just a default.
+  const capWeights = typeof raw.capWeights === 'boolean' ? raw.capWeights : true;
+  const pulseDurationMs =
+    typeof raw.pulseDurationMs === 'number' && Number.isFinite(raw.pulseDurationMs)
+      ? raw.pulseDurationMs
+      : 200;
   return {
     loopPeriodMs: raw.loopPeriodMs,
+    capWeights,
+    pulseDurationMs,
     nodes,
     connections,
     compoundTypes,

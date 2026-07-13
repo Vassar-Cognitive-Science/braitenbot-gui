@@ -1,29 +1,35 @@
 import { useCallback, useState } from 'react';
 
 /**
- * App-wide preferences that persist across diagrams and sessions (as opposed
- * to the diagram document itself). Stored in localStorage, independent of the
- * diagram so switching or clearing a diagram never touches them.
+ * Personal, per-device preferences that persist across diagrams and sessions
+ * (as opposed to the diagram document itself). Stored in localStorage,
+ * independent of the diagram so switching or clearing a diagram never touches
+ * them — and, unlike diagram preferences, they are never shared in a live
+ * session: each participant keeps their own.
  */
 export interface AppSettings {
   /**
-   * When true (default), connection weights are constrained to the
-   * conventional Braitenberg range of [-1, 1]. Turn it off to author
-   * arbitrary weights (any min/max) — useful for experiments that need
-   * stronger-than-unit coupling.
+   * When true (default), the board picker automatically switches to a newly
+   * detected identified (known-FQBN) board if the current selection is an
+   * unidentified port. Turn it off to keep whatever board you picked. A
+   * per-device preference: it governs only your own board selection, so it
+   * needs no sharing (web guests have no board picker at all).
    */
-  capWeights: boolean;
+  autoSelectIdentifiedBoard: boolean;
+
   /**
-   * How long (ms) the ▶ pulse button holds a sensor at full value in trace
-   * mode. A local UI preference — the duration is baked into each shared pulse
-   * event as ticks, so peers don't need to agree on it.
+   * Advanced: override the collaboration relay endpoint (a `ws://`/`wss://`
+   * URL). Empty string — the default — means use the built-in relay
+   * (`DEFAULT_RELAY_URL`). Set this to point at a self-hosted relay instead.
+   * Per-device: it only affects sessions you start or join from this machine,
+   * and takes effect the next time you host or join.
    */
-  pulseDurationMs: number;
+  relayUrl: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  capWeights: true,
-  pulseDurationMs: 200,
+  autoSelectIdentifiedBoard: true,
+  relayUrl: '',
 };
 
 const STORAGE_KEY = 'braitenbot-gui:settings:v1';
@@ -35,14 +41,14 @@ export function loadAppSettings(): AppSettings {
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
     // Read known keys explicitly so an unexpected shape falls back cleanly.
     return {
-      capWeights:
-        typeof parsed.capWeights === 'boolean'
-          ? parsed.capWeights
-          : DEFAULT_APP_SETTINGS.capWeights,
-      pulseDurationMs:
-        typeof parsed.pulseDurationMs === 'number' && Number.isFinite(parsed.pulseDurationMs)
-          ? parsed.pulseDurationMs
-          : DEFAULT_APP_SETTINGS.pulseDurationMs,
+      autoSelectIdentifiedBoard:
+        typeof parsed.autoSelectIdentifiedBoard === 'boolean'
+          ? parsed.autoSelectIdentifiedBoard
+          : DEFAULT_APP_SETTINGS.autoSelectIdentifiedBoard,
+      relayUrl:
+        typeof parsed.relayUrl === 'string'
+          ? parsed.relayUrl
+          : DEFAULT_APP_SETTINGS.relayUrl,
     };
   } catch {
     return DEFAULT_APP_SETTINGS;

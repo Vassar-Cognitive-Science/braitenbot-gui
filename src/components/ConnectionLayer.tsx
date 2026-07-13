@@ -74,7 +74,7 @@ export function ConnectionLayer({
         return (
           <button
             key={`${connection.id}-config`}
-            className={`connection-config-trigger ${selectedConnectionId === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''}`}
+            className={`connection-config-trigger ${selectedConnectionId === connection.id ? 'selected' : ''} ${edgeSignal !== undefined ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''} ${edgeSignal === undefined && connection.transferMode === 'nonlinear' ? 'has-curve' : ''}`}
             style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
             onMouseDown={(event: MouseEvent) => event.stopPropagation()}
             onPointerDown={onBadgePointerDown

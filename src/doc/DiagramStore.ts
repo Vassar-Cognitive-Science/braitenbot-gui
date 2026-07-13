@@ -36,6 +36,8 @@ export interface DiagramSnapshot {
   /** Top-level explanatory notes. Never routed into compound bodies. */
   comments: DiagramComment[];
   loopPeriodMs: number;
+  capWeights: boolean;
+  pulseDurationMs: number;
 }
 
 /**
@@ -285,17 +287,29 @@ export class DiagramStore {
     const compoundTypes = this.shareCompoundTypes(prev?.compoundTypes);
     const comments = shareEntities(readComments(this.comments), this.commentCache, prev?.comments);
     const loopPeriodMs = (this.meta.get('loopPeriodMs') as number) ?? 20;
+    const capWeights = (this.meta.get('capWeights') as boolean) ?? true;
+    const pulseDurationMs = (this.meta.get('pulseDurationMs') as number) ?? 200;
     if (
       prev &&
       prev.topNodes === topNodes &&
       prev.topConnections === topConnections &&
       prev.compoundTypes === compoundTypes &&
       prev.comments === comments &&
-      prev.loopPeriodMs === loopPeriodMs
+      prev.loopPeriodMs === loopPeriodMs &&
+      prev.capWeights === capWeights &&
+      prev.pulseDurationMs === pulseDurationMs
     ) {
       return prev;
     }
-    return { topNodes, topConnections, compoundTypes, comments, loopPeriodMs };
+    return {
+      topNodes,
+      topConnections,
+      compoundTypes,
+      comments,
+      loopPeriodMs,
+      capWeights,
+      pulseDurationMs,
+    };
   }
 
   private shareCompoundTypes(
@@ -575,6 +589,19 @@ export class DiagramStore {
     });
   }
 
+  /** Delete every connection touching a node (but keep the node). One undo entry. */
+  disconnectNode(id: string): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => {
+      const connectionContainer = this.contextConnectionContainer();
+      for (const [connectionId, connection] of [...connectionContainer.entries()]) {
+        if (connection.get('from') === id || connection.get('to') === id) {
+          connectionContainer.delete(connectionId);
+        }
+      }
+    });
+  }
+
   // --- comment mutations (top-level only) --------------------------------
 
   addComment(comment: DiagramComment): void {
@@ -736,6 +763,18 @@ export class DiagramStore {
     // meta is intentionally outside the undo scope, so loop period edits are
     // not undoable — matching the pre-CRDT snapshot behavior.
     this.transactLocal(() => this.meta.set('loopPeriodMs', ms));
+  }
+
+  // Diagram-level preferences. Like loop period, these live in shared `meta`
+  // (so they sync live and save with the diagram) and are outside undo scope.
+  setCapWeights(capWeights: boolean): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => this.meta.set('capWeights', capWeights));
+  }
+
+  setPulseDurationMs(ms: number): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => this.meta.set('pulseDurationMs', ms));
   }
 
   // Full replacement (file open, restore, new). Clears undo history: undoing

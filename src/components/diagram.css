@@ -39,6 +39,10 @@
   --sensor-color: #c4905a;
   --compute-color: #7888b8;
   --output-color: #6aab7a;
+  /* Compound instances get their own hue — a saturated purple-blue
+     (periwinkle), distinct from the muted indigo compute blocks. */
+  --compound-color: #8a6ee6;
+  --compound-label: #d3c8f7;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   /* Type scale — 1.25 ratio (subset used by the diagram) */
   --text-xs: 0.64rem;
@@ -99,6 +103,13 @@
   cursor: grabbing;
 }
 
+/* When the badge shows a non-linear curve thumbnail instead of text, drop the
+   text padding so it reads as a tidy little square. */
+.bb-diagram .connection-config-trigger.has-curve {
+  padding: 2px;
+  line-height: 0;
+}
+
 .bb-diagram .connection-config-trigger.selected {
   border-color: #d4bc78;
   color: #d4bc78;
@@ -156,6 +167,54 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* While renaming, lift the node above its neighbors so the floating editor
+   isn't painted over by an overlapping block. */
+.bb-diagram .diagram-node.renaming {
+  z-index: 10;
+}
+
+/* Inline label editor — double-click a node's label to rename it. Rendered as a
+   floating textbox over the top of the node (the `.node-label` box clips its
+   overflow, which would hide the border/caret), so it reads unmistakably as an
+   editable field: solid fill, accent border + focus ring, and a live caret. */
+.bb-diagram .diagram-node .node-label-input {
+  position: absolute;
+  /* Start past the type glyph so it stays visible while renaming. */
+  left: 27px;
+  right: 5px;
+  top: 5px;
+  z-index: 6;
+  height: 24px;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+  caret-color: var(--accent);
+  cursor: text;
+  box-shadow: 0 0 0 2px rgba(106, 171, 122, 0.35), 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.bb-diagram .diagram-node .node-label-input::selection {
+  background: rgba(106, 171, 122, 0.45);
+  color: var(--text);
+}
+
+/* At-a-glance type marker before each node label, so a node's kind is legible
+   without reading the text. Inline so the label still truncates with an
+   ellipsis; inherits the label's per-kind color by default. */
+.bb-diagram .node-type-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+  color: currentColor;
+  opacity: 0.9;
 }
 
 .bb-diagram .diagram-node .node-meta {
@@ -322,7 +381,7 @@
 .bb-diagram .output-port-label-green { color: #6eb87a; }
 .bb-diagram .output-port-label-blue  { color: #5e90d2; }
 .bb-diagram .output-port-label-compound {
-  color: rgba(160, 185, 215, 0.85);
+  color: rgba(180, 160, 240, 0.9);
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -348,7 +407,7 @@
   letter-spacing: 0.04em;
   pointer-events: none;
   user-select: none;
-  color: rgba(160, 185, 215, 0.85);
+  color: rgba(180, 160, 240, 0.9);
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -390,17 +449,22 @@
 /* Compound instance — same dimensions as a regular node, distinctive
    double border + muted blue accent so it reads as a subdiagram. */
 .bb-diagram .diagram-node.node-compound {
-  border: 1px solid #8aa8d8;
-  box-shadow: inset 0 0 0 1px rgba(138, 168, 216, 0.25);
+  border: 1px solid var(--compound-color);
+  box-shadow: inset 0 0 0 1px rgba(138, 110, 230, 0.25);
 }
 
 .bb-diagram .diagram-node.node-compound .node-label {
-  color: #c4d5ee;
+  color: var(--compound-label);
 }
 
 .bb-diagram .node-compound .node-handle {
-  color: #8aa8d8;
-  border-color: #8aa8d8;
+  color: var(--compound-color);
+  border-color: var(--compound-color);
+}
+
+/* Compound uses the saturated accent (its label text is a lighter tint). */
+.bb-diagram .node-compound .node-type-icon {
+  color: var(--compound-color);
 }
 
 /* Compound port anchors (compound-input / compound-output) — used inside a

@@ -17,7 +17,7 @@ import type { DiagramState } from '../lib/diagramFile';
 import { ConfigPanel } from './ConfigPanel';
 import { CodeDialog, DiagnosticsDialog, UploadErrorDialog } from './dialogs';
 import { SettingsModal } from './SettingsModal';
-import { useAppSettings } from '../settings/appSettings';
+import type { AppSettings, UpdateAppSettings } from '../settings/appSettings';
 import { SerialMonitor } from './SerialMonitor';
 import { ShareMenu, SessionOverlays } from './ShareMenu';
 import { useSession, usePresence } from '../collab/useSession';
@@ -31,6 +31,7 @@ import {
   CommentIcon,
   GroupIcon,
   SearchIcon,
+  SettingsIcon,
   UngroupIcon,
   WaypointsIcon,
 } from './icons';
@@ -120,9 +121,17 @@ function makeWheelNodes(layout: RobotOverlayLayout): DiagramNode[] {
 
 interface BraitenbergDiagramProps {
   arduino: ReturnType<typeof useArduino>;
+  /** Personal, per-device preferences (lifted to App so useArduino can read
+   *  the board auto-swap setting). Diagram-level prefs live in the doc store. */
+  appSettings: AppSettings;
+  updateAppSettings: UpdateAppSettings;
 }
 
-export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
+export function BraitenbergDiagram({
+  arduino,
+  appSettings,
+  updateAppSettings,
+}: BraitenbergDiagramProps) {
   const {
     tauriAvailable,
     cliAvailable,
@@ -147,7 +156,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // loopPeriodMs) lives in a Yjs-backed store. React reads a referentially
   // stable snapshot; every mutation goes through the store's methods.
   const store = useDiagramStore();
-  const { topNodes, topConnections, compoundTypes, loopPeriodMs, comments } = useDiagramSnapshot(store);
+  const {
+    topNodes,
+    topConnections,
+    compoundTypes,
+    loopPeriodMs,
+    capWeights,
+    pulseDurationMs,
+    comments,
+  } = useDiagramSnapshot(store);
   // Multi-selection for group operations. Click/shift-click on nodes maintain
   // this set; the "Group selection" toolbar action consumes it.
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(() => new Set());
@@ -156,6 +173,9 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const [isLinking, setIsLinking] = useState(false);
   const [robotLayout, setRobotLayout] = useState<RobotOverlayLayout>(INITIAL_ROBOT_LAYOUT);
   const [configTarget, setConfigTarget] = useState<ConfigTarget | null>(null);
+  // Per-node right-click context menu (Duplicate / Disconnect / Delete),
+  // anchored at the click point in viewport (client) coordinates.
+  const [nodeMenu, setNodeMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const {
     editingPath,
@@ -189,7 +209,6 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     }
   });
   const [showUploadErrorDialog, setShowUploadErrorDialog] = useState(false);
-  const [appSettings, updateAppSettings] = useAppSettings();
   const [showSettings, setShowSettings] = useState(false);
   // Split-button primary action ("upload" vs "generate"), persisted so the
   // toolbar's main button remembers the user's last choice across sessions.
@@ -288,12 +307,11 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   const traceResult = scope.traceResult;
 
   const [pulsingId, setPulsingId] = useState<string | null>(null);
-  // Duration of the "▶" sensor pulse in trace mode. Local UI preference: the
-  // duration is baked into each shared pulse event as durationTicks, so peers
-  // don't need to agree on this setting.
-  // Trace pulse duration is an app setting (configured in the Settings modal),
-  // not a per-diagram value.
-  const pulseDurationMs = appSettings.pulseDurationMs;
+  // Duration of the "▶" sensor pulse in trace mode. A diagram-level preference
+  // (lives in the shared doc, `pulseDurationMs` from the snapshot above), so a
+  // shared/opened diagram carries the author's chosen timing. The duration is
+  // still baked into each shared pulse event as durationTicks, so peers render
+  // an identical pulse regardless.
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number>(0);
   const showToast = useCallback((msg: string) => {
@@ -392,6 +410,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       nodes: makeWheelNodes(robotLayout),
       connections: START_CONNECTIONS,
       loopPeriodMs: 20,
+      capWeights: true,
+      pulseDurationMs: 200,
       compoundTypes: [],
       comments: [],
     });
@@ -487,6 +507,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
       nodes: snap.topNodes,
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
+      capWeights: snap.capWeights,
+      pulseDurationMs: snap.pulseDurationMs,
       compoundTypes: snap.compoundTypes,
       comments: snap.comments,
     };
@@ -505,7 +527,15 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
   // compound body currently in view — so reload/autosave round-trips
   // independent of which compound the user happens to be editing.
   useDiagramPersistence({
-    state: { nodes: topNodes, connections: topConnections, loopPeriodMs, compoundTypes, comments },
+    state: {
+      nodes: topNodes,
+      connections: topConnections,
+      loopPeriodMs,
+      capWeights,
+      pulseDurationMs,
+      compoundTypes,
+      comments,
+    },
     applyDiagram,
     isPristine: isDiagramPristine,
     resetToDefault,
@@ -770,6 +800,34 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     });
   }, [store, pan, zoom, isViewOnly, makeId]);
 
+  // Add an input/output port anchor to the compound body currently open. Ports
+  // are body-only, so this is offered only from the breadcrumb while editing a
+  // compound (see below). New ports stack down one side of the viewport center.
+  const addPort = useCallback(
+    (type: 'compound-input' | 'compound-output') => {
+      if (isViewOnly || editingPath.length === 0) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const screenCx = rect ? rect.width / 2 : 320;
+      const screenCy = rect ? rect.height / 2 : 220;
+      const sideOffset = type === 'compound-input' ? -180 : 180;
+      const count = nodes.filter((node) => node.type === type).length;
+      const x = (screenCx - pan.x) / zoom - (NODE_W / 2) * blockScale + sideOffset;
+      const y =
+        (screenCy - pan.y) / zoom -
+        (NODE_H / 2) * blockScale +
+        count * (NODE_H * blockScale + 16);
+      store.stopCapturing();
+      store.addNode({
+        id: makeId(type),
+        type,
+        label: type === 'compound-input' ? `Input ${count + 1}` : `Output ${count + 1}`,
+        x,
+        y,
+      });
+    },
+    [store, pan, zoom, blockScale, nodes, isViewOnly, editingPath.length, makeId],
+  );
+
   const nodeMap = useMemo(
     () => Object.fromEntries(nodes.map((n) => [n.id, n])) as Record<string, DiagramNode>,
     [nodes],
@@ -795,6 +853,122 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
     (id: string, value: number) => store.setConstantValue(id, value),
     [store],
   );
+
+  // Rename a node from its inline label editor. One undo entry per rename.
+  const renameNode = useCallback(
+    (id: string, label: string) => {
+      if (isViewOnly) return;
+      store.stopCapturing();
+      store.patchNode(id, { label });
+    },
+    [store, isViewOnly],
+  );
+
+  // Duplicate a node in place, offset slightly so the copy is visible, and
+  // select it. Wheel motors are fixtures and can't be duplicated.
+  const duplicateNode = useCallback(
+    (id: string) => {
+      const node = nodeMap[id];
+      if (!node || isWheelNode(node.id) || isViewOnly) return;
+      const newId = makeId(node.type);
+      store.stopCapturing();
+      store.addNode({ ...node, id: newId, x: node.x + 28, y: node.y + 28 });
+      setSelectedNodeIds(new Set([newId]));
+      setConfigTarget({ kind: 'node', id: newId });
+    },
+    [nodeMap, store, makeId, isViewOnly],
+  );
+
+  // Remove every connection touching a node (keeps the node). One undo entry.
+  const disconnectNode = useCallback(
+    (id: string) => {
+      if (isViewOnly) return;
+      store.stopCapturing();
+      store.disconnectNode(id);
+    },
+    [store, isViewOnly],
+  );
+
+  const openNodeMenu = useCallback(
+    (id: string, clientX: number, clientY: number) => {
+      if (isViewOnly) return;
+      setNodeMenu({ id, x: clientX, y: clientY });
+    },
+    [isViewOnly],
+  );
+
+  // Stable context-menu action handlers. Hoisted out of the menu's JSX so the
+  // render doesn't call a ref-reading helper (duplicateNode → makeId) inline.
+  const menuDuplicate = useCallback(() => {
+    if (nodeMenu) duplicateNode(nodeMenu.id);
+    setNodeMenu(null);
+  }, [nodeMenu, duplicateNode]);
+  const menuDisconnect = useCallback(() => {
+    if (nodeMenu) disconnectNode(nodeMenu.id);
+    setNodeMenu(null);
+  }, [nodeMenu, disconnectNode]);
+  const menuDelete = useCallback(() => {
+    if (nodeMenu) deleteNode(nodeMenu.id);
+    setNodeMenu(null);
+  }, [nodeMenu, deleteNode]);
+
+  // Frame every node of the current editing context in the viewport. Node
+  // boxes are a fixed px size (only zoom spacing changes), so we fit the span
+  // of node positions plus one node box of margin, capped at 100% so a small
+  // diagram isn't blown up.
+  const fitToContent = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || nodes.length === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const w = NODE_W * blockScale;
+    const h = NODE_H * blockScale;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x);
+      maxY = Math.max(maxY, node.y);
+    }
+    const padding = 100;
+    const spanX = maxX - minX;
+    const spanY = maxY - minY;
+    const availW = Math.max(1, rect.width - padding * 2 - w);
+    const availH = Math.max(1, rect.height - padding * 2 - h);
+    const nextZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(
+        MAX_ZOOM,
+        1,
+        spanX > 0 ? availW / spanX : MAX_ZOOM,
+        spanY > 0 ? availH / spanY : MAX_ZOOM,
+      ),
+    );
+    const panX = (rect.width - w) / 2 - ((minX + maxX) / 2) * nextZoom;
+    const panY = (rect.height - h) / 2 - ((minY + maxY) / 2) * nextZoom;
+    breakFollow();
+    applyViewport({ x: panX, y: panY }, nextZoom);
+  }, [nodes, blockScale, breakFollow, applyViewport]);
+
+  // Close the node context menu on any outside interaction. Presses inside the
+  // menu stop propagation, so this only fires for the dismissing gesture.
+  useEffect(() => {
+    if (!nodeMenu) return;
+    const close = () => setNodeMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNodeMenu(null);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('wheel', close, { passive: true });
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('wheel', close);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [nodeMenu]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -912,10 +1086,22 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         breakFollow();
         resetView();
       }
+      // Select every node in the current editing context.
+      if (mod && key === 'a') {
+        if (isBlocked()) return;
+        event.preventDefault();
+        setSelectedNodeIds(new Set(nodes.map((node) => node.id)));
+      }
+      // Escape: drop the multi-selection and close the config panel.
+      if (event.key === 'Escape') {
+        if (isBlocked()) return;
+        setSelectedNodeIds(new Set());
+        setConfigTarget(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, store, breakFollow, resetView]);
+  }, [configTarget, deleteNode, deleteConnection, undo, redo, traceMode, isViewOnly, sensorValues, nodeMap, nodes, store, breakFollow, resetView]);
 
   const handleCanvasMouseDown = (event: MouseEvent) => {
     const isBackground = event.target === event.currentTarget;
@@ -1337,13 +1523,10 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             </span>
           ) : (
             <>
-              <span
-                className="serial-status-dot"
-                data-status={selectedBoard ? 'connected' : 'disconnected'}
-                title={cliVersion ?? undefined}
-              />
               <select
                 className="toolbar-board-select"
+                data-status={canUpload ? 'connected' : 'disconnected'}
+                title={cliVersion ?? undefined}
                 value={selectedBoard ? `${selectedBoard.port}|${selectedBoard.fqbn ?? ''}` : ''}
                 onChange={(e) => {
                   // arduino-cli can report several FQBN matches for one port, so
@@ -1444,6 +1627,16 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           followingHost={followingHost}
           onToggleFollowHost={toggleFollowHost}
         />
+
+        <button
+          type="button"
+          className="toolbar-btn toolbar-secondary toolbar-settings"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+          aria-label="Settings"
+        >
+          <SettingsIcon />
+        </button>
       </div>
 
       {uploadBusy && (
@@ -1499,6 +1692,26 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
                 </span>
               );
             })}
+            {!isViewOnly && (
+              <div className="diagram-breadcrumb-ports">
+                <button
+                  type="button"
+                  className="diagram-breadcrumb-port-btn"
+                  onClick={() => addPort('compound-input')}
+                  title="Add an input port to this compound — signals flow in from the outer diagram."
+                >
+                  + Input
+                </button>
+                <button
+                  type="button"
+                  className="diagram-breadcrumb-port-btn"
+                  onClick={() => addPort('compound-output')}
+                  title="Add an output port to this compound — its value is exposed to the outer diagram."
+                >
+                  + Output
+                </button>
+              </div>
+            )}
           </div>
         )}
         {traceMode && (
@@ -1551,6 +1764,63 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           aria-hidden="true"
         />
 
+        {/* Per-wheel drive indicator: in trace mode an arrow grows straight out
+            of each motor block — up from the block's top edge for a positive
+            (forward) signal, down from the bottom edge for a negative (reverse)
+            one, scaled by magnitude. Drawn clear of the block so its label stays
+            readable. Purely a readout of the motor's trace value — real motion
+            still needs the robot. */}
+        {traceMode &&
+          ([
+            ['motor-left', robotLayout.leftWheelCx, robotLayout.leftWheelCy] as const,
+            ['motor-right', robotLayout.rightWheelCx, robotLayout.rightWheelCy] as const,
+          ]).map(([motorId, wheelCx, wheelCy]) => {
+            const raw = traceResult.nodeValues[motorId];
+            if (raw === undefined) return null;
+            // Magnitude 0–100. Below 1 the wheel is effectively stopped, so no
+            // arrow; at 1 the shortest arrow appears and the length grows
+            // linearly to its max at 100.
+            const mag = Math.min(100, Math.abs(raw));
+            if (mag < 1) return null;
+            // Geometry is anchored to the block (scaled node box), not the
+            // background wheel, so the arrow always leaves from the block edge.
+            const blockHalfH = (NODE_H / 2) * blockScale;
+            const maxLen = NODE_H * blockScale * 1.3;
+            const minLen = maxLen * 0.16; // shortest (visible) arrow at value 1
+            const len = minLen + ((mag - 1) / 99) * (maxLen - minLen);
+            // Arrowhead and shaft scale with length so it reads as an arrow at
+            // every size instead of a fixed head swamping a short shaft.
+            const headLen = len * 0.32;
+            const headHalf = Math.max(2, len * 0.22);
+            const strokeW = Math.max(1.5, len * 0.14);
+            const dir = raw > 0 ? -1 : 1; // screen-y: up (forward) is negative
+            const reach = blockHalfH + maxLen + 2;
+            const svgHalfW = maxLen * 0.22 + 4;
+            const cx = svgHalfW;
+            const centerY = reach; // block center within the SVG
+            const base = centerY + dir * blockHalfH; // start at the block edge
+            const tipY = base + dir * len;
+            const shaftEndY = tipY - dir * headLen;
+            return (
+              <svg
+                key={`${motorId}-drive`}
+                className={`wheel-drive-arrow ${raw > 0 ? 'forward' : 'reverse'}`}
+                style={{
+                  left: `${wheelCx * zoom - svgHalfW}px`,
+                  top: `${wheelCy * zoom - reach}px`,
+                  width: `${svgHalfW * 2}px`,
+                  height: `${reach * 2}px`,
+                }}
+                aria-hidden="true"
+              >
+                <line x1={cx} y1={base} x2={cx} y2={shaftEndY} strokeWidth={strokeW} />
+                <polygon
+                  points={`${cx},${tipY} ${cx - headHalf},${shaftEndY} ${cx + headHalf},${shaftEndY}`}
+                />
+              </svg>
+            );
+          })}
+
         {/* Comments render before the canvas so they sit behind the links and
             nodes. Top-level only — hidden while a compound body is open. */}
         {editingPath.length === 0 &&
@@ -1596,6 +1866,8 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           onConnectionRejected={handleConnectionRejected}
           onConnectionLabelT={handleConnectionLabelT}
           onEnterCompound={enterCompound}
+          onRenameNode={isViewOnly ? undefined : renameNode}
+          onNodeContextMenu={isViewOnly ? undefined : openNodeMenu}
           onLinkDraftChange={setIsLinking}
           remoteHighlight={remoteHighlight}
           onPointerWorldMove={handlePointerWorldMove}
@@ -1625,7 +1897,7 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           deleteNode={deleteNode}
           deleteConnection={deleteConnection}
           onClose={clearConfigTarget}
-          capWeights={appSettings.capWeights}
+          capWeights={capWeights}
         />
 
         <div className="canvas-zoom-overlay">
@@ -1652,6 +1924,34 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
             />
             <span className="canvas-block-scale-value">{Math.round(blockScale * 100)}%</span>
           </div>
+          <div className="canvas-zoom-divider" />
+          <button
+            type="button"
+            className="toolbar-btn toolbar-tertiary toolbar-zoom-btn"
+            onClick={fitToContent}
+            disabled={nodes.length === 0}
+            aria-label="Fit all blocks in view"
+            title="Fit all blocks in view"
+          >
+            <svg
+              className="toolbar-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M6 2 H2 V6" />
+              <path d="M10 2 H14 V6" />
+              <path d="M6 14 H2 V10" />
+              <path d="M10 14 H14 V10" />
+            </svg>
+          </button>
           <div className="canvas-zoom-divider" />
           <button
             type="button"
@@ -1760,8 +2060,13 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
         onClose={() => setShowSettings(false)}
         settings={appSettings}
         onChange={updateAppSettings}
+        capWeights={capWeights}
+        onCapWeightsChange={(value) => store.setCapWeights(value)}
         loopPeriodMs={loopPeriodMs}
         onLoopPeriodChange={(value) => store.setLoopPeriodMs(value)}
+        pulseDurationMs={pulseDurationMs}
+        onPulseDurationChange={(value) => store.setPulseDurationMs(value)}
+        diagramReadOnly={isViewOnly}
       />
 
       {showSerialMonitor && selectedBoard && (
@@ -1776,6 +2081,48 @@ export function BraitenbergDiagram({ arduino }: BraitenbergDiagramProps) {
           onSend={(text) => void serialMonitor.send(text)}
         />
       )}
+      {nodeMenu && (() => {
+        const menuNode = nodeMap[nodeMenu.id];
+        if (!menuNode) return null;
+        const isWheel = isWheelNode(menuNode.id);
+        return (
+          <div
+            className="node-context-menu"
+            role="menu"
+            style={{ left: `${nodeMenu.x}px`, top: `${nodeMenu.y}px` }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="node-context-menu-item"
+              disabled={isWheel}
+              title={isWheel ? 'The wheel motors are fixtures and cannot be duplicated.' : undefined}
+              onClick={menuDuplicate}
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="node-context-menu-item"
+              onClick={menuDisconnect}
+            >
+              Disconnect
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="node-context-menu-item danger"
+              disabled={isWheel}
+              title={isWheel ? 'The wheel motors are fixtures and cannot be deleted.' : undefined}
+              onClick={menuDelete}
+            >
+              Delete
+            </button>
+          </div>
+        );
+      })()}
       <SessionOverlays />
       {toast && (
         <div className="toast" role="status">{toast}</div>

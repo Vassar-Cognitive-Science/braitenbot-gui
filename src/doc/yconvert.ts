@@ -118,6 +118,8 @@ export function loadDiagramInto(
     compoundTypes: CompoundTypeDefinition[];
     comments: DiagramComment[];
     loopPeriodMs: number;
+    capWeights: boolean;
+    pulseDurationMs: number;
   },
 ): void {
   nodes.clear();
@@ -135,4 +137,6 @@ export function loadDiagramInto(
     comments.set(comment.id, commentToYMap(comment));
   }
   meta.set('loopPeriodMs', state.loopPeriodMs);
+  meta.set('capWeights', state.capWeights);
+  meta.set('pulseDurationMs', state.pulseDurationMs);
 }

@@ -2,6 +2,17 @@ export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound'
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'min' | 'max' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
+/** User-facing labels for the color-sensor channels. The internal ids stay
+ *  'clear'/'red'/'green'/'blue' (used by codegen and the trace sim); only the
+ *  display differs. The unfiltered "clear" photodiode reads the total light
+ *  across all colors, so it surfaces as "White" (short label "W", distinct from
+ *  Red/Green/Blue on the small port handle). */
+export const COLOR_CHANNEL_LABELS: Record<ColorChannel, { name: string; short: string }> = {
+  clear: { name: 'White', short: 'W' },
+  red: { name: 'Red', short: 'R' },
+  green: { name: 'Green', short: 'G' },
+  blue: { name: 'Blue', short: 'B' },
+};
 /** TCS34725 RGBC gain multipliers the UI offers; the emitter maps each to a
  *  CONTROL-register value. 16× is a good default for indoor/classroom light. */
 export const COLOR_GAINS = [1, 4, 16, 60] as const;

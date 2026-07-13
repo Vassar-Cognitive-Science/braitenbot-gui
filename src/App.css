@@ -20,6 +20,11 @@
   --sensor-color: #c4905a;
   --compute-color: #7888b8;
   --output-color: #6aab7a;
+  /* Compound instances get their own hue — a saturated purple-blue
+     (periwinkle) so they read as clearly distinct from the muted indigo
+     compute blocks. */
+  --compound-color: #8a6ee6;
+  --compound-label: #d3c8f7;
   /* Brighter variants for scope traces on dark canvas */
   --trace-sensor: #f0b878;
   --trace-compute: #a8bce8;
@@ -283,7 +288,7 @@ select,
 .palette-dot-sensor { background: var(--sensor-color); }
 .palette-dot-compute { background: var(--compute-color); }
 .palette-dot-output { background: var(--output-color); }
-.palette-dot-compound { background: #8aa8d8; }
+.palette-dot-compound { background: var(--compound-color); }
 
 .node-palette h2:not(.palette-category) {
   margin: 0.35rem 0 0.1rem;
@@ -312,7 +317,7 @@ select,
 .palette-item-compute { border-left-color: var(--compute-color); }
 .palette-item-constant { border-left-color: var(--compute-color); }
 .palette-item-output { border-left-color: var(--output-color); }
-.palette-item-compound { border-left-color: #8aa8d8; }
+.palette-item-compound { border-left-color: var(--compound-color); }
 .palette-item-port { border-left-color: #b09cd0; border-left-style: dashed; }
 
 
@@ -466,6 +471,30 @@ select,
     rgba(100, 96, 80, 0.08) 6px
   );
 }
+
+/* Trace-mode per-wheel drive arrow. Positioned over the wheel overlay; inert. */
+.wheel-drive-arrow {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
+}
+
+.wheel-drive-arrow line {
+  stroke-linecap: round;
+}
+
+.wheel-drive-arrow.forward line,
+.wheel-drive-arrow.forward polygon {
+  stroke: var(--accent);
+  fill: var(--accent);
+}
+
+.wheel-drive-arrow.reverse line,
+.wheel-drive-arrow.reverse polygon {
+  stroke: var(--sensor-color);
+  fill: var(--sensor-color);
+}
  
 /* (node + handle + port rules extracted to components/diagram.css) */
 
@@ -602,6 +631,58 @@ select,
   gap: 0.5rem;
   cursor: pointer;
 }
+
+/* Connection-weight slider with a −1 / 0 / +1 scale under the track. */
+.weight-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.weight-slider-input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.weight-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  /* Nudge the −1/+1 labels inward to sit roughly under the thumb's travel
+     extremes (the thumb centre never reaches the very track edge). */
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.weight-slider-tick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1;
+}
+
+/* A short mark above each label pointing up at the track. */
+.weight-slider-tick::before {
+  content: '';
+  width: 1px;
+  height: 4px;
+  background: var(--line);
+}
+
+/* Emphasise the zero midpoint — the "no coupling" point. */
+.weight-slider-tick-zero {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.weight-slider-tick-zero::before {
+  height: 6px;
+  background: var(--muted);
+}
  
 .transfer-curve-editor {
   display: flex;
@@ -695,6 +776,26 @@ select,
   text-align: center;
 }
 
+/* Thumbnail curve shown on a non-linear connection badge. The path inherits
+   the badge's text color (currentColor), so it brightens with the badge when
+   selected/hovered. */
+.mini-transfer-curve {
+  display: block;
+}
+
+.mini-transfer-curve .mini-curve-axis {
+  stroke: var(--line);
+  stroke-width: 0.75;
+  opacity: 0.6;
+}
+
+.mini-transfer-curve .mini-curve-path {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 /* Serial connection controls */
 
 .serial-status {
@@ -774,6 +875,8 @@ select,
 /* Canvas toolbar */
 .canvas-toolbar {
   display: flex;
+  /* Bottom-align so unlabeled controls (Share, separators) line up with the
+     button row of the labeled groups, whose caption sits above the buttons. */
   align-items: end;
   gap: 0.4rem 0.3rem;
   padding: 0.45rem 0.5rem;
@@ -782,7 +885,8 @@ select,
   border-radius: 3px;
   /* Never wrap to a second row. Everything stays intact except the board
      picker, which shrinks (see below) to absorb a tight width. No overflow
-     is set here on purpose — it would clip the split-button/share dropdowns. */
+     is set here on purpose — it would clip the split-button/share dropdowns.
+     Group captions can't force a wrap either — see .toolbar-group-label. */
   flex-wrap: nowrap;
 }
 
@@ -802,22 +906,41 @@ select,
   min-width: 0;
 }
 
+/* A group is a row of buttons with an uppercase caption above it. The caption
+   reserves vertical space via padding-top; the buttons themselves set the
+   group's width. */
 .toolbar-group {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  padding-top: 0.95rem;
 }
 
+/* The caption is ABSOLUTELY POSITIONED on purpose: taken out of layout flow, it
+   cannot contribute to the group's width, so a caption wider than its buttons
+   can never stretch the group — and therefore can never push the toolbar onto
+   a second row. `max-width: 100%` caps it to the (button-determined) group
+   width and a too-long label just truncates with an ellipsis. This is the
+   structural guard against the "toolbar wraps to two rows" regression; do not
+   move the caption back into flow (e.g. `width: 100%`) without reintroducing
+   that bug. */
 .toolbar-group-label {
-  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted);
   line-height: 1;
-  margin-bottom: 0.1rem;
 }
 
 .toolbar-separator {
@@ -841,6 +964,18 @@ select,
   cursor: pointer;
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+/* Disabled toolbar buttons gray out and stop responding, regardless of
+   variant (primary overrides below to match). */
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-btn:disabled:hover {
+  background: transparent;
+  border-color: var(--line);
 }
 
 /* Inline lucide-style icons: keep their intrinsic size inside flex buttons. */
@@ -887,6 +1022,12 @@ select,
 .toolbar-tertiary:hover {
   border-color: var(--line);
   color: var(--text);
+}
+
+/* Icon-only Settings (gear) button, pushed to the far right of the toolbar. */
+.toolbar-settings {
+  margin-left: auto;
+  padding-inline: 0.4rem;
 }
 
 /* Trace toggle active state */
@@ -971,6 +1112,47 @@ select,
   text-align: center;
 }
 
+/* Per-node right-click context menu (Duplicate / Disconnect / Delete). */
+.node-context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 9rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.node-context-menu-item {
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 3px;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.node-context-menu-item:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.node-context-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.node-context-menu-item.danger:hover:not(:disabled) {
+  background: rgba(220, 80, 80, 0.16);
+  color: #ff7676;
+}
+
 
 
 .toolbar-serial {
@@ -1018,16 +1200,29 @@ select,
   cursor: pointer;
   max-width: 260px;
   text-overflow: ellipsis;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .toolbar-board-select:hover {
   border-color: var(--muted);
 }
 
+/* Focus shows a neutral ring, NOT a green border. The border color is reserved
+   for connection status (below), and the app accent is green — so a green focus
+   border would be indistinguishable from the "connected" outline. Keep these
+   two signals on different properties. */
 .toolbar-board-select:focus {
   outline: none;
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(232, 228, 216, 0.25);
+}
+
+/* The board picker's border IS the connection indicator (replacing a separate
+   status dot): green outline only when the selected board is uploadable (has a
+   known FQBN — i.e. canUpload), default gray otherwise. Placed after :hover so
+   a connected board stays green while hovered; focus no longer touches the
+   border, so it stays green through focus too. */
+.toolbar-board-select[data-status="connected"] {
+  border-color: #4ecca3;
 }
 
 .toolbar-board-select option {
@@ -1090,6 +1285,29 @@ select,
   gap: 0.6rem;
 }
 
+/* Group heading in the split Settings dialog (Personal vs Diagram). The
+   negative margins tighten the heading + hint to the section they introduce,
+   against the dialog's 1rem flex gap. */
+.settings-group-title {
+  margin: 0.4rem 0 -0.6rem;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.settings-group-title:first-of-type {
+  margin-top: 0;
+}
+
+.settings-group-hint {
+  margin: 0 0 -0.6rem;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .settings-toggle {
   display: flex;
   align-items: flex-start;
@@ -1119,6 +1337,65 @@ select,
   line-height: 1.4;
 }
 
+/* Settings dialog: a labeled field with an inline control (loop period,
+   pulse duration). */
+.settings-field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.settings-field-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.settings-field-unit {
+  color: var(--muted);
+}
+
+/* A labeled field whose control sits below the label rather than inline —
+   used for wide inputs like the relay URL. */
+.settings-field-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.settings-text-input {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  width: 100%;
+}
+
+.settings-text-input:focus {
+  outline: 1px solid var(--accent);
+}
+
+/* Advanced settings tucked behind a disclosure so they stay out of the way
+   until deliberately opened. */
+.settings-advanced > summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  user-select: none;
+}
+
+.settings-advanced[open] > summary {
+  margin-bottom: 0.8rem;
+  color: var(--accent);
+}
+
 .code-dialog-header {
   display: flex;
   justify-content: space-between;
@@ -1141,6 +1418,30 @@ select,
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* Diagram-check (diagnostics) dialog: section headers and the all-clear note. */
+.diagnostics-section {
+  margin: 0.6rem 0 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diagnostics-section:first-of-type {
+  margin-top: 0;
+}
+
+.diagnostics-clean {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 3px;
+  background: rgba(46, 204, 113, 0.1);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+  font-size: var(--text-sm);
 }
 
 .code-error-error {
@@ -1294,6 +1595,30 @@ select,
   cursor: default;
 }
 
+/* Contextual "add port" buttons, pushed to the far end of the breadcrumb bar.
+   Only rendered while a compound body is open, so they carry no top-level cost. */
+.diagram-breadcrumb-ports {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.diagram-breadcrumb-port-btn {
+  background: rgba(120, 150, 200, 0.1);
+  border: 1px solid rgba(120, 150, 200, 0.3);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  color: rgba(180, 200, 225, 0.9);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.diagram-breadcrumb-port-btn:hover {
+  background: rgba(120, 150, 200, 0.2);
+  color: #d8e4f5;
+}
+
 .trace-banner span {
   font-family: var(--font-mono);
   color: #d4bc78;
@@ -1321,30 +1646,11 @@ select,
 /* (trace-mode node slider/toggle/pulse + trace-signal rules extracted to
    components/diagram.css) */
 
-/* The uppercase group labels (GROUP, SIMULATE, …) stretch each group wider
-   than its buttons, so once the toolbar gets tight they, not the buttons, are
-   what forces a second row. Below this width, drop the labels and lay the
-   groups out compactly in a single row — the buttons alone are self-evident.
-   Set generously (not at the true overflow point) so it also covers browser
-   page-zoom, which shrinks the effective viewport. */
-@media (max-width: 1400px) {
-  .canvas-toolbar {
-    align-items: center;
-  }
-
-  .canvas-toolbar .toolbar-group-label {
-    display: none;
-  }
-
-  .canvas-toolbar .toolbar-group {
-    flex-wrap: nowrap;
-  }
-
-  .canvas-toolbar .toolbar-separator {
-    align-self: center;
-    height: 1.2rem;
-  }
-}
+/* NB: the group captions are kept at every width. They used to be dropped here
+   on narrow screens because, laid out in flow, a caption wider than its buttons
+   stretched the group and forced the toolbar onto a second row. That's no
+   longer possible now the caption is absolutely positioned (see
+   .toolbar-group-label), so there's nothing to hide. */
 
 @media (max-width: 860px) {
   .diagram-layout {
@@ -1772,6 +2078,31 @@ select,
   color: var(--muted);
   font-style: italic;
 }
+
+.serial-monitor-send {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.serial-monitor-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: 0.3rem 0.5rem;
+  background: #14150f;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.serial-monitor-input:disabled {
+  opacity: 0.5;
+}
+
 /* --- Collaborative session (Share menu, toasts, banner) ------------------ */
 
 .toolbar-share .toolbar-split {

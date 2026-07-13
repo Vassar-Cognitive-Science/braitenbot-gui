@@ -17,6 +17,8 @@ export function defaultDiagram(): DiagramState {
     nodes: defaultMotorNodes(),
     connections: [],
     loopPeriodMs: 20,
+    capWeights: true,
+    pulseDurationMs: 200,
     compoundTypes: [],
     comments: [],
   };

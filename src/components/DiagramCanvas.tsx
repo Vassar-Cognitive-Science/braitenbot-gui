@@ -106,6 +106,10 @@ export interface DiagramCanvasProps {
   onConnectionLabelT?: (id: string, labelT: number) => void;
   /** Double-click a compound instance to enter its body. */
   onEnterCompound?: (compoundTypeId: string) => void;
+  /** Rename a node (double-click its label). Omit to disable inline rename. */
+  onRenameNode?: (id: string, label: string) => void;
+  /** Right-click a node — the host opens its context menu at the given point. */
+  onNodeContextMenu?: (id: string, clientX: number, clientY: number) => void;
   /** A link draft started (true) or ended (false) — app toggles `.linking` chrome. */
   onLinkDraftChange?: (active: boolean) => void;
 
@@ -147,6 +151,8 @@ export function DiagramCanvas({
   onConnectionRejected,
   onConnectionLabelT,
   onEnterCompound,
+  onRenameNode,
+  onNodeContextMenu,
   onLinkDraftChange,
   remoteHighlight = EMPTY_HIGHLIGHT,
   onPointerWorldMove,
@@ -172,6 +178,7 @@ export function DiagramCanvas({
     connections,
     compoundTypes,
     blockScale,
+    selectedNodeIds,
     clientToWorld,
     clientToLayer,
     nodeWorldPos,
@@ -190,6 +197,7 @@ export function DiagramCanvas({
     connections,
     compoundTypes,
     blockScale,
+    selectedNodeIds,
     clientToWorld,
     clientToLayer,
     nodeWorldPos,
@@ -210,6 +218,9 @@ export function DiagramCanvas({
   // Set true when a badge drag crosses the threshold, so the trailing click on
   // pointer-up doesn't also open the connection config.
   const badgeClickSuppressRef = useRef(false);
+  // Set true when a multi-node drag actually moves, so the trailing click on
+  // the grabbed node doesn't collapse the selection down to just that node.
+  const nodeClickSuppressRef = useRef(false);
 
   // ── node dragging ───────────────────────────────────────────────────────
 
@@ -220,11 +231,22 @@ export function DiagramCanvas({
     if (!s0.onNodeMove || !s0.clientToWorld) return;
     const node = s0.nodeMap[nodeId];
     if (!node) return;
-    // Grab offset within the node, in world coords: clientToWorld is affine,
-    // so `world − offset` tracks the cursor exactly under any pan/zoom/scale.
+    // If the grabbed node is part of a multi-node selection, drag the whole
+    // selection together; otherwise just the grabbed node. Wheel nodes are
+    // anchored and never move. Positions are captured at grab time and the
+    // world-space drag delta is applied to each, so they keep their layout.
+    const moveIds = s0.selectedNodeIds.has(nodeId) && s0.selectedNodeIds.size > 1
+      ? [...s0.selectedNodeIds]
+      : [nodeId];
+    const movers: { id: string; x0: number; y0: number }[] = [];
+    for (const id of moveIds) {
+      if (isWheelNode(id)) continue;
+      const n = s0.nodeMap[id];
+      if (n) movers.push({ id, x0: n.x, y0: n.y });
+    }
+    // Grab point in world coords: clientToWorld is affine, so the delta from
+    // here tracks the cursor exactly under any pan/zoom/scale.
     const grab = s0.clientToWorld(event.clientX, event.clientY);
-    const offsetX = grab.x - node.x;
-    const offsetY = grab.y - node.y;
     let started = false;
     const move = (e: globalThis.MouseEvent) => {
       const s = stateRef.current;
@@ -235,8 +257,13 @@ export function DiagramCanvas({
       if (!started) {
         started = true;
         s.onNodeDragStart?.(nodeId);
+        // Swallow the click that follows a multi-node drag so it doesn't
+        // reset the selection to just the grabbed node.
+        if (movers.length > 1) nodeClickSuppressRef.current = true;
       }
-      s.onNodeMove?.(nodeId, world.x - offsetX, world.y - offsetY);
+      const dx = world.x - grab.x;
+      const dy = world.y - grab.y;
+      for (const m of movers) s.onNodeMove?.(m.id, m.x0 + dx, m.y0 + dy);
       s.onPointerWorldMove?.(world, nodeId);
     };
     const up = () => {
@@ -482,9 +509,12 @@ export function DiagramCanvas({
             isPulsing={pulsingId === node.id}
             pulseDurationMs={pulseDurationMs}
             beginNodeDrag={beginNodeDrag}
+            clickSuppressRef={nodeClickSuppressRef}
             beginLinkDrag={beginLinkDrag}
             completeLink={completeLink}
             enterCompound={onEnterCompound ?? NOOP_ENTER}
+            onRename={onRenameNode}
+            onContextMenu={onNodeContextMenu}
             pulseSensor={pulseSensor}
             setSelectedNodeIds={setSelectedNodeIds}
             setConfigTarget={setConfigTarget}

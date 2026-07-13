@@ -29,15 +29,23 @@ describe('appSettings persistence', () => {
     delete (globalThis as { localStorage?: Storage }).localStorage;
   });
 
-  it('defaults to capped weights when nothing is stored', () => {
+  it('defaults to auto-selecting an identified board when nothing is stored', () => {
     expect(loadAppSettings()).toEqual(DEFAULT_APP_SETTINGS);
-    expect(DEFAULT_APP_SETTINGS.capWeights).toBe(true);
+    expect(DEFAULT_APP_SETTINGS.autoSelectIdentifiedBoard).toBe(true);
   });
 
   it('round-trips a saved setting', () => {
-    saveAppSettings({ capWeights: false, pulseDurationMs: 350 });
-    expect(loadAppSettings().capWeights).toBe(false);
-    expect(loadAppSettings().pulseDurationMs).toBe(350);
+    saveAppSettings({ autoSelectIdentifiedBoard: false, relayUrl: '' });
+    expect(loadAppSettings().autoSelectIdentifiedBoard).toBe(false);
+  });
+
+  it('defaults the relay URL to empty (use the built-in relay)', () => {
+    expect(DEFAULT_APP_SETTINGS.relayUrl).toBe('');
+  });
+
+  it('round-trips a custom relay URL', () => {
+    saveAppSettings({ autoSelectIdentifiedBoard: true, relayUrl: 'ws://localhost:1234' });
+    expect(loadAppSettings().relayUrl).toBe('ws://localhost:1234');
   });
 
   it('falls back to the default on malformed JSON', () => {
@@ -46,8 +54,13 @@ describe('appSettings persistence', () => {
   });
 
   it('falls back to the default when a known key has the wrong type', () => {
-    localStorage.setItem('braitenbot-gui:settings:v1', JSON.stringify({ capWeights: 'nope' }));
-    expect(loadAppSettings().capWeights).toBe(DEFAULT_APP_SETTINGS.capWeights);
+    localStorage.setItem(
+      'braitenbot-gui:settings:v1',
+      JSON.stringify({ autoSelectIdentifiedBoard: 'nope' }),
+    );
+    expect(loadAppSettings().autoSelectIdentifiedBoard).toBe(
+      DEFAULT_APP_SETTINGS.autoSelectIdentifiedBoard,
+    );
   });
 
   it('returns the default when localStorage is unavailable', () => {

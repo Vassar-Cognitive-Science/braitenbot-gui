@@ -1,7 +1,7 @@
-import React from 'react';
-import type { CSSProperties, Dispatch, MouseEvent, SetStateAction } from 'react';
-import type { CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
-import { TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
+import React, { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, Dispatch, MouseEvent, MutableRefObject, SetStateAction } from 'react';
+import type { ColorChannel, CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
+import { COLOR_CHANNEL_LABELS, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
 import type { NodeTypeId } from '../types/diagram';
@@ -89,9 +89,16 @@ interface DiagramNodeViewProps {
   // Duration of the "▶" sensor pulse — shown in the button tooltip.
   pulseDurationMs: number;
   beginNodeDrag: (event: MouseEvent, nodeId: string) => void;
+  // Set by beginNodeDrag when a multi-node drag moves; the node's onClick
+  // reads and clears it to swallow the click that ends the drag.
+  clickSuppressRef: MutableRefObject<boolean>;
   beginLinkDrag: (event: MouseEvent, nodeId: string, port?: OutputPortId) => void;
   completeLink: (toId: string, toPort?: string) => void;
   enterCompound: (compoundTypeId: string) => void;
+  // Double-click the label to rename; omitted (or readOnly) disables it.
+  onRename?: (id: string, label: string) => void;
+  // Right-click the node body; the host opens a context menu at the point.
+  onContextMenu?: (id: string, clientX: number, clientY: number) => void;
   pulseSensor: (id: string) => void;
   setSelectedNodeIds: Dispatch<SetStateAction<Set<string>>>;
   setConfigTarget: Dispatch<SetStateAction<ConfigTarget | null>>;
@@ -125,9 +132,12 @@ function DiagramNodeViewInner({
   isPulsing,
   pulseDurationMs,
   beginNodeDrag,
+  clickSuppressRef,
   beginLinkDrag,
   completeLink,
   enterCompound,
+  onRename,
+  onContextMenu,
   pulseSensor,
   setSelectedNodeIds,
   setConfigTarget,
@@ -139,6 +149,25 @@ function DiagramNodeViewInner({
 }: DiagramNodeViewProps) {
   const nodeType = TYPE_BY_ID[node.type];
   const isCompoundInput = node.type === 'compound-input';
+  // Inline label rename (double-click the label text). Disabled in read-only
+  // views or when the host doesn't supply an onRename callback.
+  const canRename = !readOnly && onRename !== undefined;
+  const [renaming, setRenaming] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  // On open, focus the field and select its text (file-rename behavior), so the
+  // caret is live and typing replaces the old label immediately.
+  useEffect(() => {
+    if (!renaming) return;
+    const el = renameInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [renaming]);
+  const commitRename = (raw: string) => {
+    setRenaming(false);
+    const next = raw.trim();
+    if (next && next !== node.label) onRename?.(node.id, next);
+  };
   const hasSlider =
     traceMode &&
     (nodeType.kind === 'sensor' ||
@@ -186,6 +215,7 @@ function DiagramNodeViewInner({
         hasSlider ? 'trace-expanded' : '',
         hasSlider && node.type === 'sensor-color' ? 'trace-color-expanded' : '',
         remoteColor ? 'remote-selected' : '',
+        renaming ? 'renaming' : '',
       ].filter(Boolean).join(' ')}
       style={{
         left: `${worldX}px`,
@@ -195,7 +225,24 @@ function DiagramNodeViewInner({
           : null),
       }}
       onMouseDown={(event) => beginNodeDrag(event, node.id)}
+      onContextMenu={
+        onContextMenu
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedNodeIds(new Set([node.id]));
+              setConfigTarget({ kind: 'node', id: node.id });
+              onContextMenu(node.id, event.clientX, event.clientY);
+            }
+          : undefined
+      }
       onClick={(event) => {
+        // A multi-node drag just ended: swallow this click so it doesn't
+        // collapse the selection down to only the grabbed node.
+        if (clickSuppressRef.current) {
+          clickSuppressRef.current = false;
+          return;
+        }
         if (event.shiftKey) {
           // Toggle this node in the multi-select set without
           // disturbing the rest.
@@ -225,7 +272,19 @@ function DiagramNodeViewInner({
           {remoteLabel}
         </span>
       )}
-      <div className="node-label">
+      <div
+        className="node-label"
+        onDoubleClick={
+          canRename
+            ? (event) => {
+                // Rename on label double-click; stop it reaching the node's
+                // enter-compound double-click handler.
+                event.stopPropagation();
+                setRenaming(true);
+              }
+            : undefined
+        }
+      >
         {(() => {
           const TypeIcon = NODE_TYPE_ICONS[node.type];
           return TypeIcon ? (
@@ -234,7 +293,30 @@ function DiagramNodeViewInner({
             </span>
           ) : null;
         })()}
-        {node.label}
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="node-label-input"
+            type="text"
+            defaultValue={node.label}
+            spellCheck={false}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onBlur={(e) => commitRename(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitRename((e.target as HTMLInputElement).value);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setRenaming(false);
+              }
+            }}
+          />
+        ) : (
+          node.label
+        )}
       </div>
       <div className={`node-meta ${traceValue !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
       {hasSlider && node.type === 'sensor-digital' && (
@@ -278,8 +360,11 @@ function DiagramNodeViewInner({
         <div className="trace-color-sliders">
           {getOutputPorts('sensor-color')!.map((ch, i) => (
             <div className="trace-slider-row" key={ch}>
-              <span className={`trace-slider-label output-port-label-${ch}`}>
-                {ch[0].toUpperCase()}
+              <span
+                className={`trace-slider-label output-port-label-${ch}`}
+                title={COLOR_CHANNEL_LABELS[ch as ColorChannel].name}
+              >
+                {COLOR_CHANNEL_LABELS[ch as ColorChannel].short}
               </span>
               <input
                 type="range"
@@ -361,19 +446,29 @@ function DiagramNodeViewInner({
           );
         }
         const isCompound = node.type === 'compound';
+        const isColorSensor = node.type === 'sensor-color';
         // Pre-formatted per-port values from the parent; '' = no value.
         const portValues = outputPortValues?.split(',');
         return ports.map((port, i) => {
           const leftPct = ((i + 0.5) / ports.length) * 100;
-          const label = isCompound ? getPortLabel(port, node, compoundTypes) : port[0].toUpperCase();
+          // Color channels get a friendly display name (White/Red/…); the
+          // clear/unfiltered diode reads total light, hence "White" (short "W"
+          // so it doesn't collide with Red/Green/Blue on the handle).
+          const colorChannel = isColorSensor ? COLOR_CHANNEL_LABELS[port as ColorChannel] : undefined;
+          const label = isCompound
+            ? getPortLabel(port, node, compoundTypes)
+            : colorChannel
+              ? colorChannel.short
+              : port[0].toUpperCase();
+          const portTitle = colorChannel ? colorChannel.name : port;
           const portValue = portValues?.[i] || undefined;
           return (
             <span key={port}>
               <button
                 className={`node-handle output-handle output-handle-port output-handle-${port}`}
                 style={{ left: `${leftPct}%` }}
-                title={port}
-                aria-label={`Start ${port} connection from ${node.label}`}
+                title={portTitle}
+                aria-label={`Start ${portTitle} connection from ${node.label}`}
                 onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
               />
               <span

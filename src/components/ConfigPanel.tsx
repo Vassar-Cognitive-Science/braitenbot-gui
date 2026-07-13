@@ -215,9 +215,16 @@ export function ConfigPanel({
                 </select>
               </label>
               <p className="config-description">
-                This sensor exposes four output anchors — clear, red, green, blue.
-                Drag from the specific anchor to wire that channel. Raise the
-                gain if readings are too low in dim light.
+                This sensor exposes four output anchors — White (W), Red, Green,
+                and Blue. Drag from a specific anchor to wire that channel.
+                <br />
+                <strong>White</strong> is the sensor's unfiltered channel: it
+                reads the <em>total</em> light hitting the sensor across all
+                colors, so brighter surroundings give a higher value. Wire it when
+                you want the robot to react to how light or dark it is regardless
+                of color (e.g. steer toward or away from a bright spot); use Red,
+                Green, or Blue when the actual color matters. Raise the gain if
+                readings are too low in dim light.
               </p>
             </>
           )}
@@ -455,17 +462,28 @@ export function ConfigPanel({
               {capWeights && (
                 <label>
                   Connection Weight
-                  <input
-                    type="range"
-                    min="-1"
-                    max="1"
-                    step="0.05"
-                    value={selectedConnection.weight}
-                    onChange={(event) => {
-                      const value = clampWeight(parseFloat(event.target.value));
-                      patchConnection(selectedConnection.id, { weight: value });
-                    }}
-                  />
+                  <div className="weight-slider">
+                    <input
+                      className="weight-slider-input"
+                      type="range"
+                      min="-1"
+                      max="1"
+                      step="0.05"
+                      value={selectedConnection.weight}
+                      onChange={(event) => {
+                        const value = clampWeight(parseFloat(event.target.value));
+                        patchConnection(selectedConnection.id, { weight: value });
+                      }}
+                    />
+                    {/* Scale under the track: the extremes (−1 / +1) and the
+                        zero (no-coupling) midpoint, so the sign and magnitude
+                        read at a glance. */}
+                    <div className="weight-slider-scale" aria-hidden="true">
+                      <span className="weight-slider-tick">−1</span>
+                      <span className="weight-slider-tick weight-slider-tick-zero">0</span>
+                      <span className="weight-slider-tick">+1</span>
+                    </div>
+                  </div>
                 </label>
               )}
               <label>

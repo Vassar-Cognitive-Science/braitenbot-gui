@@ -37,6 +37,8 @@ function initialState(): DiagramState {
       },
     ],
     loopPeriodMs: 20,
+    capWeights: true,
+    pulseDurationMs: 200,
     compoundTypes: [],
     comments: [],
   };
@@ -270,16 +272,20 @@ describe('SessionManager end-to-end through the relay', () => {
       nodes: snap.topNodes,
       connections: snap.topConnections,
       loopPeriodMs: snap.loopPeriodMs,
+      capWeights: snap.capWeights,
+      pulseDurationMs: snap.pulseDurationMs,
       compoundTypes: snap.compoundTypes,
       comments: snap.comments,
     });
     const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual([
+      'capWeights',
       'comments',
       'compoundTypes',
       'connections',
       'loopPeriodMs',
       'nodes',
+      'pulseDurationMs',
     ]);
     expect(text).not.toContain('trace');
     expect(text).not.toContain('enabled');
