@@ -19,8 +19,18 @@ export function App() {
     sessionManager.setRelayUrl(resolveRelayUrl(appSettings.relayUrl));
   }, [appSettings.relayUrl]);
 
+  // This is a desktop app, not a web page: the native context menu (Print,
+  // Reload, Save As, Inspect…) is meaningless here and only leaks through where
+  // we don't render our own menu. Suppress it app-wide, but leave it on
+  // editable fields so right-click copy/paste on text inputs still works.
+  const suppressNativeMenu = (event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('input, textarea, [contenteditable="true"]')) return;
+    event.preventDefault();
+  };
+
   return (
-    <div className="app">
+    <div className="app" onContextMenu={suppressNativeMenu}>
       <main className="app-main">
         <BraitenbergDiagram
           arduino={arduino}

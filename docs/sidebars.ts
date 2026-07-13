@@ -6,6 +6,7 @@ const sidebars: SidebarsConfig = {
     // browser-only Lessons first (no install), then get the app, then reach for
     // reference material, then put it on real hardware.
     'intro',
+    'teaching-with-braitenbot',
     {
       type: 'category',
       label: 'Lessons',

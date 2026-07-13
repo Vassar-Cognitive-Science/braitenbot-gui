@@ -11,7 +11,7 @@ Trace mode lets you simulate your diagram's signal flow without hardware. It's t
 
 ## Try it live
 
-The diagram below runs the exact same simulation the desktop app uses. Drag the light sensor's slider (or tap **▶** to pulse it) and watch the signal propagate to the two motors. This is a Braitenberg *vehicle 2* with crossed wiring: more light on the sensor speeds up the far wheel, so the vehicle turns *toward* light.
+The diagram below runs the exact same simulation the desktop app uses. Drag the light sensor's slider (or tap **▶** to pulse it) and watch the signal propagate to the two motors. This is a cross-wired Braitenberg vehicle 2 — see the [Fear & Love lesson](../lessons/fear-and-love) for why that wiring turns it toward light.
 
 This one is **editable** — drag the nodes around, drag from a node's bottom dot to draw a new wire, or click a connection's weight badge to retune it. Try adding a **Threshold** node between the sensor and a motor so the wheel only kicks in past a certain brightness, or drop in a second **Analog Sensor** to give the vehicle a second eye. Hit **Reset** to get the original wiring back.
 
@@ -115,6 +115,10 @@ This two-phase approach ensures that feedback cycles produce stable, predictable
 
 - **Oscillator** nodes generate a sine wave based on simulation time, using the configured frequency and amplitude
 - **Noise** nodes generate a new random value each tick
+
+## Calibrating with trace mode
+
+Thresholds you see in a lesson or a screenshot are starting points, not answers — your sensors, your lighting, and your surface will read differently. The reusable ritual is the same every time: put the robot in the real environment, activate trace mode, and read the actual numbers off the live sensor and compute nodes as you move it through the scenario. Set thresholds and weights against *those* numbers, not the ones from a tutorial. Repeat whenever the environment changes — a new room, a new time of day, or a fresh battery can all shift what "bright" or "close" reads as on the hardware.
 
 ## Tips for effective tracing
 

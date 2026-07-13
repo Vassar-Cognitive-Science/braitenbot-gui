@@ -54,8 +54,8 @@ There are nine modes, one per device:
 | `0008` | Right wheel | Same drive pattern for the right wheel. |
 | `0009` | Display self-test | Lights every segment (`8888` plus the colon) to confirm the display itself works. |
 
-The two ToF distance sensors share one I2C connection, so the test gives each a
-separate address using its XSHUT pin — both XSHUT pins must be wired for this to
-work. A ToF sensor the test can't find shows `----` instead of a distance. The
+The two ToF distance sensors share one I2C bus — see [Supported Hardware ▸ I2C
+pins](./supported-hardware#i2c-pins) for how the test tells them
+apart. A ToF sensor the test can't find shows `----` instead of a distance. The
 test always starts, even if a sensor is missing or a cable is loose, so a bad
 connection won't freeze it.

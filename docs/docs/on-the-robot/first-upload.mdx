@@ -11,22 +11,18 @@ You built Vehicle 1 in [1. Your First Vehicle](../lessons/your-first-vehicle) �
 
 On the physical robot, the light sensor is a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
 
-The kit's sensor presets already point at the right pins. The photocell node is wired to **A0**, and this is where you *would* point the sensor at a different pin — if you wired your own photoresistor to, say, A2, you'd change the **Arduino Port** in the node's config panel. For the kit build, the preset already has it right.
-
-The two wheel nodes also come pre-configured: their servo pins are set to **D5** and **D6**, matching the kit wiring, so there's nothing to configure there before uploading.
+The kit's sensor presets already point at the right pins — the photocell node is wired to **A0**, and the wheel servos to **D5**/**D6** (see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring). If you wired your own photoresistor to a different pin, you'd change the **Arduino Port** in the node's config panel — but for the kit build, the presets already have it right, so there's nothing to configure before uploading.
 
 ## Upload the diagram
 
 With the Vehicle 1 diagram open and an Arduino connected:
 
-1. Set the **Sketch loop period** to `20` ms in **Settings** (the ⚙ gear at the far right of the toolbar) — this means the robot reads its sensor and updates its motors 50 times per second
-2. Select your board in the **Device** dropdown
-3. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board
-
-If you don't have a board connected yet, you can still click the **▾** chevron next to the button, choose **Generate code only**, and then click the button to see the generated sketch.
+1. Set the **Sketch loop period** to `20` ms in **Settings** (the ⚙ gear at the far right of the toolbar) — see [Settings](../getting-started/editor#settings) for what loop period controls
+2. Select your board in the **Device** dropdown — see [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-arduino) if it doesn't show up
+3. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board. (No board yet? See [Sketch](../getting-started/editor#sketch) for what the **▾** chevron's other options do.)
 
 :::note[Board not showing up?]
-If the Device dropdown is empty, check the cable and click Refresh. See [Connecting your Arduino](../getting-started/arduino-setup) for first-time setup.
+See [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-arduino) for first-time setup.
 :::
 
 ## The flashlight test

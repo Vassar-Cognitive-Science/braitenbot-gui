@@ -106,14 +106,20 @@ export default function Home(): React.ReactElement {
               <em>Vehicles</em>, made tangible.
             </p>
             <div className={`${styles.actions} ${styles.rise}`} style={{ animationDelay: '0.2s' }}>
-              <Link className={styles.ctaPrimary} to="/install">
-                Download BraitenBot <Arrow />
+              <Link className={styles.ctaPrimary} to="/docs/lessons/your-first-vehicle">
+                For students <Arrow />
               </Link>
-              <Link className={styles.ctaGhost} to="/docs">
-                Read the documentation <Arrow />
+              <Link className={styles.ctaGhost} to="/docs/teaching-with-braitenbot">
+                For educators <Arrow />
               </Link>
             </div>
-            <p className={`${styles.meta} ${styles.rise}`} style={{ animationDelay: '0.25s' }}>
+            <Link
+              className={`${styles.ctaSecondary} ${styles.rise}`}
+              style={{ animationDelay: '0.25s' }}
+              to="/install">
+              Download BraitenBot <Arrow />
+            </Link>
+            <p className={`${styles.meta} ${styles.rise}`} style={{ animationDelay: '0.3s' }}>
               Open source · macOS · Windows · Linux
             </p>
           </div>

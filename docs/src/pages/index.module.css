@@ -125,6 +125,29 @@
   transform: translateX(3px);
 }
 
+/* Secondary CTA: the download link, demoted below the audience fork — same
+   family as the mono meta line, just linkable and with its own arrow. */
+.ctaSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+  font-family: var(--bb-font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--bb-ink-soft);
+}
+
+.ctaSecondary:hover {
+  text-decoration: none;
+  color: var(--bb-signal-text);
+}
+
+.ctaSecondary:hover .ctaArrow {
+  transform: translateX(3px);
+}
+
 .meta {
   margin-top: 1.5rem;
   font-family: var(--bb-font-mono);

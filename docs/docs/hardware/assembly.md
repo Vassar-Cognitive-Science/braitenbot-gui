@@ -37,6 +37,8 @@ assumes — if you change any pin, update `config.h` in the test sketch to match
 | Left photocell | A0 | Analog input (on-board voltage divider) |
 | Right photocell | A1 | Analog input (on-board voltage divider) |
 
+All four bump switches use `INPUT_PULLUP` — see [Digital sensors](./supported-hardware#digital-sensors) for what that does to the reading.
+
 ### Shared I2C bus
 
 The two ToF distance sensors and the color sensor all share the dedicated
@@ -48,9 +50,7 @@ The two ToF distance sensors and the color sensor all share the dedicated
 | Left ToF distance (VL53L4CD) | `0x2A` | Reassigned at startup via its XSHUT pin (D8) |
 | Right ToF distance (VL53L4CD) | `0x2B` | Reassigned at startup via its XSHUT pin (D12) |
 
-Every VL53L4CD powers up at the default `0x29` — the same address as the color
-sensor — so the firmware holds both ToF sensors in reset, then brings them up one
-at a time and moves each to a unique address. See [Nodes ▸ ToF Distance](../guide/nodes#tof-distance-vl53l4cd).
+See [Supported Hardware ▸ I2C pins](./supported-hardware#i2c-pins) for why every VL53L4CD needs its own XSHUT pin.
 
 ### Reserved pins
 

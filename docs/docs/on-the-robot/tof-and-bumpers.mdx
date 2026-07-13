@@ -13,13 +13,13 @@ Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled o
 
 ### XSHUT wiring
 
-Because both sensors sit on the same I2C bus and ship with the same default address, each needs its own **XSHUT** pin so BraitenBot can wake them one at a time at startup and give each a unique address (see [Supported Hardware](../hardware/supported-hardware)). The kit presets have this covered: **Left ToF Distance** uses XSHUT on **D8**, **Right ToF Distance** on **D12**. Both sensors share SDA/SCL; only the XSHUT lines are separate. Both XSHUT pins must be wired, or one sensor won't come up.
+**Left ToF Distance** uses XSHUT on **D8**, **Right ToF Distance** on **D12** — both must be wired, or one sensor won't come up. See [Supported Hardware ▸ I2C pins](../hardware/supported-hardware#i2c-pins) for why each ToF sensor needs its own XSHUT pin.
 
 ## Calibrating the threshold
 
 Because the ToF reports distance, the threshold is easy to reason about: with the **ToF Distance** node's max distance left at its default of 500 mm, a closer object reads higher, so a threshold of 60 fires at roughly 200 mm (about 20 cm).
 
-To calibrate on the real robot: hold an object at the distance you want it to start turning, read the value in trace mode, and set the threshold just below it. Put the robot near a wall, activate trace mode, and watch the sensor readings — note the value at the distance where you want the robot to start turning.
+To find the right threshold for your build, put the robot near a wall at the distance you want it to start turning and read the value off — see [Calibrating with trace mode](../guide/simulation#calibrating-with-trace-mode) for the ritual — then set the threshold just below it.
 
 The right threshold depends on your specific sensors and how they're mounted:
 
@@ -42,7 +42,7 @@ Weights are limited to the range -1 to +1, so **-1.0 is the sharpest single-conn
 
 The ToF sensors miss things — a thin chair leg, or a surface angled so the laser beam scatters away instead of bouncing back. The bump switches are the backstop.
 
-On the physical robot, the front-left bump switch is wired between pin **D2** and ground, and the front-right between **D3** and ground. The **Bump Front-Left** and **Bump Front-Right** presets come with **INPUT_PULLUP** enabled — so pressing the switch reads as 100 in BraitenBot (pullup mode inverts the signal, so pressing the button produces a HIGH reading).
+On the physical robot, the front-left bump switch is wired between pin **D2** and ground, and the front-right between **D3** and ground. The **Bump Front-Left** and **Bump Front-Right** presets come with **INPUT_PULLUP** enabled — so pressing the switch reads as 100 in BraitenBot. See [Digital sensors](../hardware/supported-hardware#digital-sensors) for why pullup mode inverts the reading like that.
 
 :::note[A real bump is over before you see it]
 On real switches the contact is momentary — maybe 50 ms, only a few loop iterations. By the time the next loop runs, the bumper is already open again and the event is gone. That's why the bumper feeds a latch rather than a motor directly: the circuit from [5. Memory](../lessons/latches-with-delay) captures the click and holds it long enough to act on.

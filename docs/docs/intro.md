@@ -37,6 +37,8 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 - **Lessons** — start here: six hands-on builds that run right in your browser,
   no install required. Play first.
+- **Teaching with BraitenBot** — planning a class? The course overview links the
+  lesson arc and the hardware build in one place.
 - **Getting Started** — when you're ready to build your own, install the app,
   set up Arduino, and learn the editor.
 - **Designing Vehicles** — reference for the building blocks: nodes, connections,
@@ -50,5 +52,6 @@ The separate **Hardware** section covers building the physical robot.
 ## Next steps
 
 - [Play your first lesson](./lessons/your-first-vehicle) — nothing to install
+- [Teaching this as a course?](./teaching-with-braitenbot) — the educator overview
 - [Install BraitenBot](./getting-started/installation) when you want to build your own
 - [Explore the building blocks](./guide/nodes)

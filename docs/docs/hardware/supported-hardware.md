@@ -98,6 +98,8 @@ Any sensor with a HIGH/LOW output works with a Digital Sensor node:
 - **Bump / lever switch** — mechanical contact (use INPUT_PULLUP). This is the
   kit's digital sensor.
 
+With `INPUT_PULLUP` enabled, the pin idles HIGH and reads LOW when pressed; BraitenBot inverts this in software, so a press reads as **100** and idle reads as **0**.
+
 Other digital sensors the node can read (not part of the kit):
 
 - **PIR motion sensor** — motion detection
