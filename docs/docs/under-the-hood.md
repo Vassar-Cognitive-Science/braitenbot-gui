@@ -5,7 +5,7 @@ title: Under the Hood
 
 # Under the Hood
 
-You don't need anything on this page to use BraitenBot — the editor and tutorials
+You don't need anything on this page to use BraitenBot — the editor and lessons
 cover everything at the diagram level. This is for the curious: what the app
 actually produces when you generate or upload a sketch, and how your work is saved.
 
@@ -52,8 +52,8 @@ compute node, and output is computed) follows directly from the
 
 ## Saving and sharing diagrams
 
-Diagrams are saved as plain **JSON files** you can share, email, or check into
-version control. BraitenBot also autosaves your current diagram to the browser's
+Diagrams are saved as **`.bbot` files** (plain JSON inside) you can share, email,
+or check into version control. BraitenBot also autosaves your current diagram to the browser's
 local storage, so it's still there when you reopen the app. **File ▸ New** resets
 to an empty canvas (with the two wheels), and **Save** / **Open** use a normal
 file dialog.

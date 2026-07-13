@@ -29,6 +29,7 @@ If the host has locked the session or ends it before admitting you, you'll see a
 - **Connection status dot** on the Share button indicates synced / reconnecting / offline.
 - **Participant list** in the Share menu shows every participant with their color swatch and role.
 - **Presence**: everyone's selection outline and drag ghost is drawn in their assigned color, so you can tell whose hand is on the node you're watching.
+- **Diagram preferences** (connection-weight cap, sketch loop period, trace pulse duration) are part of the shared diagram, so the **host's** values apply to everyone and are read-only for view-only guests. Your **personal preferences** (e.g. auto-selecting an identified board) stay on your own device.
 
 ### Roles: Edit vs. View
 
@@ -79,6 +80,38 @@ If your network drops mid-session, a banner appears: **Connection lost — recon
 
 - **Same app version.** The host and all guests must run the same BraitenBot GUI version. A mismatched guest is refused at handshake with a clear message — update to match, then rejoin.
 - **Outbound WebSocket to the relay.** Sessions run over `wss://` to the project's ephemeral relay. Locked-down networks that block WebSockets will block sessions.
+
+## Self-hosting the relay
+
+The relay is a small standalone WebSocket server that only brokers session traffic — it holds each room's live diagram in memory (a Yjs document) for the life of the session and never writes it to disk. If you'd rather not depend on the project's relay — for a classroom on an isolated network, or to keep session traffic on your own infrastructure — you can run your own.
+
+### Run the server
+
+The relay lives in the `relay/` directory of the [source repository](https://github.com/Vassar-Cognitive-Science/braitenbot-gui) and has no dependency on the desktop app. From a checkout:
+
+```bash
+npm install
+npm run relay:dev          # dev: runs relay/src/index.ts on ws://localhost:1234
+# or, for a build:
+npm run relay:build        # compiles to relay/dist/
+node relay/dist/index.js   # runs the compiled server
+```
+
+Environment variables:
+
+- `RELAY_PORT` (or `PORT`) — port to listen on (default `1234`).
+- `RELAY_HOST` — interface to bind (default: all interfaces).
+- `RELAY_TRUST_PROXY=1` — trust the `X-Forwarded-For` header for the client IP. Set this **only** when the relay sits behind a reverse proxy (Apache/nginx) that overwrites the header; otherwise clients could spoof it to bypass the per-IP rate limits.
+
+For anything beyond localhost, put the relay behind a reverse proxy that terminates TLS so clients can reach it over `wss://` — browsers block insecure `ws://` from a secure page, and the desktop app expects `wss://` for anything off your machine.
+
+### Point the app at it
+
+Open **Settings → Advanced** and set **Collaboration relay URL** to your server's WebSocket URL (e.g. `wss://relay.example.edu/braitenbot` or `ws://localhost:1234` for local testing). Leave it blank to fall back to the built-in relay.
+
+This is a personal, per-device preference: it only affects sessions you start or join from this machine, and it takes effect the next time you host or join. **Everyone in a session must use the same relay** — the host and all guests need matching relay URLs, since a room only exists on the relay that created it.
+
+(The default relay endpoint can also be fixed at build time with the `VITE_RELAY_URL` environment variable if you distribute your own build.)
 
 ## What is (and isn't) synced
 

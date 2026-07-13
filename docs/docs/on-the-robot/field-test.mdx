@@ -5,7 +5,7 @@ title: "Field Test: Let It Loose"
 
 # Field Test: Let It Loose
 
-You built the three-layer robot in [6. Nobody Home](../tutorials/subsumption-architecture) — now put it in a room with furniture and let it fend for itself.
+You built the three-layer robot in [6. Nobody Home](../lessons/subsumption-architecture) — now put it in a room with furniture and let it fend for itself.
 
 ## What you should see
 
@@ -29,7 +29,7 @@ The escape latch's feedback weight is your dial for how long the robot reverses 
 | 0.98 | 2.3 s |
 | 0.99 | 4.6 s |
 
-One quirk you'll notice on real hardware: a longer or firmer bump charges the latch past 100, which stretches the hold a little — the table values assume a brief trigger that tops out near 100. If the robot seems to back up longer after hard collisions, that's the latch working as wired, not a bug.
+These holds are **shorter** than the table in the [Memory lesson](../lessons/latches-with-delay), and the difference is instructive: that lesson simulates a deliberate 100 ms tap that charges the latch to about **450**, while a real bumper contact is far briefer and tops out near **100**. Same formula (`hold ≈ loopPeriod × ln(T / charge) / ln(w)`), smaller charge, shorter hold. A longer or firmer bump charges it higher and stretches the hold; if the robot seems to back up longer after hard collisions, that's the latch working as wired, not a bug.
 
 ## Troubleshooting
 

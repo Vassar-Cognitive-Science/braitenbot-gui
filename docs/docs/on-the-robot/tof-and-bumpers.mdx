@@ -5,7 +5,7 @@ title: "Rangefinders & Bumpers"
 
 # Rangefinders & Bumpers
 
-You built the avoider in [3. Don't](../tutorials/obstacle-avoidance) and gave it a memory in [5. Memory](../tutorials/latches-with-delay) — now mount the sensors that make both circuits real.
+You built the avoider in [3. Don't](../lessons/obstacle-avoidance) and gave it a memory in [5. Memory](../lessons/latches-with-delay) — now mount the sensors that make both circuits real.
 
 ## Mounting the ToF sensors
 
@@ -45,7 +45,7 @@ The ToF sensors miss things — a thin chair leg, or a surface angled so the las
 On the physical robot, the front-left bump switch is wired between pin **D2** and ground, and the front-right between **D3** and ground. The **Bump Front-Left** and **Bump Front-Right** presets come with **INPUT_PULLUP** enabled — so pressing the switch reads as 100 in BraitenBot (pullup mode inverts the signal, so pressing the button produces a HIGH reading).
 
 :::note[A real bump is over before you see it]
-On real switches the contact is momentary — maybe 50 ms, only a few loop iterations. By the time the next loop runs, the bumper is already open again and the event is gone. That's why the bumper feeds a latch rather than a motor directly: the circuit from [5. Memory](../tutorials/latches-with-delay) captures the click and holds it long enough to act on.
+On real switches the contact is momentary — maybe 50 ms, only a few loop iterations. By the time the next loop runs, the bumper is already open again and the event is gone. That's why the bumper feeds a latch rather than a motor directly: the circuit from [5. Memory](../lessons/latches-with-delay) captures the click and holds it long enough to act on.
 :::
 
 ## What's next

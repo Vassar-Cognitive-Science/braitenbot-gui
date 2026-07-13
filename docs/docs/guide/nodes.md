@@ -104,15 +104,17 @@ float sig_sensor = (pulsed_sensor || digitalRead(PIN) == HIGH) ? 100.0 : 0.0;
 | Type ID | `sensor-color` |
 | Kind | sensor |
 | Inputs | 0 |
-| Outputs | 4 (clear, red, green, blue) |
+| Outputs | 4 (White, Red, Green, Blue) |
 | Protocol | i2c |
 
 Reads a TCS34725 color sensor over I2C and outputs four channels, each scaled to **0–100** (normalized against the ADC's full-scale count of 44032 at the configured integration time, so a saturated channel reads 100):
 
-- `clear` — ambient light intensity
-- `red` — red channel
-- `green` — green channel
-- `blue` — blue channel
+- **White** (handle `W`) — the sensor's unfiltered "clear" photodiode. It reads the **total** light across all colors, so brighter surroundings give a higher value — and it usually reads higher than any single color channel rather than being their average. Wire it when the robot should react to overall light level regardless of color (light-seeking / light-avoiding behaviors).
+- **Red** (`R`) — red channel
+- **Green** (`G`) — green channel
+- **Blue** (`B`) — blue channel
+
+The three color channels are for telling *colors apart* (e.g. red line vs. blue line); use **White** when you only care *how much* light there is.
 
 **Configuration:**
 - **Gain** — RGBC gain multiplier: 1×, 4×, 16×, or 60× (default: 16×). Higher gain lifts readings in dim light; lower gain avoids saturation under bright light. The I2C address (0x29) is fixed.
@@ -430,7 +432,7 @@ Drives a 4-digit 7-segment TM1637 display. Rounds the input to the nearest integ
 
 **Configuration:**
 - **CLK Pin** — the clock pin
-- **GPIO Pin** — the data pin
+- **DIO Pin** — the data pin
 - **Brightness** — 0–7 (default: 3)
 
 ---

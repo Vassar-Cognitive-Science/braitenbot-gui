@@ -47,7 +47,7 @@ One eye, pointed at the floor, and two completely different reactions: red makes
 
 ## Four sensors sharing one eye
 
-The **Color Sensor** node has something no other node has: **four output ports** along its bottom edge, tinted grey, red, green, and blue. **Red**, **Green**, and **Blue** report how much light in each band bounces back from the surface below; **Clear** is overall brightness. Each channel reads 0–100, and to wire one you drag from that specific colored dot.
+The **Color Sensor** node has something no other node has: **four output ports** along its bottom edge, tinted grey, red, green, and blue. **Red**, **Green**, and **Blue** report how much light in each band bounces back from the surface below; the grey **White** port (labelled `W`) is the sensor's unfiltered channel — the total light across all colors, regardless of hue. Each channel reads 0–100, and to wire one you drag from that specific colored dot.
 
 The crucial thing is that *nothing about the color sensor is special* — a channel is just a light sensor with a colored filter in front of it. You already know how to wire a light sensor. You now have four of them, aimed at the same spot.
 
@@ -55,7 +55,7 @@ The crucial thing is that *nothing about the color sensor is special* — a chan
 
 The obvious plan for detecting red: threshold the **red** channel. Wire `red` → Threshold, fire when it's high. Before you commit, here's what the four channels actually read over four different surfaces:
 
-| Surface | red | green | blue | clear |
+| Surface | red | green | blue | white |
 |---------|-----|-------|------|-------|
 | Plain grey floor | 12 | 12 | 11 | 12 |
 | Red patch | 45 | 15 | 12 | 25 |
@@ -255,7 +255,7 @@ The cruise chain — a Forward constant of 40 feeding both wheel summations — 
   caption="See Red into both sums at +0.4; See Blue into Left Sum at −1.0. Then run the four surfaces from the readings table through the sliders and watch it choose."
 />
 
-Once it's solved, don't skip the best part: set the sliders to white paper (red 70, green 72, blue 68, clear 70). Every raw channel is pegged near 70 — and the robot cruises straight over it at 40, completely indifferent. The naive red-channel robot would have gone wild here. Yours doesn't even notice.
+Once it's solved, don't skip the best part: set the sliders to white paper (red 70, green 72, blue 68, white 70). Every raw channel is pegged near 70 — and the robot cruises straight over it at 40, completely indifferent. The naive red-channel robot would have gone wild here. Yours doesn't even notice.
 
 :::note[Thinking like Braitenberg]
 

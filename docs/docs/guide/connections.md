@@ -145,7 +145,7 @@ The delay time is configurable (0–10,000 ms); BraitenBot converts it to a numb
 of loop iterations (delay time ÷ loop period) and buffers that many past values.
 A cycle **without** a delay node is a validation error, and BraitenBot won't
 generate code for it. To build something that uses this on purpose, see the
-[latch tutorial](../tutorials/latches-with-delay).
+[Memory lesson](../lessons/latches-with-delay).
 
 ## Multi-port connections
 

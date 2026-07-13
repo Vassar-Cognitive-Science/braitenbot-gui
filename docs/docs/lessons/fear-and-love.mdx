@@ -21,8 +21,8 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
       { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'c1', from: 'left-sensor', to: 'right-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'c2', from: 'right-sensor', to: 'left-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'c1', labelT: 0.35, from: 'left-sensor', to: 'right-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.35, from: 'right-sensor', to: 'left-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Two eyes, two wheels, two wires. Drag the left eye brighter — which wheel races, and which way does the nose swing?"
@@ -142,8 +142,8 @@ To make the switch:
       { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'e1', from: 'ex-left', to: 'ex-rm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'e2', from: 'ex-right', to: 'ex-lm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'e1', labelT: 0.35, from: 'ex-left', to: 'ex-rm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'e2', labelT: 0.35, from: 'ex-right', to: 'ex-lm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Start cross-wired (love). Your job: rewire it into the fearful same-side vehicle. If you get tangled, press Reset and start over."
@@ -200,8 +200,8 @@ The cure is a **Constant** node: a steady value that never changes, feeding both
       { id: 'rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 290, servoPin: '6' },
     ],
     connections: [
-      { id: 'k1', from: 'ls', to: 'rsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'k2', from: 'rs', to: 'lsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'k1', labelT: 0.35, from: 'ls', to: 'rsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'k2', labelT: 0.35, from: 'rs', to: 'lsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
       { id: 'k3', from: 'lsum', to: 'lm', weight: 1, transferMode: 'linear', transferPoints: [] },
       { id: 'k4', from: 'rsum', to: 'rm', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],

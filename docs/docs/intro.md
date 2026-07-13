@@ -35,10 +35,13 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 ## Finding your way around
 
-- **Getting Started** — install the app, set up Arduino, and learn the editor.
-- **Designing Vehicles** — how the building blocks work: nodes, connections,
-  transfer functions, compounds, and the simulator.
-- **Tutorials** — step-by-step builds, from your first vehicle to subsumption.
+- **Lessons** — start here: six hands-on builds that run right in your browser,
+  no install required. Play first.
+- **Getting Started** — when you're ready to build your own, install the app,
+  set up Arduino, and learn the editor.
+- **Designing Vehicles** — reference for the building blocks: nodes, connections,
+  transfer functions, compounds, the simulator, and collaborative sessions.
+- **On the Robot** — put your vehicles on real hardware.
 - **Under the Hood** — optional: what the generated Arduino sketch looks like and
   how diagrams are stored.
 
@@ -46,6 +49,6 @@ The separate **Hardware** section covers building the physical robot.
 
 ## Next steps
 
-- [Install BraitenBot](./getting-started/installation)
-- [Build your first vehicle](./tutorials/your-first-vehicle)
+- [Play your first lesson](./lessons/your-first-vehicle) — nothing to install
+- [Install BraitenBot](./getting-started/installation) when you want to build your own
 - [Explore the building blocks](./guide/nodes)

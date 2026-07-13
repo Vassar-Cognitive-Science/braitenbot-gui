@@ -2,7 +2,22 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 const sidebars: SidebarsConfig = {
   softwareSidebar: [
+    // Ordered around a new student's journey: learn the basics by playing the
+    // browser-only Lessons first (no install), then get the app, then reach for
+    // reference material, then put it on real hardware.
     'intro',
+    {
+      type: 'category',
+      label: 'Lessons',
+      items: [
+        'lessons/your-first-vehicle',
+        'lessons/fear-and-love',
+        'lessons/obstacle-avoidance',
+        'lessons/color-discrimination',
+        'lessons/latches-with-delay',
+        'lessons/subsumption-architecture',
+      ],
+    },
     {
       type: 'category',
       label: 'Getting Started',
@@ -22,18 +37,7 @@ const sidebars: SidebarsConfig = {
         'guide/transfer-functions',
         'guide/compound-nodes',
         'guide/simulation',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Lessons',
-      items: [
-        'tutorials/your-first-vehicle',
-        'tutorials/light-follower',
-        'tutorials/obstacle-avoidance',
-        'tutorials/color-discrimination',
-        'tutorials/latches-with-delay',
-        'tutorials/subsumption-architecture',
+        'guide/collaborative-sessions',
       ],
     },
     {

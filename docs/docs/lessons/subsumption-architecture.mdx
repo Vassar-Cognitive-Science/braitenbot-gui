@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 6
 title: "6. Nobody Home"
 ---
 
@@ -261,7 +261,7 @@ This is the radical idea Rodney Brooks built behavior-based robotics on in the 1
 
 :::tip[Go further: more layers]
 
-The pattern scales. A **wander layer** — an Oscillator feeding both Mix nodes at ±0.3 — makes the robot gently weave while cruising, and avoidance overrides it for free because −100 outvotes ±30. A **light-seek layer** between avoid and escape is just the cross-wired photocells from [2. Fear & Love](./light-follower) at ±0.8. For each new layer, pick a weight magnitude stronger than the layers it should suppress and weaker than the layers that should suppress it.
+The pattern scales. A **wander layer** — an Oscillator feeding both Mix nodes at ±0.3 — makes the robot gently weave while cruising, and avoidance overrides it for free because −100 outvotes ±30. A **light-seek layer** between avoid and escape is just the cross-wired photocells from [2. Fear & Love](./fear-and-love) at ±0.8. For each new layer, pick a weight magnitude stronger than the layers it should suppress and weaker than the layers that should suppress it.
 :::
 
 ## Puzzle 3 — Your diagram got unwieldy

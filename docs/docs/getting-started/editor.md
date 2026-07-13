@@ -76,12 +76,17 @@ The canvas is where you build your circuit. It shows:
 - **Pan**: click and drag on empty canvas space
 - **Zoom**: Ctrl/Cmd + scroll wheel, or use the zoom buttons in the bottom-right corner
 - **Reset view**: click the reset button to return to 100% zoom
+- **Fit to view**: click the fit button (four corner brackets) to frame every block in the current diagram
 
 ### Working with nodes
 
 - **Select a node**: click it — the config panel opens on the right
+- **Select all**: `Ctrl/Cmd+A`
 - **Multi-select**: Shift+click to add/remove nodes from the selection
+- **Clear the selection**: press `Escape` (also closes the config panel)
 - **Move nodes**: drag a selected node to reposition it
+- **Rename a node**: double-click its label and type a new name (Enter to confirm, Escape to cancel)
+- **Right-click a node** for a quick menu: **Duplicate**, **Disconnect** (remove all its links), or **Delete**
 - **Delete**: select a node and press Delete or Backspace
 
 ### Making connections
@@ -131,7 +136,15 @@ The Arduino **loop period** is no longer in this group — it now lives in **Set
 - **Share** — start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
 
 ### Settings
-- **⚙ (gear)** — open the Settings dialog. It holds the **connection-weight cap** (keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights), the **sketch loop period** (1–1000 ms — how often the generated loop reads sensors and updates motors), and the **trace pulse duration** (10–5000 ms — how long the ▶ button holds a sensor at full value in trace mode). The loop period is saved with the diagram. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
+- **⚙ (gear)** — at the far right of the toolbar, opens the Settings dialog. It is split into two groups. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
+  - **Personal preferences** are yours alone — stored per device and never shared in a session:
+    - **Auto-select an identified board** — when your board-picker selection is an unidentified port, automatically switch to a newly detected board with a known type (FQBN). Turn it off to keep whatever board you picked.
+  - **Diagram preferences** are saved with the diagram and shared live, so in a collaborative session the **host** controls them (they are read-only for view-only guests):
+    - **Connection-weight cap** — keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights.
+    - **Sketch loop period** (1–1000 ms) — how often the generated loop reads sensors and updates motors.
+    - **Trace pulse duration** (10–5000 ms) — how long the ▶ button holds a sensor at full value in trace mode.
+  - **Advanced** (collapsed by default) holds one more personal preference:
+    - **Collaboration relay URL** — the server that carries [live sessions](../guide/collaborative-sessions#self-hosting-the-relay). Leave it blank to use the built-in relay; set it to your own `ws://`/`wss://` endpoint to run sessions on your own server.
 
 ## Application menu (desktop app)
 
@@ -173,12 +186,16 @@ When signal tracing is active (toggled with **Trace Signal Flow**), a collapsibl
 |----------|--------|
 | **Click** node | Select node, open config panel |
 | **Shift+Click** node | Toggle node in multi-selection |
+| **Right-click** node | Open the node menu (Duplicate / Disconnect / Delete) |
+| **Double-click** node label | Rename the node inline |
 | **Click** connection | Select connection, open config panel |
 | **Click** empty canvas | Deselect all |
 | **Drag** on empty canvas | Pan the view |
 | **Scroll** / two-finger swipe | Pan the view |
 | **Ctrl/Cmd + Scroll** | Zoom in/out (0.3× to 3×) |
 | **Ctrl/Cmd + 0** | Go to main view (recenter, reset zoom to 100%) |
+| **Ctrl/Cmd + A** | Select every node in the current diagram |
+| **Escape** | Clear the selection and close the config panel |
 | **Delete** or **Backspace** | Delete the selected node or connection |
 | **Ctrl/Cmd + Z** | Undo |
 | **Ctrl/Cmd + Shift + Z** or **Ctrl/Cmd + Y** | Redo |
@@ -188,4 +205,4 @@ There are no keyboard shortcuts for toolbar actions (Group, Trace, Upload to rob
 
 ## Next steps
 
-Now that you know the layout, [build your first vehicle](../tutorials/your-first-vehicle).
+Now that you know the layout, [build your first vehicle](../lessons/your-first-vehicle).

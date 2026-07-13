@@ -62,8 +62,8 @@ Wire each sensor to the motor on the **opposite** side (contralateral):
       { id: 'rm-2b', type: 'servo-cr', label: 'Right Motor', x: 300, y: 210, servoPin: '6' },
     ],
     connections: [
-      { id: 'b1', from: 'ls-2b', to: 'rm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
-      { id: 'b2', from: 'rs-2b', to: 'lm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'b1', labelT: 0.35, from: 'ls-2b', to: 'rm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'b2', labelT: 0.35, from: 'rs-2b', to: 'lm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Vehicle 2b — cross-wired. Same left-slider drag, but now the right motor accelerates: the nose swings left, toward the light."
@@ -71,7 +71,7 @@ Wire each sensor to the motor on the **opposite** side (contralateral):
 
 Same hardware, different wiring. Now light on the left speeds up the **right** motor, turning the vehicle **toward** the light. It accelerates as it approaches — charging at the source. Braitenberg called this "aggression."
 
-This is the basis of the [light follower tutorial](../tutorials/light-follower). It's also how phototaxis works in biology: many organisms steer toward light using exactly this kind of contralateral wiring between photoreceptors and motor neurons.
+This is the basis of the [Fear & Love lesson](../lessons/fear-and-love). It's also how phototaxis works in biology: many organisms steer toward light using exactly this kind of contralateral wiring between photoreceptors and motor neurons.
 
 ## Vehicle 3: "Love"
 
@@ -92,8 +92,8 @@ Take Vehicle 2b's cross-wiring, but use **negative** (inhibitory) weights. Becau
     connections: [
       { id: 'b1', from: 'baseline', to: 'lm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'b2', from: 'baseline', to: 'rm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'x1', from: 'ls-3', to: 'rm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'x2', from: 'rs-3', to: 'lm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'x1', labelT: 0.35, from: 'ls-3', to: 'rm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'x2', labelT: 0.35, from: 'rs-3', to: 'lm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'm1', from: 'lm-3', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'm2', from: 'rm-3', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
@@ -125,9 +125,9 @@ Four behaviors from four wiring configurations. No code changed. No logic was ad
 Braitenberg's original vehicles used only direct sensor-to-motor wiring. BraitenBot extends this with:
 
 - **Compute nodes** — threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
-- **Feedback loops** — delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [latch tutorial](../tutorials/latches-with-delay))
+- **Feedback loops** — delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [Memory lesson](../lessons/latches-with-delay))
 - **Transfer functions** — curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
 - **Compound nodes** — reusable sub-circuits that keep complex diagrams manageable
 - **Multiple sensor types** — analog, digital, and I2C sensors for interacting with a richer physical world
 
-With these additions, you can build behaviors that Braitenberg only hinted at: state machines, oscillating search patterns, and layered [subsumption architectures](../tutorials/subsumption-architecture) where multiple behaviors cooperate and compete.
+With these additions, you can build behaviors that Braitenberg only hinted at: state machines, oscillating search patterns, and layered [subsumption architectures](../lessons/subsumption-architecture) where multiple behaviors cooperate and compete.
