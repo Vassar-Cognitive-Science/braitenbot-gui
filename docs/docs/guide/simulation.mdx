@@ -11,9 +11,9 @@ Trace mode lets you simulate your diagram's signal flow without hardware. It's t
 
 ## Try it live
 
-The diagram below runs the exact same simulation the desktop app uses. Drag the light sensor's slider (or tap **▶** to pulse it) and watch the signal propagate to the two motors. This is a cross-wired Braitenberg vehicle 2 — see the [Fear & Love lesson](../lessons/fear-and-love) for why that wiring turns it toward light.
+The diagram below runs the exact same simulation the desktop app uses. Drag the light sensor's slider (or tap **▶** to pulse it) and watch the signal propagate to the two motors. This is a cross-wired Braitenberg vehicle 2. See the [Fear & Love lesson](../lessons/fear-and-love) for why that wiring turns it toward light.
 
-This one is **editable** — drag the nodes around, drag from a node's bottom dot to draw a new wire, or click a connection's weight badge to retune it. Try adding a **Threshold** node between the sensor and a motor so the wheel only kicks in past a certain brightness, or drop in a second **Analog Sensor** to give the vehicle a second eye. Hit **Reset** to get the original wiring back.
+This one is **editable**: drag the nodes around, drag from a node's bottom dot to draw a new wire, or click a connection's weight badge to retune it. Try adding a **Threshold** node between the sensor and a motor so the wheel only kicks in past a certain brightness, or drop in a second **Analog Sensor** to give the vehicle a second eye. Hit **Reset** to get the original wiring back.
 
 <InteractiveDiagram
   palette={['sensor-analog', 'compute-threshold', 'compute-delay']}
@@ -59,7 +59,7 @@ When tracing is active, each sensor gets interactive controls:
 
 ### Pulse injection
 
-Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for the configured pulse duration, then returns to the slider value. The duration is the **trace pulse duration** set in **Settings** (the ⚙ gear in the toolbar; default 200 ms). This is useful for testing edge-triggered behaviors like latches — you can "tap" a sensor briefly and watch how the circuit responds.
+Each sensor also has a **pulse button** (▶). Clicking it injects the value 100 (full activation) for the configured pulse duration, then returns to the slider value. The duration is the **trace pulse duration** set in **Settings** (the ⚙ gear in the toolbar; default 200 ms). This is useful for testing edge-triggered behaviors like latches: you can "tap" a sensor briefly and watch how the circuit responds.
 
 ## Signal visualization
 
@@ -77,17 +77,17 @@ Connection badges show the signal after weight/transfer application. The connect
 
 ### Wheel drive indicator
 
-Each motor block grows an arrow straight out of it: up from the top edge (green) for a positive, forward signal, down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude. It's a quick read on which way each wheel would turn and how fast — the same value shown on the motor node, made spatial. (It indicates drive only; to see the robot actually move, upload to hardware.)
+Each motor block grows an arrow straight out of it: up from the top edge (green) for a positive, forward signal, down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude. It's a quick read on which way each wheel would turn and how fast, the same value shown on the motor node, made spatial. (It indicates drive only; to see the robot actually move, upload to hardware.)
 
 ### Oscilloscope
 
-The oscilloscope panel at the bottom shows a rolling history (**5 seconds by default**) of all signal values plotted over time, so you can see how signals change across iterations. Each node gets its own row — a color-coded sparkline (orange for sensors, blue for compute, green for outputs) with the latest value beside it. Controls:
+The oscilloscope panel at the bottom shows a rolling history (**5 seconds by default**) of all signal values plotted over time, so you can see how signals change across iterations. Each node gets its own row: a color-coded sparkline (orange for sensors, blue for compute, green for outputs) with the latest value beside it. Controls:
 
-- **Pause/Resume** — freeze the display to inspect values
-- **Clear** — reset the history buffer
-- **Hide/show a trace** — click the eye icon on any row to remove that signal from the plot (useful when a busy diagram crowds the view), and **Show all / Hide all** to toggle every row at once
-- **Resize** — drag the panel's top edge to make it taller or shorter
-- **Collapse/expand** — the chevron folds the panel away without leaving trace mode
+- **Pause/Resume**: freeze the display to inspect values
+- **Clear**: reset the history buffer
+- **Hide/show a trace**: click the eye icon on any row to remove that signal from the plot (useful when a busy diagram crowds the view), and **Show all / Hide all** to toggle every row at once
+- **Resize**: drag the panel's top edge to make it taller or shorter
+- **Collapse/expand**: the chevron folds the panel away without leaving trace mode
 
 The oscilloscope samples at the configured loop period (matching what the hardware would do), so the time axis is accurate to the real-time behavior.
 
@@ -100,7 +100,7 @@ On each loop iteration, the trace simulation runs the same four steps the hardwa
 3. **Forward pass**: compute each node in order using current sensor values
 4. **Deferred phase**: update delay ring buffers
 
-The simulation matches the hardware behavior exactly — the same execution order, the same transfer functions, the same delay semantics. What you see in trace mode is what the robot will do.
+The simulation matches the hardware behavior exactly: the same execution order, the same transfer functions, the same delay semantics. What you see in trace mode is what the robot will do.
 
 ### Delay nodes in simulation
 
@@ -118,12 +118,12 @@ This two-phase approach ensures that feedback cycles produce stable, predictable
 
 ## Calibrating with trace mode
 
-Thresholds you see in a lesson or a screenshot are starting points, not answers — your sensors, your lighting, and your surface will read differently. The reusable ritual is the same every time: put the robot in the real environment, activate trace mode, and read the actual numbers off the live sensor and compute nodes as you move it through the scenario. Set thresholds and weights against *those* numbers, not the ones from a tutorial. Repeat whenever the environment changes — a new room, a new time of day, or a fresh battery can all shift what "bright" or "close" reads as on the hardware.
+Thresholds you see in a lesson or a screenshot are starting points, not answers: your sensors, your lighting, and your surface will read differently. The reusable ritual is the same every time: put the robot in the real environment, activate trace mode, and read the actual numbers off the live sensor and compute nodes as you move it through the scenario. Set thresholds and weights against *those* numbers, not the ones from a tutorial. Repeat whenever the environment changes: a new room, a new time of day, or a fresh battery can all shift what "bright" or "close" reads as on the hardware.
 
 ## Tips for effective tracing
 
 - **Start simple**: trace a direct sensor-to-motor connection first, then add complexity
-- **Use pulse** for testing latches and state-holding circuits — a brief tap reveals whether the circuit "remembers"
+- **Use pulse** for testing latches and state-holding circuits: a brief tap reveals whether the circuit "remembers"
 - **Watch the oscilloscope** for timing-dependent behaviors like oscillators and delays
 - **Compare linear vs. non-linear transfer** by switching modes on a connection and watching how the output changes
 - **Test extremes**: slide sensors to 0 and 100 to verify the circuit behaves correctly at the boundaries

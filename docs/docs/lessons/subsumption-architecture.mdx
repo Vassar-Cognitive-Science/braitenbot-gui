@@ -402,9 +402,9 @@ Wire **Suppress** into the **Lower Gate** (to shut the lower layers) and into bo
 
 The tests are the same ones you passed in Puzzles 1 and 2. That's the point: boxing a behavior changes nothing about the machine. Compounds are purely an organizational tool, a way to see the architecture instead of the plumbing.
 
-The bigger payoff is **reuse** — and it comes from the same box-up move you just did to Escape, applied to a smaller cluster.
+The bigger payoff is **reuse**, and it comes from the same box-up move you just did to Escape, applied to a smaller cluster.
 
-Remember the dead-zone-plus-threshold trick from [3. Don't](./obstacle-avoidance): a curve that ignores noise near zero, feeding a threshold that fires a clean detection. That's two nodes you'd otherwise rewire in front of *every* sensor. So box them up: select the summation and the threshold, collapse them into a compound with one input port (the raw reading) and one output port (the clean detection), and call it **Calibrated Sensor**. Now it's one part with a clean interface, exactly like Escape — double-click any instance to open the box and you'll find those same two nodes inside.
+Remember the dead-zone-plus-threshold trick from [3. Don't](./obstacle-avoidance): a curve that ignores noise near zero, feeding a threshold that fires a clean detection. That's two nodes you'd otherwise rewire in front of *every* sensor. So box them up: select the summation and the threshold, collapse them into a compound with one input port (the raw reading) and one output port (the clean detection), and call it **Calibrated Sensor**. Now it's one part with a clean interface, exactly like Escape: double-click any instance to open the box and you'll find those same two nodes inside.
 
 And because every source in BraitenBot emits the same 0–100 signal, that one box doesn't care what hardware feeds it. Here it is stamped out four times across two completely different sensor types:
 
@@ -473,3 +473,5 @@ You stacked three independent behaviors, cruise, avoid, and escape, into a robot
 ## What's next
 
 You've finished the lessons. [Field Test: Let It Loose](../on-the-robot/field-test) puts the whole architecture on the real robot. A room with furniture is the only benchmark that matters.
+
+Or, before you do: [7. Say What You Mean](./say-what-you-mean) is a short optional coda on making diagrams like this one readable by someone who isn't you.

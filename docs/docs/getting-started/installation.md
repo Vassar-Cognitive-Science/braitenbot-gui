@@ -60,7 +60,7 @@ If you want to build BraitenBot yourself:
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) toolchain
-- Platform-specific build dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
+- Platform-specific build dependencies: see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
 ### Steps
 

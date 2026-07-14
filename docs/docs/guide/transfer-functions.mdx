@@ -58,7 +58,7 @@ Ignore small signals, respond only to strong ones:
 
 Points: (-100, 0), (50, 0), (100, 100)
 
-This is useful for filtering out sensor noise — the vehicle won't react until the signal exceeds a threshold, then responds proportionally.
+This is useful for filtering out sensor noise: the vehicle won't react until the signal exceeds a threshold, then responds proportionally.
 
 #### Sigmoid-like response
 
@@ -97,7 +97,7 @@ Respond briskly to weak signals, but plateau instead of maxing out:
 
 Points: (-100, 0), (0, 0), (30, 60), (60, 60), (100, 60)
 
-The motor reaches 60% speed quickly (by input 30) but plateaus there. On a light follower this cures overshoot: the vehicle approaches briskly from a distance but can't charge past the source, so it settles beside it instead of orbiting — Braitenberg's Vehicle 3 "love" behavior, encoded in a single curve.
+The motor reaches 60% speed quickly (by input 30) but plateaus there. On a light follower this cures overshoot: the vehicle approaches briskly from a distance but can't charge past the source, so it settles beside it instead of orbiting. That's Braitenberg's Vehicle 3 "love" behavior, encoded in a single curve.
 
 #### Step function
 

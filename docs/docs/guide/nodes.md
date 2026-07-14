@@ -10,7 +10,7 @@ Nodes are the building blocks you drag onto the canvas. Every node belongs to a 
 In the editor, these live in the palette's **Basic** and **Advanced** tabs. The Basic tab lists the reference kit's parts by friendly name with pins pre-filled (dropping "Left Photocell" gives you an analog sensor already set to A0, inverted); the Advanced tab lists every type generically. See [The Editor](../getting-started/editor#node-palette-left-sidebar) for how the palette is organized.
 
 :::note Reference detail is optional
-Each entry lists a **Type ID** and, where useful, the **generated C++** and hardware-driver specifics. You never need any of that to build vehicles — it's tucked into expandable sections you can open if you're curious.
+Each entry lists a **Type ID** and, where useful, the **generated C++** and hardware-driver specifics. You never need any of that to build vehicles; it's tucked into expandable sections you can open if you're curious.
 :::
 
 ## Sensors
@@ -30,8 +30,8 @@ Sensor nodes read values from the physical world and output signals into the dia
 Reads an analog pin (0–1023) and scales the value to **0–100**.
 
 **Configuration:**
-- **Arduino Port** — a free-text field for the analog pin label (e.g., `A0`)
-- **Invert signal** — checkbox that outputs `100 − value`, so a brighter reading produces a higher signal. Useful with a photocell wired as a voltage divider, where the raw reading *drops* as light increases — inverting flips it so brighter means higher.
+- **Arduino Port**: a free-text field for the analog pin label (e.g., `A0`)
+- **Invert signal**: checkbox that outputs `100 − value`, so a brighter reading produces a higher signal. Useful with a photocell wired as a voltage divider, where the raw reading *drops* as light increases: inverting flips it so brighter means higher.
 
 <details>
 <summary>Generated code</summary>
@@ -61,16 +61,16 @@ float sig_sensor = 100.0 - (analogRead(SENSOR_PIN) * (100.0 / 1023.0));
 Reads a digital pin and outputs **0** (LOW) or **100** (HIGH).
 
 **Configuration:**
-- **Arduino Port** — a free-text field for the digital pin number (e.g., `2`)
-- **INPUT_PULLUP** — checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
-- **Catch brief pulses** — checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling.
+- **Arduino Port**: a free-text field for the digital pin number (e.g., `2`)
+- **INPUT_PULLUP**: checkbox to enable the internal pull-up resistor. When enabled, the pin reads HIGH by default and LOW when grounded. The output is inverted: LOW → 100, HIGH → 0.
+- **Catch brief pulses**: checkbox that attaches a pin interrupt so pulses shorter than the loop period (e.g., a clap on a sound sensor's digital output) still register. The interrupt latches the pulse, and the next scheduled read reports 100 for that tick, then clears the latch. Steady signals behave exactly as with plain polling.
 
 <details>
 <summary>Pulse capture: caveats and per-board pin support</summary>
 
-Because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often — adjust the sensor's sensitivity pot if that happens.
+Because every brief spike now counts, a signal chattering near the sensor's comparator threshold reads high more often. Adjust the sensor's sensitivity pot if that happens.
 
-Pin support differs by board: classic Uno R3 / Nano boards support every pin (via pin-change interrupts), but the UNO R4 can only attach interrupts on pins 2, 3, 8, 12, and A1–A5 — and pins 3 + A4 (and A3 + A5) share an interrupt channel, so only one pulse-capture sensor can use each pair. The diagram validator warns about both cases.
+Pin support differs by board: classic Uno R3 / Nano boards support every pin (via pin-change interrupts), but the UNO R4 can only attach interrupts on pins 2, 3, 8, 12, and A1–A5. Pins 3 + A4 (and A3 + A5) share an interrupt channel, so only one pulse-capture sensor can use each pair. The diagram validator warns about both cases.
 
 </details>
 
@@ -84,7 +84,7 @@ float sig_sensor = digitalRead(PIN) * 100.0;
 // With pullup (inverted)
 float sig_sensor = (1 - digitalRead(PIN)) * 100.0;
 
-// With "catch brief pulses" — an interrupt sets pulse_sensor between reads;
+// With "catch brief pulses": an interrupt sets pulse_sensor between reads;
 // the live read is OR'd in so a held signal stays high after the latch clears
 noInterrupts();
 bool pulsed_sensor = pulse_sensor;
@@ -109,17 +109,17 @@ float sig_sensor = (pulsed_sensor || digitalRead(PIN) == HIGH) ? 100.0 : 0.0;
 
 Reads a TCS34725 color sensor over I2C and outputs four channels, each scaled to **0–100** (normalized against the ADC's full-scale count of 44032 at the configured integration time, so a saturated channel reads 100):
 
-- **White** (handle `W`) — the sensor's unfiltered "clear" photodiode. It reads the **total** light across all colors, so brighter surroundings give a higher value — and it usually reads higher than any single color channel rather than being their average. Wire it when the robot should react to overall light level regardless of color (light-seeking / light-avoiding behaviors).
-- **Red** (`R`) — red channel
-- **Green** (`G`) — green channel
-- **Blue** (`B`) — blue channel
+- **White** (handle `W`): the sensor's unfiltered "clear" photodiode. It reads the **total** light across all colors, so brighter surroundings give a higher value, and it usually reads higher than any single color channel rather than being their average. Wire it when the robot should react to overall light level regardless of color (light-seeking / light-avoiding behaviors).
+- **Red** (`R`): red channel
+- **Green** (`G`): green channel
+- **Blue** (`B`): blue channel
 
 The three color channels are for telling *colors apart* (e.g. red line vs. blue line); use **White** when you only care *how much* light there is.
 
 **Configuration:**
-- **Gain** — RGBC gain multiplier: 1×, 4×, 16×, or 60× (default: 16×). Higher gain lifts readings in dim light; lower gain avoids saturation under bright light. The I2C address (0x29) is fixed.
+- **Gain**: RGBC gain multiplier: 1×, 4×, 16×, or 60× (default: 16×). Higher gain lifts readings in dim light; lower gain avoids saturation under bright light. The I2C address (0x29) is fixed.
 
-Gain is a device-wide setting — if a diagram has more than one color-sensor node they share the single physical sensor, so the gain is taken from the first one.
+Gain is a device-wide setting: if a diagram has more than one color-sensor node they share the single physical sensor, so the gain is taken from the first one.
 
 Each outgoing connection specifies which port it reads from via the `fromPort` field. You can route each channel to different targets independently.
 
@@ -138,16 +138,16 @@ Each outgoing connection specifies which port it reads from via the `fromPort` f
 Reads a VL53L4CD time-of-flight distance sensor over I2C and outputs a single signal scaled to **0–100**. By default a closer object reads higher, ramping down to 0 at the configured max distance.
 
 **Configuration:**
-- **XSHUT Pin** — a digital pin wired to the sensor's XSHUT (shutdown) line. **Each ToF node needs its own XSHUT pin** — this is what lets multiple sensors share the I2C bus (see below).
-- **Max Distance (mm)** — the distance that maps to full-scale signal (default: 500). Objects at or beyond this read 0.
-- **Invert (far reads higher)** — checkbox that flips the mapping so a farther object produces a higher signal.
+- **XSHUT Pin**: a digital pin wired to the sensor's XSHUT (shutdown) line. **Each ToF node needs its own XSHUT pin**; this is what lets multiple sensors share the I2C bus (see below).
+- **Max Distance (mm)**: the distance that maps to full-scale signal (default: 500). Objects at or beyond this read 0.
+- **Invert (far reads higher)**: checkbox that flips the mapping so a farther object produces a higher signal.
 
-**Multiple ToF sensors** — and pairing a ToF with the color sensor — share the I2C bus automatically. You only need to give each ToF node its own **XSHUT pin**; the generated sketch handles the rest.
+**Multiple ToF sensors** (and pairing a ToF with the color sensor) share the I2C bus automatically. You only need to give each ToF node its own **XSHUT pin**; the generated sketch handles the rest.
 
 <details>
 <summary>The I2C address trick (how multiple sensors share one bus)</summary>
 
-Every VL53L4CD powers up at the same default I2C address (written `0x52`, or `0x29` in 7-bit notation — the same address, two ways of writing it), which also collides with the TCS34725 color sensor at 0x29. To use more than one — or to pair one with a color sensor — the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
+Every VL53L4CD powers up at the same default I2C address (written `0x52`, or `0x29` in 7-bit notation: the same address, two ways of writing it), which also collides with the TCS34725 color sensor at 0x29. To use more than one, or to pair one with a color sensor, the generated `setup()` follows the library's documented procedure: it drives **every** sensor's XSHUT line low to hold them all in reset, then brings them up **one at a time**, reassigning each to a unique address (0x2A, 0x2B, …) before the next powers on. This runs before the TCS34725 is initialized, so the shared bus is unambiguous. The only wiring requirement is a distinct XSHUT pin per sensor.
 
 </details>
 
@@ -170,11 +170,11 @@ if (ready_tof) {
 float sig_tof = constrain((1.0 - dist_tof / 500.0) * 100.0, 0.0, 100.0);
 ```
 
-The read is non-blocking — the main loop runs faster than a ranging cycle, so when no new frame is ready the sensor keeps its previous distance. Every frame that *is* ready is resolved to a usable distance so robot logic never has to handle a faulty reading:
+The read is non-blocking: the main loop runs faster than a ranging cycle, so when no new frame is ready the sensor keeps its previous distance. Every frame that *is* ready is resolved to a usable distance so robot logic never has to handle a faulty reading:
 
-- **`range_status` 0–2** (valid, plus the sigma/signal-low warnings — a weak return from a real wall a few hundred mm away) → the measured distance is used.
+- **`range_status` 0–2** (valid, plus the sigma/signal-low warnings: a weak return from a real wall a few hundred mm away) → the measured distance is used.
 - **`range_status` 3** (target below the minimum detection range, i.e. right up against the sensor) → treated as 0 mm, the closest possible reading.
-- **`range_status` 4–7** (wraparound, out of range, hardware fault — bogus distances) → treated as the configured max distance, i.e. "nothing detected."
+- **`range_status` 4–7** (wraparound, out of range, hardware fault: bogus distances) → treated as the configured max distance, i.e. "nothing detected."
 
 These resolve to *distances*, so the node's **Invert** setting still applies: in the default near-reads-high orientation, status 3 yields signal 100 and status 4–7 yield 0; with Invert on, they flip.
 
@@ -198,7 +198,7 @@ Compute nodes process signals between sensors and outputs.
 Binary decision node. Outputs **100** if the input exceeds the threshold, otherwise **0**.
 
 **Configuration:**
-- **Threshold** — value from -100 to 100 (default: 50)
+- **Threshold**: value from -100 to 100 (default: 50)
 
 <details>
 <summary>Generated code</summary>
@@ -220,10 +220,10 @@ float sig_node = (input > 50.0) ? 100.0 : 0.0;
 | Inputs | 1 (max) |
 | Outputs | 1 |
 
-Delays the input signal by a configurable time. Uses a ring buffer to store past values. Critically, **Delay is the only node type that can break feedback cycles** — it reads from the previous iteration, allowing cycles in the graph.
+Delays the input signal by a configurable time. Uses a ring buffer to store past values. Critically, **Delay is the only node type that can break feedback cycles**: it reads from the previous iteration, allowing cycles in the graph.
 
 **Configuration:**
-- **Delay** — time in milliseconds, 0–10000 (default: 100)
+- **Delay**: time in milliseconds, 0–10000 (default: 100)
 
 The buffer size is calculated as `max(1, round(delay_ms / loop_period_ms))`.
 
@@ -312,11 +312,11 @@ No configuration beyond connection weights.
 | Inputs | 0 |
 | Outputs | 1 |
 
-Generates a sine wave signal. This is a source node — it has no inputs.
+Generates a sine wave signal. This is a source node; it has no inputs.
 
 **Configuration:**
-- **Frequency** — Hz, 0–50 (default: 1.0)
-- **Amplitude** — 0–100 (default: 100)
+- **Frequency**: Hz, 0–50 (default: 1.0)
+- **Amplitude**: 0–100 (default: 100)
 
 **Formula:** `output = amplitude × sin(2π × frequency × t / 1000)`
 
@@ -336,7 +336,7 @@ Where `t` is the elapsed time in milliseconds.
 Generates a random signal each loop iteration. This is a source node.
 
 **Configuration:**
-- **Amplitude** — 0–100 (default: 50)
+- **Amplitude**: 0–100 (default: 50)
 
 **Formula:** `output = amplitude × random(-1, 1)`
 
@@ -356,7 +356,7 @@ Generates a random signal each loop iteration. This is a source node.
 Emits a fixed value every loop iteration. This is a source node.
 
 **Configuration:**
-- **Value** — -100 to 100
+- **Value**: -100 to 100
 
 ---
 
@@ -376,7 +376,7 @@ Output nodes consume signals and drive physical hardware. They have no signal ou
 Controls a continuous rotation servo. Maps the input signal (-100 to 100) to a pulse width (1000–2000 microseconds).
 
 **Configuration:**
-- **Servo Pin** — the digital pin the servo signal wire is connected to
+- **Servo Pin**: the digital pin the servo signal wire is connected to
 
 **Wheels** (Left Wheel, Right Wheel) are special instances of this type:
 - The left wheel maps directly: `1500 + input × 5` µs
@@ -396,7 +396,7 @@ Controls a continuous rotation servo. Maps the input signal (-100 to 100) to a p
 Controls a standard positional servo. Maps the input signal (-100 to 100) to an angle (0°–180°).
 
 **Configuration:**
-- **Servo Pin** — the digital pin
+- **Servo Pin**: the digital pin
 
 **Formula:** `angle = constrain((input + 100) × 0.9, 0, 180)`
 
@@ -414,8 +414,8 @@ Controls a standard positional servo. Maps the input signal (-100 to 100) to an 
 Drives a digital pin HIGH or LOW based on a threshold comparison. Useful for LEDs, relays, and buzzers.
 
 **Configuration:**
-- **Pin** — the digital pin
-- **Threshold** — value from -100 to 100 (default: 50). Output is HIGH when input exceeds threshold.
+- **Pin**: the digital pin
+- **Threshold**: value from -100 to 100 (default: 50). Output is HIGH when input exceeds threshold.
 
 ---
 
@@ -431,9 +431,9 @@ Drives a digital pin HIGH or LOW based on a threshold comparison. Useful for LED
 Drives a 4-digit 7-segment TM1637 display. Rounds the input to the nearest integer, clamped to -999–9999.
 
 **Configuration:**
-- **CLK Pin** — the clock pin
-- **DIO Pin** — the data pin
-- **Brightness** — 0–7 (default: 3)
+- **CLK Pin**: the clock pin
+- **DIO Pin**: the data pin
+- **Brightness**: 0–7 (default: 3)
 
 ---
 

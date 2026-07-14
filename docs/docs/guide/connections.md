@@ -7,7 +7,7 @@ title: Connections & Signal Flow
 
 Connections are the weighted links between nodes. Each one carries a signal from
 one node's output to another node's input, scaling or reshaping it along the way.
-Together they form a circuit in which signals flow in one direction — from
+Together they form a circuit in which signals flow in one direction: from
 sensors, through compute nodes, to motors.
 
 ## Signal range
@@ -32,14 +32,14 @@ transfer curves.
 
 The editor refuses connections that wouldn't make sense:
 
-- **No self-loops** — a node can't connect to itself.
-- **No duplicates** — only one connection is allowed between the same source node +
+- **No self-loops**: a node can't connect to itself.
+- **No duplicates**: only one connection is allowed between the same source node +
   source port and the same target node. (The *target* port isn't part of this
   check, so you can't draw two connections from one source port into the same
   target even if they'd land on different input ports.)
-- **Input limits** — nodes that take a single input (Threshold, Delay, servos,
+- **Input limits**: nodes that take a single input (Threshold, Delay, servos,
   digital output, display) reject a second incoming connection.
-- **Type compatibility** — output-only nodes can't be a connection's source, since
+- **Type compatibility**: output-only nodes can't be a connection's source, since
   they produce no signal.
 
 ## Weights
@@ -66,14 +66,14 @@ a weight of -1 it arrives as -80.
 
 :::tip A weight already covers every straight line through the origin
 Because linear mode is just multiplication, any response that's a **straight line
-through zero** is already a weight — you don't need a curve for it. "Invert the
+through zero** is already a weight: you don't need a curve for it. "Invert the
 signal" is simply a weight of **-1**; "halve and invert" is **-0.5**. Reach for a
 non-linear curve only when the response has to *bend*: a dead zone near zero, a
 threshold step, or saturation at the extremes.
 :::
 
 A connection can also use a **non-linear curve** instead of a single weight, for
-responses that change shape across the input range — see
+responses that change shape across the input range. See
 [Transfer Functions](./transfer-functions).
 
 ## Input aggregation
@@ -95,7 +95,7 @@ type:
 
 ## Execution order
 
-BraitenBot computes signals in **topological order** — sources first, then the
+BraitenBot computes signals in **topological order**: sources first, then the
 nodes downstream of them. This guarantees every node reads its inputs only after
 they've been computed for the current loop.
 
@@ -120,7 +120,7 @@ computation.
 
 ## Cycles and the delay node
 
-Feedback loops — where a signal eventually flows back to influence its own input —
+Feedback loops (where a signal eventually flows back to influence its own input)
 make some of the most interesting vehicles possible. But a plain cycle has no
 valid execution order: every node would be waiting on another.
 
@@ -152,7 +152,7 @@ generate code for it. To build something that uses this on purpose, see the
 Some nodes have more than one input or output port, and a connection to them must
 say which port it uses:
 
-- The **Color Sensor** has four output ports — `clear`, `red`, `green`, `blue` —
+- The **Color Sensor** has four output ports (`clear`, `red`, `green`, `blue`),
   and each outgoing connection picks one channel.
 - **Compound instances** have one input and one output port per port anchor in
   their body. See [Compound Nodes](./compound-nodes).
@@ -162,8 +162,8 @@ say which port it uses:
 Connections are drawn as curves between nodes. In normal editing, the color shows
 the weight (green for positive, rust/red for negative) and a badge at the midpoint
 shows its value. A connection using a **non-linear curve** shows a tiny thumbnail
-of that curve on its badge instead of a number — the same shape you'd see in the
-curve editor — since a single weight can't describe it. In
-[trace mode](./simulation), the same curve shows the *live* signal instead —
+of that curve on its badge instead of a number (the same shape you'd see in the
+curve editor), since a single weight can't describe it. In
+[trace mode](./simulation), the same curve shows the *live* signal instead:
 color and thickness track its magnitude and sign, and a badge shows the value
 after the weight or curve is applied.

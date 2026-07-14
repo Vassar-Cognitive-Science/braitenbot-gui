@@ -69,9 +69,9 @@ export default function Install(): React.ReactElement {
       <main className="container margin-vert--xl">
         <h1>Install BraitenBot</h1>
         <p className={styles.lede}>
-          BraitenBot is a desktop app. Download the build for your platform —
+          BraitenBot is a desktop app. Download the build for your platform;
           it bundles everything you need, including the visual editor and the
-          one-click Arduino upload.
+          Arduino upload tooling.
           {release.version ? (
             <>
               {' '}
@@ -92,7 +92,7 @@ export default function Install(): React.ReactElement {
         <h2>After downloading</h2>
         <p>
           The app is not yet code-signed, so your operating system will warn you
-          the first time you open it. This is expected — here is how to get past
+          the first time you open it. This is expected. Here is how to get past
           it.
         </p>
 

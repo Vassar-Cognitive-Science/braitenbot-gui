@@ -28,9 +28,9 @@ This is behavior BraitenBot wires into the code, not a feature of the board itse
 
 | Pin | Function | Notes |
 |-----|----------|-------|
-| 0 | Serial RX | Used by USB communication — **never assign to sensors/outputs** |
-| 1 | Serial TX | Used by USB communication — **never assign to sensors/outputs** |
-| 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used as BraitenBot's motor-safety indicator (Uno R4) — **never assign to sensors/outputs** |
+| 0 | Serial RX | Used by USB communication. **Never assign to sensors/outputs** |
+| 1 | Serial TX | Used by USB communication. **Never assign to sensors/outputs** |
+| 13 | Built-in LED | Wired directly to the onboard LED, which distorts signals on the pin and is used as BraitenBot's motor-safety indicator (Uno R4). **Never assign to sensors/outputs** |
 
 BraitenBot's validation will report an error if you assign pin 0, 1, or 13 to a digital pin field.
 
@@ -60,7 +60,7 @@ Used by: Digital Sensor, Continuous Servo, Positional Servo, Digital Output node
 | SDA | SDA | Uno R4 (dedicated header) |
 | SCL | SCL | Uno R4 (dedicated header) |
 
-Used by: Color Sensor (TCS34725), ToF Distance (VL53L4CD), TM1637 Display. The I2C bus is shared — multiple I2C devices use the same two pins (SDA/SCL); they are daisy-chained, not given individual ports.
+Used by: Color Sensor (TCS34725), ToF Distance (VL53L4CD), TM1637 Display. The I2C bus is shared: multiple I2C devices use the same two pins (SDA/SCL), daisy-chained rather than given individual ports.
 
 Because the bus is addressed rather than pinned, devices must have distinct I2C addresses. The VL53L4CD ships at the same address (0x29) as every other VL53L4CD **and** as the TCS34725, so BraitenBot reassigns each ToF sensor to a unique address at startup using its XSHUT pin (see [ToF Distance](../guide/nodes#tof-distance-vl53l4cd)). Each ToF node therefore needs its own digital XSHUT pin in addition to the shared SDA/SCL lines.
 
@@ -74,15 +74,15 @@ Servo control typically uses PWM (pulse-width modulation) pins. On most Arduinos
 
 Any sensor that outputs a 0–5V analog signal can be used with an Analog Sensor node:
 
-- **Photocell / light-sensor board** (LDR) — light intensity. This is the kit's
+- **Photocell / light-sensor board** (LDR): light intensity. This is the kit's
   analog sensor; the board includes its own voltage divider.
 
 Other analog sensors the node can read (not part of the kit):
 
-- **Potentiometer** — manual input / calibration
-- **Force sensitive resistor** (FSR) — pressure sensing
-- **Thermistor** — temperature (with voltage divider)
-- **IR distance sensor** (Sharp GP2Y0A21) — distance as analog voltage
+- **Potentiometer**: manual input / calibration
+- **Force sensitive resistor** (FSR): pressure sensing
+- **Thermistor**: temperature (with voltage divider)
+- **IR distance sensor** (Sharp GP2Y0A21): distance as analog voltage
 
 :::note
 
@@ -95,23 +95,23 @@ sensor), not an analog IR sensor.
 
 Any sensor with a HIGH/LOW output works with a Digital Sensor node:
 
-- **Bump / lever switch** — mechanical contact (use INPUT_PULLUP). This is the
+- **Bump / lever switch**: mechanical contact (use INPUT_PULLUP). This is the
   kit's digital sensor.
 
 With `INPUT_PULLUP` enabled, the pin idles HIGH and reads LOW when pressed; BraitenBot inverts this in software, so a press reads as **100** and idle reads as **0**.
 
 Other digital sensors the node can read (not part of the kit):
 
-- **PIR motion sensor** — motion detection
-- **IR proximity sensor** (e.g., TCRT5000 module) — obstacle detection
-- **Ultrasonic sensor trigger** — if wired as digital threshold
+- **PIR motion sensor**: motion detection
+- **IR proximity sensor** (e.g., TCRT5000 module): obstacle detection
+- **Ultrasonic sensor trigger**: if wired as digital threshold
 
 ### I2C sensors
 
 Currently supported:
 
-- **TCS34725** — RGB color sensor (via Color Sensor node)
-- **VL53L4CD** — time-of-flight distance sensor (via ToF Distance node). Multiple units are supported on the same bus; each needs its own XSHUT pin for the startup address-assignment sequence.
+- **TCS34725**: RGB color sensor (via Color Sensor node)
+- **VL53L4CD**: time-of-flight distance sensor (via ToF Distance node). Multiple units are supported on the same bus; each needs its own XSHUT pin for the startup address-assignment sequence.
 
 ## Outputs
 

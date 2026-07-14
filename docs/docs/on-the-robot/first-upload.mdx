@@ -5,21 +5,21 @@ title: "First Upload"
 
 # First Upload
 
-You built Vehicle 1 in [1. Your First Vehicle](../lessons/your-first-vehicle) — one light sensor, two wires, two wheels. Now put it on real wheels.
+You built Vehicle 1 in [1. Your First Vehicle](../lessons/your-first-vehicle): one light sensor, two wires, two wheels. Now put it on real wheels.
 
 ## What the hardware is doing
 
-On the physical robot, the light sensor is a photoresistor — a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
+On the physical robot, the light sensor is a photoresistor, a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
 
-The kit's sensor presets already point at the right pins — the photocell node is wired to **A0**, and the wheel servos to **D5**/**D6** (see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring). If you wired your own photoresistor to a different pin, you'd change the **Arduino Port** in the node's config panel — but for the kit build, the presets already have it right, so there's nothing to configure before uploading.
+The kit's sensor presets already point at the right pins: the photocell node is wired to **A0**, and the wheel servos to **D5**/**D6** (see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring). If you wired your own photoresistor to a different pin, you'd change the **Arduino Port** in the node's config panel. For the kit build, though, the presets already have it right, so there's nothing to configure before uploading.
 
 ## Upload the diagram
 
 With the Vehicle 1 diagram open and an Arduino connected:
 
-1. Set the **Sketch loop period** to `20` ms in **Settings** (the ⚙ gear at the far right of the toolbar) — see [Settings](../getting-started/editor#settings) for what loop period controls
-2. Select your board in the **Device** dropdown — see [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-arduino) if it doesn't show up
-3. Click **Upload to robot** — BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board. (No board yet? See [Sketch](../getting-started/editor#sketch) for what the **▾** chevron's other options do.)
+1. Set the **Sketch loop period** to `20` ms in **Settings** (the ⚙ gear at the far right of the toolbar). See [Settings](../getting-started/editor#settings) for what loop period controls.
+2. Select your board in the **Device** dropdown. See [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-arduino) if it doesn't show up.
+3. Click **Upload to robot**. BraitenBot validates your diagram, generates the Arduino sketch, and uploads it to the board. (No board yet? See [Sketch](../getting-started/editor#sketch) for what the **▾** chevron's other options do.)
 
 :::note[Board not showing up?]
 See [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-arduino) for first-time setup.
@@ -27,10 +27,10 @@ See [Connecting your Arduino](../getting-started/arduino-setup#connecting-your-a
 
 ## The flashlight test
 
-Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows — not by steering, but simply by speeding up or slowing down based on brightness.
+Now try it: place the robot on a table and shine a flashlight at the sensor. The robot should drive toward the light source. Move the light and the robot follows, not by steering, but simply by speeding up or slowing down based on brightness.
 
-Cover the sensor and it stops. That's the whole vehicle: no code you wrote, no logic — a wire that turns brightness into speed, now running on real hardware.
+Cover the sensor and it stops. That's the whole vehicle: no code you wrote, no logic, just a wire that turns brightness into speed, now running on real hardware.
 
 ## What's next
 
-One eye can only speed up or slow down. [Eyes: Photocells](./photocells) mounts the second photocell so the robot can steer — and covers the tuning you'll need when the two real sensors don't quite match.
+One eye can only speed up or slow down. [Eyes: Photocells](./photocells) mounts the second photocell so the robot can steer, and covers the tuning you'll need when the two real sensors don't quite match.

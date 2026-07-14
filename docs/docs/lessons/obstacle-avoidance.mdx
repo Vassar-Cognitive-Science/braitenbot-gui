@@ -55,7 +55,7 @@ Click the weight badge on the Left Detect → Right Sum wire and drag it to **�
   editable
   initialInputs={{ 'left-tof': 80 }}
   goal={{
-    title: "It speeds up toward walls. Make a wall on the left throw the right wheel into reverse — and leave open floor alone.",
+    title: "It speeds up toward walls. Make a wall on the left throw the right wheel into reverse, and leave open floor alone.",
     tests: [
       {
         label: 'a wall on the left throws the right wheel into reverse',
@@ -112,7 +112,7 @@ Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0
     title: "Give the right side its own 'no.' Walls on either side, open floor straight ahead.",
     tests: [
       {
-        label: 'a wall on the right — pivot left',
+        label: 'a wall on the right: pivot left',
         phases: [{ inputs: { 'right-tof': 80, 'left-tof': 0 }, ticks: 5 }],
         expect: [
           { node: 'left-motor', op: 'lte', value: -40 },
@@ -120,7 +120,7 @@ Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0
         ],
       },
       {
-        label: 'a wall on the left — still pivots right',
+        label: 'a wall on the left: still pivots right',
         phases: [{ inputs: { 'left-tof': 80, 'right-tof': 0 }, ticks: 5 }],
         expect: [
           { node: 'right-motor', op: 'lte', value: -40 },
@@ -128,7 +128,7 @@ Three moves: wire Right ToF Distance → Right Detect (the default weight of 1.0
         ],
       },
       {
-        label: 'open floor — cruise straight',
+        label: 'open floor: cruise straight',
         phases: [{ inputs: { 'left-tof': 0, 'right-tof': 0 }, ticks: 5 }],
         expect: [
           { node: 'left-motor', op: 'gte', value: 45 },
@@ -182,7 +182,7 @@ A pre-placed threshold ("Really bright?", set to 25, safely above the noise floo
   editable
   initialInputs={{ 'photo': 0 }}
   goal={{
-    title: 'In the dark it twitches. Make the wheel dead silent at light 0 — and driving hard at light 80.',
+    title: 'In the dark it twitches. Make the wheel dead silent at light 0, and driving hard at light 80.',
     tests: [
       {
         label: 'dead silence in the dark',

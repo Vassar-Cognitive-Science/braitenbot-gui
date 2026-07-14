@@ -5,54 +5,54 @@ title: "Eyes: Photocells"
 
 # Eyes: Photocells
 
-You cross-wired two eyes in [2. Fear & Love](../lessons/fear-and-love) and let them fight the noise floor in [3. Don't](../lessons/obstacle-avoidance) — here's how to mount and tune the real ones.
+You cross-wired two eyes in [2. Fear & Love](../lessons/fear-and-love) and let them fight the noise floor in [3. Don't](../lessons/obstacle-avoidance). Here's how to mount and tune the real ones.
 
 ## Mounting and wiring
 
-Mount the robot's two **light-sensor boards** on the front, angled slightly outward — one pointing left, one pointing right. Wire each board's analog output to pins **A0** (left) and **A1** (right) — see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring; the board already carries the photocell and its voltage divider, so there's nothing else to add. Do **not** wire your own divider — the board does it for you.
+Mount the robot's two **light-sensor boards** on the front, angled slightly outward: one pointing left, one pointing right. Wire each board's analog output to pins **A0** (left) and **A1** (right); see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring. The board already carries the photocell and its voltage divider, so there's nothing else to add. Do **not** wire your own divider: the board does it for you.
 
 When a light source is to the left of the robot, the left board gets more light and reads higher. When it's to the right, the right board reads higher. That asymmetry is all the steering circuit needs.
 
 ## Tuning for real hardware
 
-On a real robot, the two photoresistors won't be perfectly matched — one might read 10–15% higher than the other under identical lighting. This shows up as a subtle curve to one side when the robot should be driving straight. You can compensate by adjusting the weights independently:
+On a real robot, the two photoresistors won't be perfectly matched: one might read 10–15% higher than the other under identical lighting. This shows up as a subtle curve to one side when the robot should be driving straight. You can compensate by adjusting the weights independently:
 
 | Left weight | Right weight | Effect |
 |-------------|-------------|--------|
 | 0.7 | 0.7 | Balanced (ideal sensors) |
 | 0.7 | 0.6 | Compensates for a right sensor that reads high |
 | 0.5 | 0.5 | Slower, more controlled approach |
-| 1.0 | 1.0 | Maximum speed — may oscillate around the target |
+| 1.0 | 1.0 | Maximum speed: may oscillate around the target |
 
-A weight less than 1.0 limits the motor speed, which matters on a real robot — at full speed the robot may overshoot the light source and oscillate back and forth. Starting at 0.7 gives a good balance between responsiveness and stability.
+A weight less than 1.0 limits the motor speed, which matters on a real robot: at full speed the robot may overshoot the light source and oscillate back and forth. Starting at 0.7 gives a good balance between responsiveness and stability.
 
 ## Two curves you'll want on the real robot
 
-On the bench, linear weights are enough. On the floor, real photocells have a noise floor and real motors have momentum — and both problems are fixed with a [transfer curve](../guide/transfer-functions) instead of a weight.
+On the bench, linear weights are enough. On the floor, real photocells have a noise floor and real motors have momentum, and both problems are fixed with a [transfer curve](../guide/transfer-functions) instead of a weight.
 
 ### Curve 1: a dead zone for sensor jitter
 
-You build the light-follower circuit, upload it, and the robot works — mostly. But even when there's no light source nearby, the motors twitch. The robot jitters in place instead of sitting still.
+You build the light-follower circuit, upload it, and the robot works, mostly. But even when there's no light source nearby, the motors twitch. The robot jitters in place instead of sitting still.
 
-The cause: your photoresistors don't read exactly zero in a dark room. Ambient light, electrical noise, and sensor drift produce small readings — maybe 5 to 15 out of 100. With a linear weight of 0.7, those readings become motor signals of 3.5 to 10.5 — small, but enough to make the wheels visibly jerk.
+The cause: your photoresistors don't read exactly zero in a dark room. Ambient light, electrical noise, and sensor drift produce small readings, maybe 5 to 15 out of 100. With a linear weight of 0.7, those readings become motor signals of 3.5 to 10.5: small, but enough to make the wheels visibly jerk.
 
-You could add a Threshold node, but then you lose proportional control — the robot would lurch from stopped to full speed with no in-between. Instead, put a dead zone on the connection:
+You could add a Threshold node, but then you lose proportional control: the robot would lurch from stopped to full speed with no in-between. Instead, put a dead zone on the connection:
 
 1. Click the connection between the sensor and the motor
 2. Change **Transfer Function** from "Linear (weight)" to **"Non-linear (curve)"**
 3. Set control points at **(-100, 0), (20, 0), (100, 100)**
 
-Any sensor reading below 20 produces exactly 0 at the motor — no jitter. Above 20, the output ramps linearly to 100. Upload this and the jittering stops: the robot sits still in a dark room, responds smoothly to nearby light, and still has full proportional control above the noise floor.
+Any sensor reading below 20 produces exactly 0 at the motor: no jitter. Above 20, the output ramps linearly to 100. Upload this and the jittering stops: the robot sits still in a dark room, responds smoothly to nearby light, and still has full proportional control above the noise floor.
 
 ### Curve 2: a speed cap for overshoot
 
-Another common issue: the robot charges at the light source at full speed, overshoots, whips around, overshoots again, and oscillates. Lowering the weight to 0.3 fixes the overshoot but makes the robot sluggish from far away — it barely responds to light at a distance.
+Another common issue: the robot charges at the light source at full speed, overshoots, whips around, overshoots again, and oscillates. Lowering the weight to 0.3 fixes the overshoot but makes the robot sluggish from far away: it barely responds to light at a distance.
 
-What you actually want is for the robot to respond briskly when the light is distant (low reading) but limit its speed as it gets closer (high reading). This is Braitenberg's Vehicle 3 — the "love" vehicle — and it requires a capped response curve.
+What you actually want is for the robot to respond briskly when the light is distant (low reading) but limit its speed as it gets closer (high reading). This is Braitenberg's Vehicle 3, the "love" vehicle, and it requires a capped response curve.
 
 Set control points at **(-100, 0), (0, 0), (30, 60), (60, 60), (100, 60)**.
 
-The motor reaches 60% speed quickly (by sensor reading 30) but plateaus there. The robot approaches the light source briskly from a distance but can't overshoot because it's speed-limited near the source. This is the difference between a robot that crashes into the light source and one that parks next to it — approach fast, arrive gently.
+The motor reaches 60% speed quickly (by sensor reading 30) but plateaus there. The robot approaches the light source briskly from a distance but can't overshoot because it's speed-limited near the source. This is the difference between a robot that crashes into the light source and one that parks next to it: approach fast, arrive gently.
 
 ## What's next
 

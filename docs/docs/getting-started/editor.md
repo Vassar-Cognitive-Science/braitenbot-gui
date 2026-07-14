@@ -34,22 +34,22 @@ The palette has two tabs, **Basic** and **Advanced**, so you can start simple an
 
 The Basic tab lists the reference kit's hardware by friendly name, with pins and options pre-filled to match the standard build:
 
-- **Kit sensors** — Left/Right Photocell, four Bump switches, Color Sensor, Left/Right ToF Distance
-- **Kit outputs** — 7-Segment Display
-- **Compute** — a starter set: Threshold, Summation, Multiply, Delay
+- **Kit sensors**: Left/Right Photocell, four Bump switches, Color Sensor, Left/Right ToF Distance
+- **Kit outputs**: 7-Segment Display
+- **Compute**: a starter set of Threshold, Summation, Multiply, Delay
 
-Dragging **Left Photocell**, for example, drops an analog sensor already set to pin A0 with its signal inverted — so you don't have to type pin numbers for standard kit parts.
+Dragging **Left Photocell**, for example, drops an analog sensor already set to pin A0 with its signal inverted, so you don't have to type pin numbers for standard kit parts.
 
 ### Advanced tab
 
 The Advanced tab lists **every** node type, grouped into collapsible sections:
 
-- **Sensors** — Analog Sensor, Digital Sensor, Color Sensor, ToF Distance
-- **Compute** — Threshold, Delay, Summation, Multiply, Minimum, Maximum, Oscillator, Noise, Constant
-- **Outputs** — Continuous Servo, Positional Servo, Digital Output, 7-Segment Display
-- **Compounds** — your custom compound node types (appears when you've created at least one)
+- **Sensors**: Analog Sensor, Digital Sensor, Color Sensor, ToF Distance
+- **Compute**: Threshold, Delay, Summation, Multiply, Minimum, Maximum, Oscillator, Noise, Constant
+- **Outputs**: Continuous Servo, Positional Servo, Digital Output, 7-Segment Display
+- **Compounds**: your custom compound node types (appears when you've created at least one)
 
-Nodes dropped from the Advanced tab are generic: you assign their pins yourself in the config panel (the field shows a suggested pin as a placeholder). Fixed-wiring parts still pre-fill — the 7-Segment Display comes in with CLK 9 / DIO 10.
+Nodes dropped from the Advanced tab are generic: you assign their pins yourself in the config panel (the field shows a suggested pin as a placeholder). Fixed-wiring parts still pre-fill: the 7-Segment Display comes in with CLK 9 / DIO 10.
 
 Each section is color-coded to match the node kind:
 - Orange for sensors
@@ -67,9 +67,9 @@ The palette is resizable: drag the handle on its right edge to make it wider or 
 
 The canvas is where you build your circuit. It shows:
 
-- **Nodes** — rectangular blocks representing sensors, compute elements, and outputs
-- **Connections** — curved lines linking node outputs to inputs
-- **Robot overlay** — a top-down view of the robot body and wheels in the center of the canvas
+- **Nodes**: rectangular blocks representing sensors, compute elements, and outputs
+- **Connections**: curved lines linking node outputs to inputs
+- **Robot overlay**: a top-down view of the robot body and wheels in the center of the canvas
 
 ### Navigation
 
@@ -80,7 +80,7 @@ The canvas is where you build your circuit. It shows:
 
 ### Working with nodes
 
-- **Select a node**: click it — the config panel opens on the right
+- **Select a node**: click it to open the config panel on the right
 - **Select all**: `Ctrl/Cmd+A`
 - **Multi-select**: Shift+click to add/remove nodes from the selection
 - **Clear the selection**: press `Escape` (also closes the config panel)
@@ -100,61 +100,61 @@ The editor prevents invalid connections: you can't connect a node to itself, exc
 
 ### The robot overlay
 
-The robot appears as a circle in the center of the canvas with two wheels (rounded rectangles) on the left and right edges. The two motor nodes (left wheel, right wheel) are always snapped to the wheel positions — you can't drag them away from the robot body. All other nodes can be positioned freely.
+The robot appears as a circle in the center of the canvas with two wheels (rounded rectangles) on the left and right edges. The two motor nodes (left wheel, right wheel) are always snapped to the wheel positions: you can't drag them away from the robot body. All other nodes can be positioned freely.
 
-In **trace mode**, each wheel's motor block also grows a drive arrow straight out of it: up from the top edge (green) for a positive, forward signal and down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude — a quick read on which way each wheel would turn. (It's an indicator only; to actually watch the robot move, upload to the real hardware.)
+In **trace mode**, each wheel's motor block also grows a drive arrow straight out of it: up from the top edge (green) for a positive, forward signal and down from the bottom edge (tan) for a negative, reverse one, scaled by magnitude, giving a quick read on which way each wheel would turn. (It's an indicator only; to actually watch the robot move, upload to the real hardware.)
 
 ## Canvas toolbar (top)
 
 The toolbar is divided into functional groups:
 
 ### Group
-- **Group** — select 2 or more nodes, then click to combine them into a compound node
-- **Ungroup** — select a compound instance to expand it back into its constituent nodes
+- **Group**: select 2 or more nodes, then click to combine them into a compound node
+- **Ungroup**: select a compound instance to expand it back into its constituent nodes
 
 ### Annotate
-- **Comment** — drop a gray note box on the canvas to explain what a cluster of nodes is doing. Comments sit behind the nodes, are editable, movable, and resizable, and are saved with the diagram — but they carry no signal and are ignored when generating code. (Comments live on the top-level diagram only, so the button is disabled while you're editing inside a compound.)
+- **Comment**: drop a gray note box on the canvas to explain what a cluster of nodes is doing. Comments sit behind the nodes, are editable, movable, and resizable, and are saved with the diagram, but they carry no signal and are ignored when generating code. (Comments live on the top-level diagram only, so the button is disabled while you're editing inside a compound.)
 
 ### Simulate
-- **Trace Signal Flow** — toggle the real-time signal simulation overlay
+- **Trace Signal Flow**: toggle the real-time signal simulation overlay
 
-(The ▶ pulse duration used in trace mode is set in **Settings** — see below.)
+(The ▶ pulse duration used in trace mode is set in **Settings**; see below.)
 
 ### Sketch
-- **Upload to robot / Generate** (split button) — the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
+- **Upload to robot / Generate** (split button): the primary segment runs the selected action; click the **▾** chevron to switch between **Upload to robot** (compile and upload to the connected board) and **Generate code only** (show the generated sketch without needing a board). The chosen action is remembered. "Generate code only" works without any board connected.
 
-During an upload, a **progress bar** appears at the top of the canvas showing the current phase (compiling, then uploading — with a percentage once the uploader reports one), next to a **Cancel** button.
+During an upload, a **progress bar** appears at the top of the canvas showing the current phase (compiling, then uploading, with a percentage once the uploader reports one), next to a **Cancel** button.
 
-The Arduino **loop period** is no longer in this group — it now lives in **Settings** (see below).
+The Arduino **loop period** is no longer in this group; it now lives in **Settings** (see below).
 
 ### Device
-- **Board selector** — dropdown showing detected Arduino boards
-- **Refresh** — re-scan serial ports
-- **Monitor** — open the serial monitor to watch live output from the board, and send lines back to it using the text box at the bottom of the panel (for example, to drive the [hardware test sketch](../hardware/testing) over serial)
+- **Board selector**: dropdown showing detected Arduino boards
+- **Refresh**: re-scan serial ports
+- **Monitor**: open the serial monitor to watch live output from the board, and send lines back to it using the text box at the bottom of the panel (for example, to drive the [hardware test sketch](../hardware/testing) over serial)
 
 ### Share
-- **Share** — start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
+- **Share**: start or join a real-time collaborative session. See [Collaborative Sessions](../guide/collaborative-sessions).
 
 ### Settings
-- **⚙ (gear)** — at the far right of the toolbar, opens the Settings dialog. It is split into two groups. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
-  - **Personal preferences** are yours alone — stored per device and never shared in a session:
-    - **Auto-select an identified board** — when your board-picker selection is an unidentified port, automatically switch to a newly detected board with a known type (FQBN). Turn it off to keep whatever board you picked.
+- **⚙ (gear)**: at the far right of the toolbar, opens the Settings dialog. It is split into two groups. *(On macOS, Settings is also reachable from the app menu, ⌘,.)*
+  - **Personal preferences** are yours alone, stored per device and never shared in a session:
+    - **Auto-select an identified board**: when your board-picker selection is an unidentified port, automatically switch to a newly detected board with a known type (FQBN). Turn it off to keep whatever board you picked.
   - **Diagram preferences** are saved with the diagram and shared live, so in a collaborative session the **host** controls them (they are read-only for view-only guests):
-    - **Connection-weight cap** — keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights.
-    - **Sketch loop period** (1–1000 ms) — how often the generated loop reads sensors and updates motors.
-    - **Trace pulse duration** (10–5000 ms) — how long the ▶ button holds a sensor at full value in trace mode.
+    - **Connection-weight cap**: keep weights in the conventional −1…1 Braitenberg range, or turn it off for arbitrary weights.
+    - **Sketch loop period** (1–1000 ms): how often the generated loop reads sensors and updates motors.
+    - **Trace pulse duration** (10–5000 ms): how long the ▶ button holds a sensor at full value in trace mode.
   - **Advanced** (collapsed by default) holds one more personal preference:
-    - **Collaboration relay URL** — the server that carries [live sessions](../guide/collaborative-sessions#self-hosting-the-relay). Leave it blank to use the built-in relay; set it to your own `ws://`/`wss://` endpoint to run sessions on your own server.
+    - **Collaboration relay URL**: the server that carries [live sessions](../guide/collaborative-sessions#self-hosting-the-relay). Leave it blank to use the built-in relay; set it to your own `ws://`/`wss://` endpoint to run sessions on your own server.
 
 ## Application menu (desktop app)
 
 The desktop build adds a native menu bar with the usual app-level actions:
 
-- **File** — New Diagram, Save…, Load…
+- **File**: New Diagram, Save…, Load…
 - **View**
-  - **Go to Main View** (`Ctrl/Cmd+0`) — recenter the canvas and reset the zoom to 100%
-  - **Check for Errors / Warnings** — open the diagram check: a list of everything worth fixing, split into problems that block upload (**errors**) and things worth a look (**warnings** — unnamed or unconnected nodes, pin conflicts, and so on). Nothing needs to be uploaded to see it.
-- **Hardware** — Upload Test Sketch
+  - **Go to Main View** (`Ctrl/Cmd+0`): recenter the canvas and reset the zoom to 100%
+  - **Check for Errors / Warnings**: open the diagram check, a list of everything worth fixing, split into problems that block upload (**errors**) and things worth a look (**warnings**: unnamed or unconnected nodes, pin conflicts, and so on). Nothing needs to be uploaded to see it.
+- **Hardware**: Upload Test Sketch
 
 ## Config panel (right sidebar)
 
@@ -164,16 +164,16 @@ When you select a node or connection, the config panel shows its editable proper
 
 Depending on the node type, you'll see:
 
-- **Label** — the node's display name
-- **Arduino Port** — pin assignment (sensors and outputs)
-- **Parameters** — threshold value, delay time, frequency, amplitude, etc.
+- **Label**: the node's display name
+- **Arduino Port**: pin assignment (sensors and outputs)
+- **Parameters**: threshold value, delay time, frequency, amplitude, etc.
 - **Delete Node** button
 
 ### Connection config
 
-- **Transfer function** — choose between Linear (simple weight) or Non-linear (custom curve)
-- **Weight** — for linear mode, a numeric input plus (when the weight cap is on) a −1…+1 slider. Turn the cap off in Settings to enter any weight; the slider then hides and only the numeric field remains.
-- **Curve editor** — for non-linear mode, an interactive point editor
+- **Transfer function**: choose between Linear (simple weight) or Non-linear (custom curve)
+- **Weight**: for linear mode, a numeric input plus (when the weight cap is on) a −1…+1 slider. Turn the cap off in Settings to enter any weight; the slider then hides and only the numeric field remains.
+- **Curve editor**: for non-linear mode, an interactive point editor
 - **Delete Connection** button
 
 ## Oscilloscope (bottom, trace mode only)
@@ -201,7 +201,7 @@ When signal tracing is active (toggled with **Trace Signal Flow**), a collapsibl
 | **Ctrl/Cmd + Shift + Z** or **Ctrl/Cmd + Y** | Redo |
 | **Double-click** compound | Enter the compound body editor |
 
-There are no keyboard shortcuts for toolbar actions (Group, Trace, Upload to robot / Generate) — those are buttons, described above.
+There are no keyboard shortcuts for toolbar actions (Group, Trace, Upload to robot / Generate); those are buttons, described above.
 
 ## Next steps
 

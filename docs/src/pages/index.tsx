@@ -102,7 +102,7 @@ export default function Home(): React.ReactElement {
             <p className={`${styles.lede} ${styles.rise}`} style={{ animationDelay: '0.15s' }}>
               BraitenBot is an educational tool for sensorimotor robotics. Connect sensors to
               motors through weighted links, trace how those signals become behavior, and run
-              your design on real Arduino hardware — the thought experiments from Braitenberg’s{' '}
+              your design on real Arduino hardware: the thought experiments from Braitenberg’s{' '}
               <em>Vehicles</em>, made tangible.
             </p>
             <div className={`${styles.actions} ${styles.rise}`} style={{ animationDelay: '0.2s' }}>
@@ -127,7 +127,7 @@ export default function Home(): React.ReactElement {
           <figure className={`${styles.figure} ${styles.rise}`} style={{ animationDelay: '0.15s' }}>
             <PhototaxisScene />
             <figcaption className={styles.figcaption}>
-              <span><strong>Fig. 3a</strong> — Phototaxis</span>
+              <span><strong>Fig. 3a</strong> · Phototaxis</span>
             </figcaption>
           </figure>
         </header>
@@ -138,8 +138,8 @@ export default function Home(): React.ReactElement {
             <h2>An open robotics platform you build yourself.</h2>
             <p className={styles.sectionLede}>
               BraitenBot isn’t a sealed kit. The robot is built from standard, orderable
-              parts and a 3D-printed chassis, and every layer — the editor, the firmware it
-              generates, and the hardware itself — is open and meant to be modified.
+              parts and a 3D-printed chassis, and every layer is open and meant to be
+              modified: the editor, the firmware it generates, and the hardware itself.
             </p>
           </div>
 
@@ -148,8 +148,8 @@ export default function Home(): React.ReactElement {
               <dt className={styles.specTerm}>Orderable parts</dt>
               <dd className={styles.specDesc}>
                 An Arduino-compatible board, two continuous-rotation servos for the
-                wheels, and light, distance, and color sensors — stock components from
-                any electronics supplier, not a proprietary kit.
+                wheels, and light, distance, and color sensors. All of it is stock,
+                available from any electronics supplier, not a proprietary kit.
               </dd>
             </div>
             <div className={styles.spec}>
@@ -163,8 +163,8 @@ export default function Home(): React.ReactElement {
               <dt className={styles.specTerm}>Configurable with LEGO Technic</dt>
               <dd className={styles.specDesc}>
                 Mounting points follow the Technic standard, so students can move sensors,
-                extend the body, and test how a vehicle’s shape changes its behavior — the
-                heart of the exercise.
+                extend the body, and test how a vehicle’s shape changes its behavior. That
+                is the heart of the exercise.
               </dd>
             </div>
             <div className={styles.spec}>

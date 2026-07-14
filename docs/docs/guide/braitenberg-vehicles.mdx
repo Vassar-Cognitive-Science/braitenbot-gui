@@ -7,7 +7,7 @@ title: Braitenberg Vehicles
 
 In 1984, the neuroscientist Valentino Braitenberg published *Vehicles: Experiments in Synthetic Psychology*, a slim book of thought experiments. His premise was deceptively simple: take a box on wheels, add a sensor and a motor, and wire them together. Then watch what happens.
 
-What happens is surprisingly lifelike behavior. A vehicle with two photoresistors and two motors — four components, two wires — can appear to "fear" light, "chase" it, or "fall in love" with it, depending entirely on which wire goes where. Braitenberg's point was that we instinctively attribute complex mental states to agents whose mechanisms are trivially simple. The vehicles are a lesson in how much behavior can emerge from very little structure.
+What happens is surprisingly lifelike behavior. A vehicle with two photoresistors and two motors (four components, two wires) can appear to "fear" light, "chase" it, or "fall in love" with it, depending entirely on which wire goes where. Braitenberg's point was that we instinctively attribute complex mental states to agents whose mechanisms are trivially simple. The vehicles are a lesson in how much behavior can emerge from very little structure.
 
 BraitenBot lets you build these vehicles for real, on physical hardware, and extend them far beyond Braitenberg's original designs.
 
@@ -15,7 +15,7 @@ BraitenBot lets you build these vehicles for real, on physical hardware, and ext
 
 A Braitenberg vehicle has:
 
-- **Sensors** on the front that detect something in the environment — light, distance, color
+- **Sensors** on the front that detect something in the environment: light, distance, color
 - **Motors** that drive wheels on the left and right sides
 - **Wires** connecting sensors to motors, each with a weight that amplifies or attenuates the signal
 
@@ -23,11 +23,11 @@ No microcontroller logic, no if-statements, no planning. The vehicle's behavior 
 
 ## The classic vehicles
 
-Braitenberg named a few of these wiring patterns himself. You can build every one of them in the [Fear & Love lesson](../lessons/fear-and-love) — here's what to expect from each:
+Braitenberg named a few of these wiring patterns himself. You can build every one of them in the [Fear & Love lesson](../lessons/fear-and-love); here's what to expect from each:
 
-- **Vehicle 2a, "fear"** — each sensor wired to the motor on the **same** side (ipsilateral), positive weight. Light on the left speeds up the left motor, so the vehicle's nose swings away from the source and it flees — faster the brighter the light gets.
-- **Vehicle 2b, "aggression"** — each sensor cross-wired to the **opposite** motor (contralateral), positive weight. Light on the left now speeds up the *right* motor, turning the vehicle toward the source and charging at it as it gets closer. This is also roughly how phototaxis works in biology: many organisms steer toward light using this same contralateral wiring between photoreceptors and motor neurons.
-- **Vehicle 3, "love"** — 2b's cross-wiring again, but with negative weights over a Constant baseline that drives both motors forward. Light on one side inhibits the opposite motor instead of exciting it, so the vehicle still turns toward the source but slows as it nears, parking gently beside it. The lesson's "keep it moving in the dark" puzzle has you build the baseline-plus-inhibition circuit that makes this behavior possible.
+- **Vehicle 2a, "fear"**: each sensor wired to the motor on the **same** side (ipsilateral), positive weight. Light on the left speeds up the left motor, so the vehicle's nose swings away from the source and it flees, faster the brighter the light gets.
+- **Vehicle 2b, "aggression"**: each sensor cross-wired to the **opposite** motor (contralateral), positive weight. Light on the left now speeds up the *right* motor, turning the vehicle toward the source and charging at it as it gets closer. This is also roughly how phototaxis works in biology: many organisms steer toward light using this same contralateral wiring between photoreceptors and motor neurons.
+- **Vehicle 3, "love"**: 2b's cross-wiring again, but with negative weights over a Constant baseline that drives both motors forward. Light on one side inhibits the opposite motor instead of exciting it, so the vehicle still turns toward the source but slows as it nears, parking gently beside it. The lesson's "keep it moving in the dark" puzzle has you build the baseline-plus-inhibition circuit that makes this behavior possible.
 
 ## The power of the idea
 
@@ -40,18 +40,18 @@ The remarkable thing about Braitenberg vehicles is that they demonstrate how the
 | Cross-wired | Negative | Approaches gently |
 | Same-side | Negative | Slows near stimulus, orients away |
 
-Build the first three yourself, hands-on, in the [Fear & Love lesson](../lessons/fear-and-love). The fourth — same-side wiring with negative weights — is a good one to reason through on your own, or to try in [trace mode](./simulation).
+Build the first three yourself, hands-on, in the [Fear & Love lesson](../lessons/fear-and-love). The fourth (same-side wiring with negative weights) is a good one to reason through on your own, or to try in [trace mode](./simulation).
 
-Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior — and it's the principle that BraitenBot is built around.
+Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior, and it's the principle that BraitenBot is built around.
 
 ## Beyond Braitenberg
 
 Braitenberg's original vehicles used only direct sensor-to-motor wiring. BraitenBot extends this with:
 
-- **Compute nodes** — threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
-- **Feedback loops** — delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [Memory lesson](../lessons/latches-with-delay))
-- **Transfer functions** — curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
-- **Compound nodes** — reusable sub-circuits that keep complex diagrams manageable
-- **Multiple sensor types** — analog, digital, and I2C sensors for interacting with a richer physical world
+- **Compute nodes**: threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
+- **Feedback loops**: delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [Memory lesson](../lessons/latches-with-delay))
+- **Transfer functions**: curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
+- **Compound nodes**: reusable sub-circuits that keep complex diagrams manageable
+- **Multiple sensor types**: analog, digital, and I2C sensors for interacting with a richer physical world
 
 With these additions, you can build behaviors that Braitenberg only hinted at: state machines, oscillating search patterns, and layered [subsumption architectures](../lessons/subsumption-architecture) where multiple behaviors cooperate and compete.

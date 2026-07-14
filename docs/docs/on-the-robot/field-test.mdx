@@ -5,18 +5,18 @@ title: "Field Test: Let It Loose"
 
 # Field Test: Let It Loose
 
-You built the three-layer robot in [6. Nobody Home](../lessons/subsumption-architecture) — now put it in a room with furniture and let it fend for itself.
+You built the three-layer robot in [6. Nobody Home](../lessons/subsumption-architecture). Now put it in a room with furniture and let it fend for itself.
 
 ## What you should see
 
 Put the robot on the floor and watch:
 
 1. It drives forward (cruise)
-2. It approaches a table leg — the distance sensors detect it and the robot veers away (avoid overrides cruise)
-3. It clips a corner the sensors missed — bumper clicks — the robot reverses for about 2 seconds (escape overrides everything)
+2. It approaches a table leg: the distance sensors detect it and the robot veers away (avoid overrides cruise)
+3. It clips a corner the sensors missed. The bumper clicks, and the robot reverses for about 2 seconds (escape overrides everything)
 4. After reversing, it resumes driving forward. If the table leg is still nearby, avoidance kicks in again immediately
 
-The robot navigates surprisingly well for something with no planning, no map, and no centralized control. Each behavior is a simple sensor-to-motor circuit. The competence comes from the layering.
+The robot navigates well for something with no planning, no map, and no centralized control. Each behavior is a simple sensor-to-motor circuit. The competence comes from the layering.
 
 ## Tuning the escape hold
 
@@ -35,9 +35,9 @@ These holds are **shorter** than the table in the [Memory lesson](../lessons/lat
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Wheels twitch even in a dark, empty room | Photocell noise floor (readings of 5–15 leaking through linear weights) | Add a dead-zone transfer curve, or set the threshold above the noise — see [Eyes: Photocells](./photocells) |
-| Robot turns *toward* walls and hugs them | Inhibition sign or wiring flipped — a positive weight (or same-side wiring) turns avoidance into attraction | Check that each Detect threshold cross-wires to the *opposite* Mix with weight **-1.0** — see [Rangefinders & Bumpers](./tof-and-bumpers) |
-| Robot ignores bumps entirely | Bumper node missing INPUT_PULLUP, so the press never reads as 100 | Use the Bump presets (D2/D3) with pullup enabled — see [Digital sensors](../hardware/supported-hardware#digital-sensors) |
+| Wheels twitch even in a dark, empty room | Photocell noise floor (readings of 5–15 leaking through linear weights) | Add a dead-zone transfer curve, or set the threshold above the noise; see [Eyes: Photocells](./photocells) |
+| Robot turns *toward* walls and hugs them | Inhibition sign or wiring flipped: a positive weight (or same-side wiring) turns avoidance into attraction | Check that each Detect threshold cross-wires to the *opposite* Mix with weight **-1.0**; see [Rangefinders & Bumpers](./tof-and-bumpers) |
+| Robot ignores bumps entirely | Bumper node missing INPUT_PULLUP, so the press never reads as 100 | Use the Bump presets (D2/D3) with pullup enabled; see [Digital sensors](../hardware/supported-hardware#digital-sensors) |
 | Color node reads zeros | A second I2C device is wired to the bus but missing from the diagram, silently interfering | Add every wired I2C device to the diagram (or unplug it), then re-upload |
 
 ## When in doubt, test the hardware

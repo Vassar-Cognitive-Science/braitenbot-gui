@@ -44,7 +44,7 @@ One wire fixes it. Drag from the **Right Eye**'s bottom dot to the **Left Wheel*
   editable
   initialInputs={{ 'ex-left': 20, 'ex-right': 70 }}
   goal={{
-    title: 'Make it chase: it must turn toward whichever side is brighter — both directions.',
+    title: 'Make it chase: it must turn toward whichever side is brighter, in either direction.',
     tests: [
       {
         label: 'brighter on the left turns it left',
@@ -170,7 +170,7 @@ The cure is a **Constant** node: a steady value that never changes, feeding both
   editable
   initialInputs={{ 'ls': 0, 'rs': 0 }}
   goal={{
-    title: 'It stops dead in the dark. Give it restlessness: both wheels at least 25 with no light — and it still steers toward light.',
+    title: 'It stops dead in the dark. Give it restlessness: both wheels at least 25 with no light, and it still steers toward light.',
     tests: [
       {
         label: 'darkness no longer stops it',
