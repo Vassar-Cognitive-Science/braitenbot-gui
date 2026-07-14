@@ -3,7 +3,6 @@ import type { DiagramConnection, DiagramNode, ThresholdOp, TransferPoint } from 
 import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM, DEFAULT_THRESHOLD_OP } from '../types/diagram';
 import type { DiagramStore } from '../doc/DiagramStore';
 import { TransferCurveEditor } from './TransferCurveEditor';
-import { MiniTransferCurve } from './MiniTransferCurve';
 import { weightLinePoints } from './connectionGeometry';
 import type { TraceResult } from '../hooks/useTraceSimulation';
 import { NumberInput } from './NumberInput';
@@ -467,11 +466,26 @@ export function ConfigPanel({
               value={selectedConnection.transferMode ?? 'linear'}
               onChange={(event) => {
                 const mode = event.target.value as 'linear' | 'nonlinear';
+                if (mode === 'linear') {
+                  // Keep existing points around so toggling back to curve
+                  // mode restores them instead of re-seeding from scratch.
+                  patchConnection(selectedConnection.id, { transferMode: 'linear' });
+                  return;
+                }
+                // Seed the curve from the weight line it's replacing (unless a
+                // curve was already shaped) so behavior doesn't jump when the
+                // dropdown flips modes.
+                const hasCurve = (selectedConnection.transferPoints?.length ?? 0) >= 2;
+                const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
+                const seeded = hasCurve
+                  ? selectedConnection.transferPoints
+                  : [
+                      { x: -100, y: clamp(-100 * selectedConnection.weight) },
+                      { x: 100, y: clamp(100 * selectedConnection.weight) },
+                    ];
                 patchConnection(selectedConnection.id, {
-                  transferMode: mode,
-                  transferPoints: selectedConnection.transferPoints?.length
-                    ? selectedConnection.transferPoints
-                    : [{ x: -100, y: -100 }, { x: 100, y: 100 }],
+                  transferMode: 'nonlinear',
+                  transferPoints: seeded,
                 });
               }}
             >
@@ -488,16 +502,31 @@ export function ConfigPanel({
             const operatingPoint =
               inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
             const isCurve = selectedConnection.transferMode === 'nonlinear';
-            return isCurve ? null : (
-              // Design/linear edges show the line through the origin (slope =
-              // weight), matching the wire badge and the docs popover.
-              <div className="config-transfer-preview">
-                <MiniTransferCurve
-                  points={weightLinePoints(selectedConnection.weight)}
-                  weight={selectedConnection.weight}
-                  operatingPoint={operatingPoint}
-                />
-              </div>
+            // Linear edges are drawn with the same editor as curves, seeded
+            // with the line through the origin (slope = weight) — so the two
+            // modes read as the same kind of graph, and shaping the line (a
+            // click or drag) is literally adding points to it.
+            const graphPoints: TransferPoint[] = isCurve
+              ? (selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }])
+              : weightLinePoints(selectedConnection.weight);
+            return (
+              <TransferCurveEditor
+                points={graphPoints}
+                operatingPoint={operatingPoint}
+                onChange={(pts: TransferPoint[]) => {
+                  if (isCurve) {
+                    patchConnection(selectedConnection.id, { transferPoints: pts });
+                  } else {
+                    // Shaping the weight-line adds/moves a point → it becomes
+                    // a curve. Patch both fields in one call so this is a
+                    // single undo entry.
+                    patchConnection(selectedConnection.id, {
+                      transferMode: 'nonlinear',
+                      transferPoints: pts,
+                    });
+                  }
+                }}
+              />
             );
           })()}
 
@@ -544,20 +573,6 @@ export function ConfigPanel({
                 />
               </label>
             </>
-          )}
-
-          {selectedConnection.transferMode === 'nonlinear' && (
-            <TransferCurveEditor
-              points={selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }]}
-              onChange={(pts: TransferPoint[]) =>
-                patchConnection(selectedConnection.id, { transferPoints: pts })
-              }
-              operatingPoint={(() => {
-                const inX = traceResult?.edgeInputs?.[selectedConnection.id];
-                const outY = traceResult?.edgeSignals?.[selectedConnection.id];
-                return inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
-              })()}
-            />
           )}
 
           <button
