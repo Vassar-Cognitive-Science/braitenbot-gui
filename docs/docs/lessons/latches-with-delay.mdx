@@ -15,16 +15,16 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
-      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 60, y: 320, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
-      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.26, from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.48, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Tap the bumper (▶) once, briefly: the bumper forgets instantly, but the circuit doesn't."
@@ -56,6 +56,7 @@ Draw the missing wire: drag from the dot at the bottom of the Delay up to the La
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'bumper': 0 }}
   goal={{
     title: 'Make the moment outlive itself: ten ticks after the tap ends, the wheel must still be turning.',
@@ -78,10 +79,10 @@ Draw the missing wire: drag from the dot at the bottom of the Delay up to the La
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
-      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 60, y: 320, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
@@ -102,6 +103,7 @@ The fix is to make the feedback *lossy*. Click the weight badge on the Delay →
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'bumper': 0 }}
   goal={{
     title: 'An unforgettable grudge is a bug. Keep the memory alive for about a second — then let it die on its own.',
@@ -132,16 +134,16 @@ The fix is to make the feedback *lossy*. Click the weight badge on the Delay →
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
-      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 390, y: 30, threshold: 10 },
-      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 30, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 20 },
+      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 60, y: 320, threshold: 10 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 60, y: 470, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c2', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c3', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.26, from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.48, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c4', from: 'sum', to: 'sting', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c5', from: 'sting', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
@@ -165,16 +167,16 @@ The fix is a **clamping transfer curve** on the feedback wire: any positive valu
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
-      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 20 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 60, y: 320, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
-      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
+      { id: 'c3', labelT: 0.26, from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.48, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
     ],
   }}
   caption="Same latch, clamped feedback. Tap ▶: the sum settles at a clean, steady 100 instead of climbing forever."
@@ -192,16 +194,16 @@ Pulse the bumper below and watch what actually happens.
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 2000 },
-      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 390, y: 30, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 2000 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 60, y: 320, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c2', from: 'sum', to: 'motor', weight: 0.5, transferMode: 'linear', transferPoints: [] },
-      { id: 'c3', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c4', labelT: 0.46, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
+      { id: 'c3', labelT: 0.26, from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.48, from: 'delay', to: 'sum', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 100 }, { x: 100, y: 100 }] },
     ],
   }}
   caption="A 2-second delay with clamped feedback. Tap ▶ once, then wait. And wait. The tap comes back every 2 seconds, forever."
@@ -248,6 +250,7 @@ Connect memory to behavior. Draw **Still stinging? → Left Sum** and **Still st
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'bumper': 0 }}
   goal={{
     title: 'Wire memory into behavior: cruise, take the hit, back off for about a second, then carry on as if nothing happened.',
@@ -287,20 +290,20 @@ Connect memory to behavior. Draw **Still stinging? → Left Sum** and **Still st
   diagram={{
     loopPeriodMs: 20,
     nodes: [
-      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 30, arduinoPort: '2', pullup: true },
-      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 200, y: 30 },
-      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 190, delayMs: 20 },
-      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 390, y: 30, threshold: 10 },
-      { id: 'fwd', type: 'constant', label: 'Forward', x: 650, y: 30, constantValue: 50 },
-      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 560, y: 190 },
-      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 750, y: 190 },
-      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 560, y: 350, servoPin: '5' },
-      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 750, y: 350, servoPin: '6' },
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 60, y: 20, arduinoPort: '2', pullup: true },
+      { id: 'sum', type: 'compute-summation', label: 'Latch', x: 60, y: 170 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 260, y: 170, delayMs: 20 },
+      { id: 'sting', type: 'compute-threshold', label: 'Still stinging?', x: 60, y: 300, threshold: 10 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 560, y: 30, constantValue: 50 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 470, y: 360 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 650, y: 360 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 470, y: 510, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 650, y: 510, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'bumper', to: 'sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c2', from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'c3', labelT: 0.46, from: 'delay', to: 'sum', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.26, from: 'sum', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.48, from: 'delay', to: 'sum', weight: 0.95, transferMode: 'linear', transferPoints: [] },
       { id: 'c4', from: 'sum', to: 'sting', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c5', from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'c6', from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },

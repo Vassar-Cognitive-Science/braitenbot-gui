@@ -1,15 +1,15 @@
 import React from 'react';
 import type { DiagramNode } from '@app/types/diagram';
 import { NODE_H, NODE_W } from '@app/components/connectionGeometry';
-import { wheelArrowGeometry } from '@app/components/wheelArrow';
+import { wheelBarGeometry } from '@app/components/wheelArrow';
 
 /**
  * A top-down robot chassis drawn behind the wheel nodes, mirroring the desktop
  * app's robot overlay so the embedded diagrams read as a little vehicle rather
  * than free-floating boxes. Rendered when the diagram has at least two
  * continuous-servo wheel nodes; the body spans between the outermost two, with
- * each wheel node sitting on a wheel. In trace mode each wheel also grows the
- * shared drive arrow (forward/reverse, scaled by the motor value).
+ * each wheel node sitting on a wheel. In trace mode each wheel also shows the
+ * shared drive bar on its outer flank (green up / red down, scaled by value).
  *
  * Coordinates are world px — this renders inside the scaled `.id-world`, so the
  * parent transform handles zoom.
@@ -57,20 +57,19 @@ export function RobotOverlay({ nodes, worldPos, traceMode, traceResult }: RobotO
         wheels.map((n) => {
           const raw = traceResult?.nodeValues[n.id];
           if (raw === undefined) return null;
-          const g = wheelArrowGeometry(raw, 1);
+          const g = wheelBarGeometry(raw, 1);
           if (!g) return null;
           const { cx, cy } = center(n);
+          const isLeft = cx <= bodyCx;
+          const nodeHalfW = NODE_W / 2;
+          const left = isLeft ? cx - nodeHalfW - g.gap - g.thickness : cx + nodeHalfW + g.gap;
+          const top = g.positive ? cy - g.length : cy;
           return (
-            <svg
+            <div
               key={`${n.id}-drive`}
-              className={`id-wheel-arrow ${g.forward ? 'forward' : 'reverse'}`}
-              style={{ left: cx - g.svgHalfW, top: cy - g.reach, width: g.svgHalfW * 2, height: g.reach * 2 }}
-            >
-              <line x1={g.cx} y1={g.base} x2={g.cx} y2={g.shaftEndY} strokeWidth={g.strokeW} />
-              <polygon
-                points={`${g.cx},${g.tipY} ${g.cx - g.headHalf},${g.shaftEndY} ${g.cx + g.headHalf},${g.shaftEndY}`}
-              />
-            </svg>
+              className={`id-wheel-bar ${g.positive ? 'positive' : 'negative'}`}
+              style={{ left, top, width: g.thickness, height: g.length }}
+            />
           );
         })}
     </div>

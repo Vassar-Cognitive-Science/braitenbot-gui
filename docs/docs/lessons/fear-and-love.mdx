@@ -21,8 +21,8 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
       { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'c1', labelT: 0.35, from: 'left-sensor', to: 'right-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'c2', labelT: 0.35, from: 'right-sensor', to: 'left-motor', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'c1', labelT: 0.35, from: 'left-sensor', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.35, from: 'right-sensor', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Drag the left eye brighter and see which wheel races, and which way the nose swings."
@@ -70,13 +70,13 @@ One wire fixes it. Drag from the **Right Eye**'s bottom dot to the **Left Wheel*
       { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'e1', from: 'ex-left', to: 'ex-rm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'e1', labelT: 0.28, from: 'ex-left', to: 'ex-rm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Half a chaser. Draw the missing wire from the Right Eye to the Left Wheel. The light slider stays live while you work."
 />
 
-New wires start at weight 1.0, which passes just fine, but click the badge and set it to **0.7** if you want a perfectly symmetric twin of the existing wire. Cross-to-the-left plus cross-to-the-right is the complete Vehicle 2b: whichever side glows brighter, the *opposite* wheel surges, and the nose swings toward the glow.
+New wires start at weight 1.0, the same as the existing wire, so the twin is symmetric the moment you draw it, no weight to tweak. Cross-to-the-left plus cross-to-the-right is the complete Vehicle 2b: whichever side glows brighter, the *opposite* wheel surges, and the nose swings toward the glow.
 
 ## The fearful twin
 
@@ -94,8 +94,8 @@ Compare the diagram below with the cross-wired one above. The nodes and weights 
       { id: 'rm-fear', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'f1', from: 'ls-fear', to: 'lm-fear', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'f2', from: 'rs-fear', to: 'rm-fear', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'f1', from: 'ls-fear', to: 'lm-fear', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'f2', from: 'rs-fear', to: 'rm-fear', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Vehicle 2a (same-side wiring): left sensor drives the left motor, so strong light on one side pushes the vehicle's nose away."
@@ -142,8 +142,8 @@ To make the switch:
       { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
     ],
     connections: [
-      { id: 'e1', labelT: 0.35, from: 'ex-left', to: 'ex-rm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'e2', labelT: 0.35, from: 'ex-right', to: 'ex-lm', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'e1', labelT: 0.35, from: 'ex-left', to: 'ex-rm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'e2', labelT: 0.35, from: 'ex-right', to: 'ex-lm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
     ],
   }}
   caption="Start cross-wired (love). Your job: rewire it into the fearful same-side vehicle. If you get tangled, press Reset and start over."
@@ -191,17 +191,17 @@ The cure is a **Constant** node: a steady value that never changes, feeding both
   }}
   diagram={{
     nodes: [
-      { id: 'ls', type: 'sensor-analog', label: 'Left Eye', x: 60, y: 30, arduinoPort: 'A0' },
-      { id: 'rs', type: 'sensor-analog', label: 'Right Eye', x: 300, y: 30, arduinoPort: 'A1' },
-      { id: 'forward', type: 'constant', label: 'Forward', x: 180, y: 30, constantValue: 30 },
-      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 60, y: 160 },
-      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 300, y: 160 },
-      { id: 'lm', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 290, servoPin: '5' },
-      { id: 'rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 290, servoPin: '6' },
+      { id: 'ls', type: 'sensor-analog', label: 'Left Eye', x: 40, y: 30, arduinoPort: 'A0' },
+      { id: 'rs', type: 'sensor-analog', label: 'Right Eye', x: 360, y: 30, arduinoPort: 'A1' },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 200, y: 120, constantValue: 30 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 40, y: 210 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 360, y: 210 },
+      { id: 'lm', type: 'servo-cr', label: 'Left Wheel', x: 40, y: 360, servoPin: '5' },
+      { id: 'rm', type: 'servo-cr', label: 'Right Wheel', x: 360, y: 360, servoPin: '6' },
     ],
     connections: [
-      { id: 'k1', labelT: 0.35, from: 'ls', to: 'rsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
-      { id: 'k2', labelT: 0.35, from: 'rs', to: 'lsum', weight: 0.7, transferMode: 'linear', transferPoints: [] },
+      { id: 'k1', labelT: 0.25, from: 'ls', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'k2', labelT: 0.25, from: 'rs', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
       { id: 'k3', from: 'lsum', to: 'lm', weight: 1, transferMode: 'linear', transferPoints: [] },
       { id: 'k4', from: 'rsum', to: 'rm', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],

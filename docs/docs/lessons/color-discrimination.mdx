@@ -17,16 +17,16 @@ export const Sw = ({ c }) => (
   initialInputs={{ 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }}
   diagram={{
     nodes: [
-      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
-      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 150 },
-      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 150 },
-      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 270, threshold: 15 },
-      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 270, threshold: 15 },
-      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 290, constantValue: 40 },
-      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 410 },
-      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 410 },
-      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 530, servoPin: '5' },
-      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 530, servoPin: '6' },
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: -70 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 210 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 210 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 340, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 340, threshold: 15 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 300, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 470 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 600, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 600, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
@@ -95,6 +95,7 @@ The fix: click the naive `red → See Red` wire and press **Delete**. Then build
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'color:red': 70, 'color:green': 72, 'color:blue': 68, 'color:clear': 70 }}
   goal={{
     title: 'Fire on the red patch. Stay silent on white paper and blue.',
@@ -149,6 +150,7 @@ A single opinion is just a tic, not taste. Your red pathway is intact below, and
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'color:red': 10, 'color:green': 18, 'color:blue': 40, 'color:clear': 24 }}
   goal={{
     title: 'Build the opposite opinion: detect blue, ignore white, ignore red.',
@@ -179,10 +181,10 @@ A single opinion is just a tic, not taste. Your red pathway is intact below, and
   diagram={{
     nodes: [
       { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
-      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 80, y: 170 },
-      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 430, y: 170 },
-      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 80, y: 300, threshold: 15 },
-      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 430, y: 300, threshold: 15 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 80, y: 240 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 430, y: 240 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 80, y: 370, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 430, y: 370, threshold: 15 },
     ],
     connections: [
       { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
@@ -206,6 +208,7 @@ The cruise chain (a Forward constant of 40 feeding both wheel summations) is alr
 
 <InteractiveDiagram
   editable
+  curveEditing
   initialInputs={{ 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }}
   goal={{
     title: 'Give each color its own reaction: lunge straight at red, spin away from blue, shrug at plain floor.',
@@ -240,16 +243,16 @@ The cruise chain (a Forward constant of 40 feeding both wheel summations) is alr
   }}
   diagram={{
     nodes: [
-      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
-      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 150 },
-      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 150 },
-      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 270, threshold: 15 },
-      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 270, threshold: 15 },
-      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 290, constantValue: 40 },
-      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 410 },
-      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 410 },
-      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 530, servoPin: '5' },
-      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 530, servoPin: '6' },
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: -70 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 210 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 210 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 340, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 340, threshold: 15 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 300, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 470 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 600, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 600, servoPin: '6' },
     ],
     connections: [
       { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
@@ -286,8 +289,8 @@ The thresholds give this vehicle its decisive, all-or-nothing character: 0 or 10
   diagram={{
     nodes: [
       { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
-      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 256, y: 160 },
-      { id: 'forward', type: 'constant', label: 'Forward', x: 60, y: 290, constantValue: 40 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 256, y: 210 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 60, y: 250, constantValue: 40 },
       { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 410 },
       { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 410 },
       { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 530, servoPin: '5' },

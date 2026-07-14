@@ -1,11 +1,9 @@
 /**
  * Shared extractor for the docs' embedded `<InteractiveDiagram>` diagrams.
  *
- * Both the badge-overlap checker (`check-badge-overlaps.ts`) and the diagram
- * render harness (`render-diagrams.ts`) need to pull the authored diagram
- * object literals out of the lesson `.mdx` files and replay the app's render
- * geometry over them. This module owns that scanning so the two scripts agree
- * on exactly what a "diagram" is.
+ * The badge-overlap checker (`check-badge-overlaps.ts`) pulls the authored
+ * diagram object literals out of the lesson `.mdx` files and replays the app's
+ * render geometry over them. This module owns that scanning.
  *
  * The diagram/goal/initialInputs props are plain object literals (numbers,
  * strings, arrays — no function calls), so they can be evaluated directly.

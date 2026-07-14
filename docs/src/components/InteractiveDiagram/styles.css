@@ -108,26 +108,20 @@
   );
 }
 
-.id-wheel-arrow {
+/* Trace-mode per-wheel drive bar: a small capsule on the wheel's outer flank.
+   Grows up (green) for forward, down (red) for reverse. */
+.id-wheel-bar {
   position: absolute;
   pointer-events: none;
-  overflow: visible;
+  border-radius: 999px;
 }
 
-.id-wheel-arrow line {
-  stroke-linecap: round;
+.id-wheel-bar.positive {
+  background: var(--accent, #6aab7a);
 }
 
-.id-wheel-arrow.forward line,
-.id-wheel-arrow.forward polygon {
-  stroke: var(--accent, #6aab7a);
-  fill: var(--accent, #6aab7a);
-}
-
-.id-wheel-arrow.reverse line,
-.id-wheel-arrow.reverse polygon {
-  stroke: var(--sensor-color, #c4905a);
-  fill: var(--sensor-color, #c4905a);
+.id-wheel-bar.negative {
+  background: var(--danger, #c0392b);
 }
 
 .id-caption {
@@ -450,6 +444,37 @@
   height: 74px;
 }
 
+/* The MiniTransferCurve's own path/axis styles are scoped to `.bb-diagram` in
+   the shared diagram.css; the popover renders outside that scope, so restate
+   them here or the curve draws with no stroke (an empty box). */
+.id-weight-curve .mini-curve-path {
+  stroke: #a9d6b4;
+  stroke-width: 1.5;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.id-weight-curve .mini-curve-axis {
+  stroke: #4a4b3f;
+  stroke-width: 0.75;
+  opacity: 0.7;
+}
+
+.id-weight-curve .mini-curve-arrow {
+  stroke: #a9d6b4;
+  stroke-width: 1.5;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.id-weight-curve .mini-curve-point {
+  fill: #d4bc78;
+  stroke: #10120c;
+  stroke-width: 0.5;
+}
+
 .id-weight-note {
   margin: 0;
   font-size: 10px;
@@ -471,6 +496,175 @@
 .id-weight-delete:hover {
   background: #c05a4a;
   color: #fff;
+}
+
+/* Linear / Curve mode switch at the top of an editable weight popover. */
+.id-weight-modes {
+  display: flex;
+  gap: 2px;
+}
+
+.id-weight-mode {
+  flex: 1 1 0;
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #4a4b3f;
+  background: #22241c;
+  color: #a8a595;
+  cursor: pointer;
+}
+
+.id-weight-mode:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.id-weight-mode:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.id-weight-mode.active {
+  background: #6aab7a;
+  border-color: #6aab7a;
+  color: #10120c;
+}
+
+/* Editable transfer-curve editor embedded in the popover. The shared
+   TransferCurveEditor's own CSS lives in App.css (scoped to the app), so the
+   docs restyle its classes here with the embed's palette. */
+.id-weight-curve-editor {
+  display: flex;
+  justify-content: center;
+}
+
+.id-weight-popover .transfer-curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.id-weight-popover .transfer-curve-svg {
+  border: 1px solid #4a4b3f;
+  border-radius: 3px;
+  cursor: crosshair;
+  background: #0f100c;
+}
+
+.id-weight-popover .transfer-bg {
+  fill: #0f100c;
+}
+
+.id-weight-popover .transfer-grid {
+  stroke: #2a2b24;
+  stroke-width: 0.5;
+}
+
+.id-weight-popover .transfer-zero {
+  stroke: #44453a;
+  stroke-width: 1;
+}
+
+.id-weight-popover .transfer-tick {
+  fill: #8a8574;
+  font-family: var(--ifm-font-family-monospace, monospace);
+  font-size: 8px;
+}
+
+.id-weight-popover .transfer-axis-label {
+  fill: #8a8574;
+  font-family: var(--ifm-font-family-monospace, monospace);
+  font-size: 9px;
+}
+
+.id-weight-popover .transfer-path {
+  stroke: #6aab7a;
+  stroke-width: 2;
+  fill: none;
+}
+
+.id-weight-popover .transfer-point {
+  fill: #6aab7a;
+  stroke: #cfc9ba;
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.id-weight-popover .transfer-point.dragging {
+  fill: #d4bc78;
+  stroke: #d4bc78;
+  cursor: grabbing;
+}
+
+.id-weight-popover .transfer-point.selected {
+  fill: #6aab7a;
+  stroke: #d4bc78;
+  stroke-width: 2.5;
+}
+
+.id-weight-popover .transfer-op-point {
+  fill: #d4bc78;
+  stroke: #10120c;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.id-weight-popover .transfer-point.endpoint {
+  fill: #4a7d57;
+}
+
+.id-weight-popover .transfer-coord-editor {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.id-weight-popover .transfer-coord-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--ifm-font-family-monospace, monospace);
+  font-size: 0.78rem;
+  color: #8a8574;
+}
+
+.id-weight-popover .transfer-coord-field input {
+  width: 4rem;
+}
+
+.id-weight-popover .transfer-curve-hint {
+  max-width: 230px;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: #8a8574;
+  text-align: center;
+}
+
+/* ── "Click to view graph" hint for curve badges ───────────────────────── */
+
+.id-curve-hint {
+  position: absolute;
+  z-index: 6;
+  /* Sit just below-right of the badge so the arrow points back up-left at it. */
+  transform: translate(6px, 18px);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #d4bc78;
+  background: rgba(26, 27, 22, 0.9);
+  border: 1px solid rgba(196, 168, 98, 0.4);
+  border-radius: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.id-curve-hint-arrow {
+  font-size: 0.8rem;
+  line-height: 1;
 }
 
 /* ── Inline rejection notice ───────────────────────────────────────────── */

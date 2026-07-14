@@ -7,6 +7,7 @@ import type {
   DiagramNode,
   NodeTypeId,
   OutputPortId,
+  TransferPoint,
 } from '@app/types/diagram';
 import { TYPE_BY_ID } from '@app/types/diagram';
 import { useScopeSimulation } from '@app/hooks/useScopeSimulation';
@@ -17,8 +18,9 @@ import {
 } from '@app/hooks/useTraceSimulation';
 import type { ConfigTarget } from '@app/components/diagramShared';
 import { DiagramCanvas } from '@app/components/DiagramCanvas';
-import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
+import { NODE_H, NODE_W, computeConnectionPaths, weightLinePoints } from '@app/components/connectionGeometry';
 import { MiniTransferCurve } from '@app/components/MiniTransferCurve';
+import { TransferCurveEditor } from '@app/components/TransferCurveEditor';
 import { RobotOverlay } from './RobotOverlay';
 // The app's diagram presentation layer (nodes, connections, trace UI). Scoped
 // under `.bb-diagram`, so it renders as a self-contained dark panel and leaks
@@ -140,6 +142,20 @@ export interface InteractiveDiagramProps {
    * where negative weights haven't been introduced yet.
    */
   weightRange?: 'signed' | 'positive';
+  /**
+   * Show the **Weight / Curve** switch in the weight popover, letting the reader
+   * turn a scalar weight into a draggable transfer curve (and back). Off by
+   * default so the option only appears once transfer curves have been
+   * introduced in the lessons. Requires `editable`; an edge that is already a
+   * curve stays editable regardless of this flag.
+   */
+  curveEditing?: boolean;
+  /**
+   * Show the "click to view graph" nudge next to each curve badge. Off by
+   * default; enable it only on the first diagram that introduces curves so the
+   * hint appears once and never nags again on later curve diagrams.
+   */
+  curveHint?: boolean;
 }
 
 /** Symmetric world padding around the node bounds (world px, pre-scale). */
@@ -151,9 +167,9 @@ const TRACE_MARGIN = 40;
 /** Floor on the fit-to-width shrink so nodes stay close to app-native size;
  *  wider diagrams scroll horizontally rather than shrink past this. */
 const MIN_SCALE = 0.72;
-/** Clamp on the auto-derived viewport height (screen px). */
+/** Floor on the auto-derived viewport height (screen px); no ceiling — the
+ *  panel grows to fit tall diagrams rather than scrolling vertically. */
 const MIN_HEIGHT = 260;
-const MAX_HEIGHT = 560;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 
 // ── Static layout shared by SSR fallback and live component ────────────────
@@ -205,19 +221,15 @@ function computeEpochFit(
   viewportH: number;
 } {
   const contentH = layout.contentH + (traceMode ? TRACE_MARGIN : 0);
-  let scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
-  // A tall diagram scaled to width can exceed MAX_HEIGHT and get clipped (view-
-  // only embeds don't scroll). Shrink further to fit the height too, never
-  // below MIN_SCALE — past that we fall back to vertical scroll.
-  if (heightOverride === undefined && contentH * scale > MAX_HEIGHT) {
-    scale = Math.min(scale, Math.max(MIN_SCALE, MAX_HEIGHT / contentH));
-  }
+  const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
   const scaledW = layout.contentW * scale;
   const scaledH = contentH * scale;
   const overflowsX = scaledW > availW + 0.5;
   const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
-  const viewportH =
-    heightOverride ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(scaledH)));
+  // The embed always grows to fit its content height rather than showing a
+  // vertical scrollbar — a tall diagram (e.g. subsumption) just makes a taller
+  // panel. (Width can still scroll horizontally for very wide graphs.)
+  const viewportH = heightOverride ?? Math.max(MIN_HEIGHT, Math.round(scaledH));
   return { scale, worldOffsetX, overflowsX, viewportH };
 }
 
@@ -227,7 +239,6 @@ function computeEpochFit(
 // toggles / pulse) stay live via the trace passthrough props.
 const NOOP = () => {};
 const NOOP_SET_SELECTED: Dispatch<SetStateAction<Set<string>>> = () => {};
-const NOOP_SET_CONFIG: Dispatch<SetStateAction<ConfigTarget | null>> = () => {};
 const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
 
 /** Deep clone of the diagram's structural arrays so editing never mutates the
@@ -357,6 +368,7 @@ interface DiagramPanelProps {
   traceResult?: {
     nodeValues: Record<string, number>;
     edgeSignals: Record<string, number>;
+    edgeInputs: Record<string, number>;
     disconnected: Set<string>;
   };
   /** Goal banner text; rendered above the canvas when present. */
@@ -365,6 +377,11 @@ interface DiagramPanelProps {
   goalSolved?: boolean;
   /** Weight popover slider range + tick labels. Defaults to 'signed'. */
   weightRange?: 'signed' | 'positive';
+  /** Show the Weight/Curve mode switch in the popover (editable diagrams). */
+  curveEditing?: boolean;
+  /** Show the "click to view graph" nudge next to curve badges (first curve
+   *  diagram only). */
+  curveHint?: boolean;
   // ── editing (all optional; omit → view-only) ─────────────────────────────
   editable?: boolean;
   palette?: NodeTypeId[];
@@ -378,6 +395,8 @@ interface DiagramPanelProps {
   onAddNode?: (type: NodeTypeId) => void;
   onDeleteSelection?: () => void;
   onSetWeight?: (id: string, weight: number) => void;
+  onSetTransferMode?: (id: string, mode: 'linear' | 'nonlinear') => void;
+  onSetTransferPoints?: (id: string, points: TransferPoint[]) => void;
   onDeleteConnection?: (id: string) => void;
   onReset?: () => void;
   /** True when reset would change something (an edit or non-default input). */
@@ -418,6 +437,8 @@ function DiagramPanel({
   goalTitle,
   goalSolved = false,
   weightRange = 'signed',
+  curveEditing = false,
+  curveHint = false,
   editable = false,
   palette,
   selectedNodeIds,
@@ -430,6 +451,8 @@ function DiagramPanel({
   onAddNode,
   onDeleteSelection,
   onSetWeight,
+  onSetTransferMode,
+  onSetTransferPoints,
   onDeleteConnection,
   onReset,
   canReset = false,
@@ -437,6 +460,14 @@ function DiagramPanel({
   onAvailWMeasured,
 }: DiagramPanelProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Editable embeds get their config target from the parent LiveDiagram; a
+  // plain (view-only / playable) embed owns its own, so a curve badge can still
+  // be clicked to inspect its transfer curve. `setConfigTarget` being defined
+  // signals the parent is managing it.
+  const [ownConfigTarget, setOwnConfigTarget] = useState<ConfigTarget | null>(null);
+  const effConfigTarget = setConfigTarget ? configTarget : ownConfigTarget;
+  const effSetConfigTarget = setConfigTarget ?? setOwnConfigTarget;
 
   // For view-only embeds (no epochLayout prop), compute layout + fit inline,
   // responding to both node positions and container width (ResizeObserver).
@@ -597,7 +628,7 @@ function DiagramPanel({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!editable) return;
       if (e.key === 'Escape') {
-        setConfigTarget?.(null);
+        effSetConfigTarget(null);
         setSelectedNodeIds?.(new Set());
         return;
       }
@@ -611,22 +642,44 @@ function DiagramPanel({
         }
       }
     },
-    [editable, hasSelection, onDeleteSelection, setConfigTarget, setSelectedNodeIds],
+    [editable, hasSelection, onDeleteSelection, effSetConfigTarget, setSelectedNodeIds],
   );
 
   // ── weight popover position (for the selected connection's badge) ─────────
   const popover = useMemo(() => {
-    if (!editable || configTarget?.kind !== 'connection') return null;
-    const conn = connections.find((c) => c.id === configTarget.id);
+    if (effConfigTarget?.kind !== 'connection') return null;
+    const conn = connections.find((c) => c.id === effConfigTarget.id);
     if (!conn) return null;
+    const isCurve = conn.transferMode === 'nonlinear';
+    // Both weights and curves are inspectable any time — in trace the badge
+    // shows the live value, and clicking it opens the weight/curve popover so
+    // you can read (or, when editable, reshape) the transfer curve while the
+    // simulation runs.
     const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
     const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1, traceMode);
     const path = paths.find((p) => p.id === conn.id);
     if (!path) return null;
     // Badge is at (midX, midY) in layer px; the world div is scaled, so the
     // screen offset inside the (unscaled) `.id-canvas` is midX/Y * scale.
-    return { conn, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
-  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
+    return { conn, isCurve, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
+  }, [editable, curveEditing, effConfigTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
+
+  // "Click here to view graph" hints: one per curve edge (in both trace and
+  // design mode, since the graph opens either way), hidden only while that
+  // badge's own popover is open, so the reader knows the badge is inspectable.
+  const curveHints = useMemo(() => {
+    if (!curveHint) return [];
+    const curveEdges = connections.filter((c) => c.transferMode === 'nonlinear');
+    if (curveEdges.length === 0) return [];
+    const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1, traceMode);
+    return curveEdges
+      .map((c) => {
+        const path = paths.find((p) => p.id === c.id);
+        return path ? { id: c.id, left: worldOffsetX + path.midX * scale, top: path.midY * scale } : null;
+      })
+      .filter((h): h is { id: string; left: number; top: number } => h !== null);
+  }, [curveHint, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
 
   // Dismiss the popover on outside click (Escape is handled by the canvas keydown).
   useEffect(() => {
@@ -635,20 +688,20 @@ function DiagramPanel({
       const target = e.target as HTMLElement | null;
       if (target?.closest('.id-weight-popover')) return;
       if (target?.closest('.connection-config-trigger')) return;
-      setConfigTarget?.(null);
+      effSetConfigTarget(null);
     };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
-  }, [popover, setConfigTarget]);
+  }, [popover, effSetConfigTarget]);
 
   const selectedNodeId =
     editable && selectedNodeIds && selectedNodeIds.size === 1 ? [...selectedNodeIds][0] : null;
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
 
-  // Vertical scroll: if the current content extents exceed the fixed viewport
-  // height we want overflow-y: auto so the user can scroll to see everything.
-  // Applies to view-only embeds too — a tall static diagram must never clip
-  // (the fit already shrinks to height first; this is the last-resort fallback).
+  // Vertical scroll fallback: the initial viewport already grows to the full
+  // content height (no vertical scrollbar on load), but while editing a reader
+  // can drag a node below the current extents — then overflow-y: auto lets them
+  // scroll to it rather than losing it off-panel.
   const scaledCurrentH = currentExtentH * scale;
   const overflowsY = scaledCurrentH > viewportH + 0.5;
 
@@ -703,10 +756,14 @@ function DiagramPanel({
         onMouseDown={
           editable
             ? (e) => {
-                // Clicking empty canvas clears selection + closes the popover.
-                if (e.target === e.currentTarget) {
+                // Clicking empty space (anywhere not on a node or weight badge)
+                // clears the selection and closes the popover, so wires return
+                // to full opacity. The scaled `.id-world` div covers the canvas,
+                // so an exact currentTarget check would miss most empty clicks.
+                const t = e.target as HTMLElement;
+                if (!t.closest('.diagram-node') && !t.closest('.connection-config-trigger')) {
                   setSelectedNodeIds?.(new Set());
-                  setConfigTarget?.(null);
+                  effSetConfigTarget(null);
                 }
               }
             : undefined
@@ -746,8 +803,8 @@ function DiagramPanel({
             readOnly={traceResult === undefined}
             selectedNodeIds={selectedNodeIds ?? (EMPTY_SELECTION as Set<string>)}
             setSelectedNodeIds={setSelectedNodeIds ?? NOOP_SET_SELECTED}
-            configTarget={configTarget}
-            setConfigTarget={setConfigTarget ?? NOOP_SET_CONFIG}
+            configTarget={effConfigTarget}
+            setConfigTarget={effSetConfigTarget}
             onNodeMove={editable ? onNodeMove : undefined}
             onNodeDragStart={undefined}
             onNodeDragEnd={undefined}
@@ -777,57 +834,135 @@ function DiagramPanel({
           </button>
         )}
 
-        {/* Lightweight weight editor near the connection badge (badge click). */}
-        {popover && (
+        {/* Weight / curve editor near the connection badge (badge click). Every
+            edge is shown as one graph: a plain weight is the straight line
+            y = weight·x through the origin; a curve is that same graph with
+            extra points. So linear and curve read as the same thing, and
+            "adding a curve" is literally adding points to the line. */}
+        {popover && (() => {
+          const conn = popover.conn;
+          const isCurve = conn.transferMode === 'nonlinear';
+          const canEditCurve = editable && curveEditing;
+          const graphPoints = isCurve ? conn.transferPoints : weightLinePoints(conn.weight);
+          // In trace mode, mark where the live signal sits on the graph.
+          const inX = traceMode ? traceResult?.edgeInputs?.[conn.id] : undefined;
+          const outY = traceMode ? traceResult?.edgeSignals?.[conn.id] : undefined;
+          const operatingPoint =
+            inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
+          return (
           <div
             className="id-weight-popover"
             style={{ left: popover.left, top: popover.top }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {popover.conn.transferMode === 'nonlinear' ? (
-              // A non-linear edge is shaped by its transfer curve, not a scalar
-              // weight — show the curve (read-only) so the dead-zone / clamp
-              // shape from the lesson is inspectable, plus the clamp note.
-              <>
-                <div className="id-weight-row">
-                  <span className="id-weight-label">transfer curve</span>
-                </div>
-                <div className="id-weight-curve">
-                  <MiniTransferCurve points={popover.conn.transferPoints} />
-                </div>
-                <p className="id-weight-note">Values outside −100…100 are clamped.</p>
-              </>
+            {canEditCurve && (
+              <div className="id-weight-modes" role="group" aria-label="Connection mode">
+                <button
+                  type="button"
+                  className={`id-weight-mode${!isCurve ? ' active' : ''}`}
+                  onClick={() => onSetTransferMode?.(conn.id, 'linear')}
+                >
+                  Weight
+                </button>
+                <button
+                  type="button"
+                  className={`id-weight-mode${isCurve ? ' active' : ''}`}
+                  onClick={() => onSetTransferMode?.(conn.id, 'nonlinear')}
+                >
+                  Curve
+                </button>
+              </div>
+            )}
+
+            {/* The graph. Editable curve editing → the draggable editor (dragging
+                or adding a point to a weight-line turns it into a curve). Otherwise
+                a read-only thumbnail of the line or curve. */}
+            {canEditCurve ? (
+              <div className="id-weight-curve-editor">
+                <TransferCurveEditor
+                  points={graphPoints}
+                  operatingPoint={operatingPoint}
+                  onChange={(pts) => {
+                    if (isCurve) {
+                      onSetTransferPoints?.(conn.id, pts);
+                    } else {
+                      // Shaping the weight-line adds points → it becomes a curve.
+                      onSetTransferMode?.(conn.id, 'nonlinear');
+                      onSetTransferPoints?.(conn.id, pts);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="id-weight-curve">
+                <MiniTransferCurve
+                  points={graphPoints}
+                  weight={isCurve ? undefined : conn.weight}
+                  operatingPoint={operatingPoint}
+                />
+              </div>
+            )}
+
+            {/* A plain weight keeps its numeric value + slope slider; a curve
+                has no single weight, so it shows the clamp note instead. */}
+            {isCurve ? (
+              <p className="id-weight-note">Values outside −100…100 are clamped.</p>
             ) : (
               <>
                 <div className="id-weight-row">
                   <span className="id-weight-label">weight</span>
-                  <span className="id-weight-value">{popover.conn.weight.toFixed(2)}</span>
+                  <span className="id-weight-value">{conn.weight.toFixed(2)}</span>
                 </div>
-                <input
-                  type="range"
-                  min={weightRange === 'positive' ? 0 : -1}
-                  max={1}
-                  step={0.05}
-                  value={popover.conn.weight}
-                  onChange={(e) => onSetWeight?.(popover.conn.id, Number(e.target.value))}
-                />
-                {/* Reference ticks under the slider — the range's key stops, so
-                    the scale reads at a glance (like the app's weight control). */}
-                <div className={`id-weight-ticks ${weightRange}`} aria-hidden="true">
-                  {(weightRange === 'positive' ? ['0', '1'] : ['−1', '0', '1']).map((t) => (
-                    <span key={t}>{t}</span>
-                  ))}
-                </div>
+                {editable && (
+                  <>
+                    <input
+                      type="range"
+                      min={weightRange === 'positive' ? 0 : -1}
+                      max={1}
+                      step={0.05}
+                      value={conn.weight}
+                      onChange={(e) => onSetWeight?.(conn.id, Number(e.target.value))}
+                    />
+                    {/* Reference ticks under the slider — the range's key stops, so
+                        the scale reads at a glance (like the app's weight control). */}
+                    <div className={`id-weight-ticks ${weightRange}`} aria-hidden="true">
+                      {(weightRange === 'positive' ? ['0', '1'] : ['−1', '0', '1']).map((t) => (
+                        <span key={t}>{t}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
-            <button
-              type="button"
-              className="id-weight-delete"
-              onClick={() => onDeleteConnection?.(popover.conn.id)}
-            >
-              Delete connection
-            </button>
+
+            {editable && (
+              <button
+                type="button"
+                className="id-weight-delete"
+                onClick={() => onDeleteConnection?.(conn.id)}
+              >
+                Delete connection
+              </button>
+            )}
           </div>
+          );
+        })()}
+
+        {/* "Click here to view graph" nudges toward each curve badge, so readers
+            know the transfer curve is inspectable. Hidden while the badge's own
+            popover is open. */}
+        {curveHints.map((hint) =>
+          popover?.conn.id === hint.id ? null : (
+            <div
+              key={`hint-${hint.id}`}
+              className="id-curve-hint"
+              style={{ left: hint.left, top: hint.top }}
+              aria-hidden="true"
+            >
+              <span className="id-curve-hint-arrow">↖</span>
+              <span className="id-curve-hint-text">click to view graph</span>
+            </div>
+          ),
         )}
 
         {rejectedNotice && <div className="id-notice">{rejectedNotice}</div>}
@@ -886,6 +1021,8 @@ function LiveDiagram({
   initialTrace,
   goal,
   weightRange,
+  curveEditing,
+  curveHint,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height?: number;
@@ -896,6 +1033,8 @@ function LiveDiagram({
   initialTrace: boolean;
   goal?: DiagramGoal;
   weightRange: 'signed' | 'positive';
+  curveEditing: boolean;
+  curveHint: boolean;
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
@@ -1050,6 +1189,9 @@ function LiveDiagram({
           ...(edge.fromPort ? { fromPort: edge.fromPort } : {}),
           to: edge.to,
           ...(edge.toPort ? { toPort: edge.toPort } : {}),
+          // Spawn the weight badge near the input end (not mid-wire), matching
+          // the authored convention and keeping crossing wires' badges apart.
+          labelT: 0.3,
           weight: DEFAULT_CONNECTION_WEIGHT,
           transferMode: 'linear' as const,
           transferPoints: [
@@ -1070,6 +1212,36 @@ function LiveDiagram({
 
   const onSetWeight = useCallback((id: string, weight: number) => {
     setEditConnections((prev) => prev.map((c) => (c.id === id ? { ...c, weight } : c)));
+    setDirty(true);
+  }, []);
+
+  // Switch a connection between a scalar weight and a transfer curve. When
+  // turning a linear wire into a curve, seed the curve with the straight line
+  // its weight already describes (y = weight · x, clamped) so behavior doesn't
+  // jump — the student then reshapes it by dragging points.
+  const onSetTransferMode = useCallback((id: string, mode: 'linear' | 'nonlinear') => {
+    setEditConnections((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        if (mode === 'linear') return { ...c, transferMode: 'linear' as const };
+        const hasCurve = c.transferPoints && c.transferPoints.length >= 2;
+        const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
+        const seeded = hasCurve
+          ? c.transferPoints
+          : [
+              { x: -100, y: clamp(-100 * c.weight) },
+              { x: 100, y: clamp(100 * c.weight) },
+            ];
+        return { ...c, transferMode: 'nonlinear' as const, transferPoints: seeded };
+      }),
+    );
+    setDirty(true);
+  }, []);
+
+  const onSetTransferPoints = useCallback((id: string, points: TransferPoint[]) => {
+    setEditConnections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, transferPoints: points } : c)),
+    );
     setDirty(true);
   }, []);
 
@@ -1162,6 +1334,8 @@ function LiveDiagram({
       goalTitle={goal?.title}
       goalSolved={goalSolved}
       weightRange={weightRange}
+      curveEditing={curveEditing}
+      curveHint={curveHint}
       editable={editable}
       palette={palette}
       selectedNodeIds={selectedNodeIds}
@@ -1174,6 +1348,8 @@ function LiveDiagram({
       onAddNode={onAddNode}
       onDeleteSelection={onDeleteSelection}
       onSetWeight={onSetWeight}
+      onSetTransferMode={onSetTransferMode}
+      onSetTransferPoints={onSetTransferPoints}
       onDeleteConnection={onDeleteConnection}
       onReset={onReset}
       canReset={dirty || traceOn !== initialTrace}
@@ -1230,6 +1406,8 @@ export default function InteractiveDiagram({
   initialTrace = true,
   goal,
   weightRange = 'signed',
+  curveEditing = false,
+  curveHint = false,
 }: InteractiveDiagramProps) {
   // A palette implies editing.
   const isEditable = editable || (palette !== undefined && palette.length > 0);
@@ -1257,6 +1435,8 @@ export default function InteractiveDiagram({
             initialTrace={initialTrace}
             goal={goal}
             weightRange={weightRange}
+            curveEditing={curveEditing}
+            curveHint={curveHint}
           />
         )}
       </BrowserOnly>
