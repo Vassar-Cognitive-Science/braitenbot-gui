@@ -66,8 +66,11 @@ export interface DiagramCanvasProps {
   traceResult?: {
     nodeValues: Record<string, number>;
     edgeSignals: Record<string, number>;
+    edgeInputs: Record<string, number>;
     disconnected: Set<string>;
   };
+  /** Show the full `input × weight = output` calc on trace badges. */
+  advancedWeightViz?: boolean;
   /** Sensor slider/toggle inputs, keyed nodeId or `${id}:${channel}`. */
   sensorValues: Record<string, number>;
   setSensorValue: (key: string, value: number) => void;
@@ -135,6 +138,7 @@ export function DiagramCanvas({
   clientToLayer,
   traceMode,
   traceResult,
+  advancedWeightViz,
   sensorValues,
   setSensorValue,
   setConstantValue,
@@ -456,6 +460,8 @@ export function DiagramCanvas({
       <ConnectionLayer
         paths={connectionPaths}
         edgeSignals={traceMode ? traceResult?.edgeSignals : undefined}
+        edgeInputs={traceMode ? traceResult?.edgeInputs : undefined}
+        advancedWeightViz={advancedWeightViz}
         selectedConnectionId={selectedConnectionId}
         emphasizedConnectionIds={emphasizedConnectionIds}
         occludedPaths={occludedPaths}

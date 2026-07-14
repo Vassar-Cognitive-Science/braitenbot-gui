@@ -100,6 +100,24 @@ export function SettingsModal({
           </label>
         </div>
 
+        <div className="settings-section">
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.advancedWeightViz}
+              onChange={(e) => onChange({ advancedWeightViz: e.target.checked })}
+            />
+            <span className="settings-toggle-text">
+              <span className="settings-toggle-label">Advanced weight visualization</span>
+              <span className="settings-toggle-hint">
+                In trace mode, show the full calculation on each connection —
+                input × weight = output (or input ↝ output for a transfer
+                curve) — instead of just the resulting signal value.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <h3 className="settings-group-title">Diagram preferences</h3>
         <p className="settings-group-hint">
           {diagramReadOnly

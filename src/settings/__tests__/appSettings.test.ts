@@ -35,7 +35,7 @@ describe('appSettings persistence', () => {
   });
 
   it('round-trips a saved setting', () => {
-    saveAppSettings({ autoSelectIdentifiedBoard: false, relayUrl: '' });
+    saveAppSettings({ autoSelectIdentifiedBoard: false, advancedWeightViz: false, relayUrl: '' });
     expect(loadAppSettings().autoSelectIdentifiedBoard).toBe(false);
   });
 
@@ -44,7 +44,7 @@ describe('appSettings persistence', () => {
   });
 
   it('round-trips a custom relay URL', () => {
-    saveAppSettings({ autoSelectIdentifiedBoard: true, relayUrl: 'ws://localhost:1234' });
+    saveAppSettings({ autoSelectIdentifiedBoard: true, advancedWeightViz: false, relayUrl: 'ws://localhost:1234' });
     expect(loadAppSettings().relayUrl).toBe('ws://localhost:1234');
   });
 

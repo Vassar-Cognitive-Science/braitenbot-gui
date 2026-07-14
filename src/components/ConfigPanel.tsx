@@ -3,6 +3,9 @@ import type { DiagramConnection, DiagramNode, ThresholdOp, TransferPoint } from 
 import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM, DEFAULT_THRESHOLD_OP } from '../types/diagram';
 import type { DiagramStore } from '../doc/DiagramStore';
 import { TransferCurveEditor } from './TransferCurveEditor';
+import { MiniTransferCurve } from './MiniTransferCurve';
+import { weightLinePoints } from './connectionGeometry';
+import type { TraceResult } from '../hooks/useTraceSimulation';
 import { NumberInput } from './NumberInput';
 import {
   clampWeight,
@@ -28,6 +31,9 @@ interface ConfigPanelProps {
   onClose: () => void;
   /** When false, connection weights accept any value (no [-1, 1] cap). */
   capWeights: boolean;
+  /** Live trace data when trace mode is on; lets the transfer graph show the
+   *  current operating point (input → output) on the selected connection. */
+  traceResult?: TraceResult;
 }
 
 export function ConfigPanel({
@@ -39,6 +45,7 @@ export function ConfigPanel({
   deleteConnection,
   onClose,
   capWeights,
+  traceResult,
 }: ConfigPanelProps) {
   // One undo entry per config-target "session". A session begins when the
   // selected target changes (including after an undo/redo, which clears the
@@ -473,6 +480,27 @@ export function ConfigPanel({
             </select>
           </label>
 
+          {(() => {
+            // Live operating point (input → output) for the selected edge,
+            // drawn on the transfer graph while tracing.
+            const inX = traceResult?.edgeInputs?.[selectedConnection.id];
+            const outY = traceResult?.edgeSignals?.[selectedConnection.id];
+            const operatingPoint =
+              inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
+            const isCurve = selectedConnection.transferMode === 'nonlinear';
+            return isCurve ? null : (
+              // Design/linear edges show the line through the origin (slope =
+              // weight), matching the wire badge and the docs popover.
+              <div className="config-transfer-preview">
+                <MiniTransferCurve
+                  points={weightLinePoints(selectedConnection.weight)}
+                  weight={selectedConnection.weight}
+                  operatingPoint={operatingPoint}
+                />
+              </div>
+            );
+          })()}
+
           {(selectedConnection.transferMode ?? 'linear') === 'linear' && (
             <>
               {/* The range slider needs finite bounds, so it's only shown when
@@ -524,6 +552,11 @@ export function ConfigPanel({
               onChange={(pts: TransferPoint[]) =>
                 patchConnection(selectedConnection.id, { transferPoints: pts })
               }
+              operatingPoint={(() => {
+                const inX = traceResult?.edgeInputs?.[selectedConnection.id];
+                const outY = traceResult?.edgeSignals?.[selectedConnection.id];
+                return inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
+              })()}
             />
           )}
 

@@ -18,6 +18,14 @@ export interface AppSettings {
   autoSelectIdentifiedBoard: boolean;
 
   /**
+   * When true, connection badges in trace mode spell out the full
+   * `input × weight = output` calculation (and `input ↝ output` for curve
+   * edges) instead of just the resulting signal value. Off by default to keep
+   * badges compact; a per-device preference so it never affects collaborators.
+   */
+  advancedWeightViz: boolean;
+
+  /**
    * Advanced: override the collaboration relay endpoint (a `ws://`/`wss://`
    * URL). Empty string — the default — means use the built-in relay
    * (`DEFAULT_RELAY_URL`). Set this to point at a self-hosted relay instead.
@@ -29,6 +37,7 @@ export interface AppSettings {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   autoSelectIdentifiedBoard: true,
+  advancedWeightViz: false,
   relayUrl: '',
 };
 
@@ -45,6 +54,10 @@ export function loadAppSettings(): AppSettings {
         typeof parsed.autoSelectIdentifiedBoard === 'boolean'
           ? parsed.autoSelectIdentifiedBoard
           : DEFAULT_APP_SETTINGS.autoSelectIdentifiedBoard,
+      advancedWeightViz:
+        typeof parsed.advancedWeightViz === 'boolean'
+          ? parsed.advancedWeightViz
+          : DEFAULT_APP_SETTINGS.advancedWeightViz,
       relayUrl:
         typeof parsed.relayUrl === 'string'
           ? parsed.relayUrl

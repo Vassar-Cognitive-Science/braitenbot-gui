@@ -81,7 +81,6 @@ export const COLOR_SWATCHES: ReadonlyArray<{ name: string; hex: string }> = [
   { name: 'Orange', hex: '#c47a34' },
   { name: 'Yellow', hex: '#bfae44' },
   { name: 'Green', hex: '#4f9a4a' },
-  { name: 'Teal', hex: '#3f9691' },
   { name: 'Blue', hex: '#4661b8' },
   { name: 'Purple', hex: '#8154ac' },
   { name: 'White', hex: '#cfcbc0' },

@@ -472,28 +472,21 @@ select,
   );
 }
 
-/* Trace-mode per-wheel drive arrow. Positioned over the wheel overlay; inert. */
-.wheel-drive-arrow {
+/* Trace-mode per-wheel drive bar: a small capsule on the wheel's outer flank.
+   Grows up (green) for a positive/forward signal, down (red) for reverse. */
+.wheel-drive-bar {
   position: absolute;
   pointer-events: none;
-  overflow: visible;
+  border-radius: 999px;
   z-index: 1;
 }
 
-.wheel-drive-arrow line {
-  stroke-linecap: round;
+.wheel-drive-bar.positive {
+  background: var(--accent);
 }
 
-.wheel-drive-arrow.forward line,
-.wheel-drive-arrow.forward polygon {
-  stroke: var(--accent);
-  fill: var(--accent);
-}
-
-.wheel-drive-arrow.reverse line,
-.wheel-drive-arrow.reverse polygon {
-  stroke: var(--sensor-color);
-  fill: var(--sensor-color);
+.wheel-drive-bar.negative {
+  background: var(--danger, #c0392b);
 }
  
 /* (node + handle + port rules extracted to components/diagram.css) */
@@ -747,6 +740,51 @@ select,
   fill: var(--accent);
   stroke: #d4bc78;
   stroke-width: 2.5;
+}
+
+/* Live operating point (trace): the current (input, output) on the curve. */
+.transfer-op-point {
+  fill: #d4bc78;
+  stroke: #12130f;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+/* Linear-weight preview graph in the config panel. The MiniTransferCurve's
+   path/axis strokes are scoped to `.bb-diagram` in diagram.css, but the config
+   panel renders outside that scope, so restate them here (otherwise the graph
+   draws with no stroke — an empty box). Scaled up from its 18px badge size. */
+.config-transfer-preview {
+  display: flex;
+  justify-content: center;
+  padding: 0.35rem 0 0.2rem;
+  color: var(--accent);
+}
+
+.config-transfer-preview .mini-transfer-curve {
+  width: 96px;
+  height: 96px;
+}
+
+.config-transfer-preview .mini-curve-axis {
+  stroke: var(--line);
+  stroke-width: 0.75;
+  opacity: 0.6;
+}
+
+.config-transfer-preview .mini-curve-path,
+.config-transfer-preview .mini-curve-arrow {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.config-transfer-preview .mini-curve-point {
+  fill: #d4bc78;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.5;
 }
 
 .transfer-coord-editor {

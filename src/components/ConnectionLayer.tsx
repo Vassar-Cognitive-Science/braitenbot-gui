@@ -1,7 +1,7 @@
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { formatTraceValue } from '../hooks/useTraceSimulation';
 import type { ConnectionPathDatum } from './connectionGeometry';
-import { signalToStroke, weightToColor } from './connectionGeometry';
+import { signalToStroke, weightLinePoints, weightToColor } from './connectionGeometry';
 import { MiniTransferCurve } from './MiniTransferCurve';
 
 /**
@@ -16,6 +16,12 @@ export interface ConnectionLayerProps {
   paths: ConnectionPathDatum[];
   /** Per-edge trace signals; undefined when trace mode is off. */
   edgeSignals?: Record<string, number>;
+  /** Per-edge raw source values (before weight/curve); undefined off-trace.
+   *  Only consulted when `advancedWeightViz` is on. */
+  edgeInputs?: Record<string, number>;
+  /** When true, trace badges show the full `input × weight = output` (or, for
+   *  curve edges, `input → output`) calculation instead of just the output. */
+  advancedWeightViz?: boolean;
   selectedConnectionId?: string | null;
   /** Connections incident to a selected node — drawn emphasized so they're
    *  easy to trace. `null` when nothing is selected. */
@@ -38,6 +44,8 @@ export interface ConnectionLayerProps {
 export function ConnectionLayer({
   paths,
   edgeSignals,
+  edgeInputs,
+  advancedWeightViz,
   selectedConnectionId,
   emphasizedConnectionIds,
   occludedPaths,
@@ -97,12 +105,16 @@ export function ConnectionLayer({
         const edgeSignal = edgeSignals?.[connection.id];
         const isCurve = connection.transferMode === 'nonlinear';
         const inTrace = edgeSignal !== undefined;
+        // Advanced calc badge: shown only in trace, only when the setting is on,
+        // and only once we actually have an input value for this edge.
+        const edgeInput = edgeInputs?.[connection.id];
+        const showCalc = inTrace && advancedWeightViz && edgeInput !== undefined;
         const badgeEmphasized = emphasizedConnectionIds?.has(connection.id) ?? false;
         const badgeDimmed = emphasizedConnectionIds != null && !badgeEmphasized;
         return (
           <button
             key={`${connection.id}-config`}
-            className={`connection-config-trigger ${selectedConnectionId === connection.id ? 'selected' : ''} ${inTrace ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''} ${isCurve && !inTrace ? 'has-curve' : ''} ${isCurve && inTrace ? 'has-curve-trace' : ''} ${badgeEmphasized ? 'emphasized' : ''} ${badgeDimmed ? 'dimmed' : ''}`}
+            className={`connection-config-trigger ${selectedConnectionId === connection.id ? 'selected' : ''} ${inTrace ? 'trace-signal' : ''} ${draggingBadgeId === connection.id ? 'dragging' : ''} ${!inTrace ? 'has-curve' : ''} ${showCalc ? 'advanced-weight' : ''} ${badgeEmphasized ? 'emphasized' : ''} ${badgeDimmed ? 'dimmed' : ''}`}
             style={{ left: `${connection.midX}px`, top: `${connection.midY}px` }}
             onMouseDown={(event: MouseEvent) => event.stopPropagation()}
             onPointerDown={onBadgePointerDown
@@ -111,21 +123,34 @@ export function ConnectionLayer({
             onClick={onBadgeClick ? () => onBadgeClick(connection.id) : undefined}
           >
             {inTrace ? (
-              // In trace mode a non-linear edge shows its curve alongside the
-              // live signal, so the curve stays visible (and inspectable) while
-              // simulating rather than being replaced by a bare number.
-              isCurve ? (
-                <>
-                  <MiniTransferCurve points={connection.transferPoints} />
-                  <span className="badge-curve-value">{formatTraceValue(edgeSignal)}</span>
-                </>
+              // Trace mode shows the live signal. The curve/weight badge is a
+              // design-time affordance, so it's replaced by the value while
+              // simulating (matching how plain weights behave). With advanced
+              // weight visualization on, spell out the whole calculation.
+              showCalc ? (
+                isCurve ? (
+                  <span className="badge-calc">
+                    {formatTraceValue(edgeInput)} <span className="badge-calc-op">↝</span>{' '}
+                    {formatTraceValue(edgeSignal)}
+                  </span>
+                ) : (
+                  <span className="badge-calc">
+                    {formatTraceValue(edgeInput)} <span className="badge-calc-op">×</span>{' '}
+                    {connection.weight.toFixed(2)} <span className="badge-calc-op">=</span>{' '}
+                    {formatTraceValue(edgeSignal)}
+                  </span>
+                )
               ) : (
                 formatTraceValue(edgeSignal)
               )
-            ) : isCurve ? (
-              <MiniTransferCurve points={connection.transferPoints} />
             ) : (
-              `w ${connection.weight.toFixed(2)}`
+              // Design mode: every edge shows its transfer graph — a curve for
+              // non-linear edges, a line through the origin (slope = weight) for
+              // plain weights — so the two read as the same kind of thing.
+              <MiniTransferCurve
+                points={isCurve ? connection.transferPoints : weightLinePoints(connection.weight)}
+                weight={isCurve ? undefined : connection.weight}
+              />
             )}
           </button>
         );

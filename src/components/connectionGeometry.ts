@@ -160,6 +160,34 @@ export function weightToColor(weight: number): string {
   }
 }
 
+/**
+ * The transfer graph of a plain scalar weight: a straight line through the
+ * origin with slope = weight, i.e. y = weight·x. This lets a linear weight be
+ * drawn with the same graph as a transfer curve — a curve is just this line
+ * with extra points — so the two read as the same kind of thing across badges
+ * and editors.
+ *
+ * The returned endpoints sit where the line leaves the −100…100 box: at the
+ * left/right edges when |weight| ≤ 1, or the top/bottom edges when |weight| > 1
+ * (a slope too steep to fit). `weightExceedsRange` reports the latter so the
+ * renderer can cap the line with an out-of-range arrow rather than drawing a
+ * misleading corner-to-corner diagonal.
+ */
+export function weightLinePoints(weight: number): TransferPoint[] {
+  if (weight === 0) return [{ x: -100, y: 0 }, { x: 100, y: 0 }];
+  const ax = Math.min(100, 100 / Math.abs(weight));
+  return [
+    { x: -ax, y: -weight * ax },
+    { x: ax, y: weight * ax },
+  ];
+}
+
+/** True when a linear weight's line is too steep to fit the −100…100 box
+ *  (|weight| > 1), i.e. its output saturates before the input reaches ±100. */
+export function weightExceedsRange(weight: number): boolean {
+  return Math.abs(weight) > 1;
+}
+
 export function signalToStroke(signal: number): { color: string; width: number; opacity: number } {
   const abs = Math.min(Math.abs(signal), 1);
   const width = 1.2 + abs * 2.5;

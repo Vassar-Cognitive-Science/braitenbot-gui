@@ -14,14 +14,18 @@ import {
 interface TransferCurveEditorProps {
   points: TransferPoint[];
   onChange: (points: TransferPoint[]) => void;
+  /** Live (input, output) to mark on the graph during trace; null/undefined hides it. */
+  operatingPoint?: { x: number; y: number } | null;
 }
 
 const SVG_W = 230;
-const SVG_H = 220;
+const SVG_H = 236;
 const PAD_LEFT = 32;
 const PAD_RIGHT = 8;
 const PAD_TOP = 8;
-const PAD_BOTTOM = 24;
+// Extra bottom room so the "Input" axis label clears the tick labels and isn't
+// cropped at the SVG edge.
+const PAD_BOTTOM = 40;
 const PLOT_W = SVG_W - PAD_LEFT - PAD_RIGHT;
 const PLOT_H = SVG_H - PAD_TOP - PAD_BOTTOM;
 const POINT_R = 6;
@@ -73,7 +77,7 @@ function isEndpoint(idx: number, length: number): boolean {
   return idx === 0 || idx === length - 1;
 }
 
-export function TransferCurveEditor({ points, onChange }: TransferCurveEditorProps) {
+export function TransferCurveEditor({ points, onChange, operatingPoint }: TransferCurveEditorProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -276,7 +280,7 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
         {/* Axis labels */}
         <text
           x={PAD_LEFT + PLOT_W / 2}
-          y={SVG_H - 1}
+          y={SVG_H - 12}
           className="transfer-axis-label"
           textAnchor="middle"
         >
@@ -307,6 +311,17 @@ export function TransferCurveEditor({ points, onChange }: TransferCurveEditorPro
             onDoubleClick={(e) => handlePointDoubleClick(e, i)}
           />
         ))}
+
+        {/* Live operating point (trace): where the current signal sits on the
+            transfer function. Clamped into the plot so it's always visible. */}
+        {operatingPoint && (
+          <circle
+            className="transfer-op-point"
+            cx={toSvgX(Math.max(X_MIN, Math.min(X_MAX, operatingPoint.x)))}
+            cy={toSvgY(Math.max(Y_MIN, Math.min(Y_MAX, operatingPoint.y)))}
+            r={5}
+          />
+        )}
       </svg>
 
       {selectedPoint && (

@@ -9,11 +9,17 @@ export interface TraceResult {
   nodeValues: Record<string, number>;
   /** Signal carried on each connection, keyed by connection ID. */
   edgeSignals: Record<string, number>;
+  /**
+   * Raw source value feeding each connection BEFORE its weight/curve is
+   * applied, keyed by connection ID. `edgeSignals[id]` is the value after.
+   * Used by the "advanced weight visualization" badge (input × weight = output).
+   */
+  edgeInputs: Record<string, number>;
   /** Set of node IDs that have no incoming connections (and aren't sources). */
   disconnected: Set<string>;
 }
 
-const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
+const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, edgeInputs: {}, disconnected: new Set() };
 
 /**
  * Precomputed, structure-only artifacts for `simulateGraph`. Everything here
@@ -256,6 +262,7 @@ export function simulateGraph(
   if (order === null) return EMPTY;
   const nodeValues: Record<string, number> = {};
   const edgeSignals: Record<string, number> = {};
+  const edgeInputs: Record<string, number> = {};
   const disconnected = new Set<string>();
 
   // Resolve the value an edge draws from its source. Multi-output sources
@@ -367,6 +374,7 @@ export function simulateGraph(
     for (const edge of incomingEdges) {
       const raw = readSource(edge);
       const signal = applyTransfer(raw, edge, sortedPoints.get(edge.id));
+      edgeInputs[edge.id] = raw;
       edgeSignals[edge.id] = signal;
       inputs.push(signal);
     }
@@ -407,7 +415,9 @@ export function simulateGraph(
   // nodes, both of which were skipped above.
   for (const edge of connections) {
     if (!(edge.id in edgeSignals)) {
-      edgeSignals[edge.id] = applyTransfer(readSource(edge), edge, sortedPoints.get(edge.id));
+      const raw = readSource(edge);
+      edgeInputs[edge.id] = raw;
+      edgeSignals[edge.id] = applyTransfer(raw, edge, sortedPoints.get(edge.id));
     }
   }
 
@@ -430,7 +440,7 @@ export function simulateGraph(
     }
   }
 
-  return { nodeValues, edgeSignals, disconnected };
+  return { nodeValues, edgeSignals, edgeInputs, disconnected };
 }
 
 /**

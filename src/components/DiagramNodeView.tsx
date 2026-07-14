@@ -6,7 +6,7 @@ import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
 import type { NodeTypeId } from '../types/diagram';
 import type { ColorChannels } from '../lib/colorSensor';
-import { COLOR_SWATCHES, channelsToHue, hueToChannels } from '../lib/colorSensor';
+import { COLOR_SWATCHES, channelsToHue, hueToChannels, rgbToHex } from '../lib/colorSensor';
 import type { IconProps } from './icons';
 import {
   AsteriskIcon,
@@ -57,27 +57,36 @@ const NODE_TYPE_ICONS: Record<NodeTypeId, (props: IconProps) => React.ReactEleme
 };
 
 /**
- * A "reception" glyph for light/distance sensors: concentric arcs opening
- * toward the sensor that light up as the reading rises. It reads as the sensor
- * *detecting* something in the world (waves arriving), deliberately unlike the
- * wheel-drive arrows that grow *outward* to show a motor emitting motion — so a
- * bright light or a near object never looks like the sensor is emitting light.
+ * A "reception" meter for light/distance sensors: four concentric arcs opening
+ * toward the sensor (the dot on the right) that fill *continuously* with the
+ * reading — a faint track when the value is low, brightening arc-by-arc as the
+ * signal grows, with the current level's arc partway lit like a moving
+ * wavefront. It reads as the sensor *detecting* something in the world (waves
+ * arriving), deliberately unlike the wheel-drive bars that grow *outward* to
+ * show a motor emitting — so a bright light or a near object never looks like
+ * the sensor is emitting. The continuous fill (vs the old three on/off steps)
+ * makes "how strong / how near" legible at a glance.
  */
 function SensorReception({ value }: { value: number }) {
-  const lit = (min: number) => (value >= min ? 1 : 0.18);
+  // Map 0–100 onto the four arcs; each arc fills from a faint 0.12 track to a
+  // full 1.0 as the level sweeps past it, so the leading arc is partway lit.
+  const level = (Math.max(0, Math.min(100, value)) / 100) * 4;
+  const arc = (i: number) => Math.max(0.12, Math.min(1, level - i));
+  const width = (i: number) => 1.2 + 0.9 * Math.max(0, Math.min(1, level - i));
   return (
     <svg
       className="sensor-reception"
-      width="15"
+      width="16"
       height="18"
-      viewBox="0 0 15 18"
+      viewBox="0 0 16 18"
       role="img"
       aria-label={`reading ${Math.round(value)}`}
     >
-      <circle cx="13" cy="9" r="1.5" fill="currentColor" />
-      <path d="M10 4.5 A 5.5 5.5 0 0 0 10 13.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(15)} />
-      <path d="M7 2.5 A 8.5 8.5 0 0 0 7 15.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(50)} />
-      <path d="M4 1 A 11.5 11.5 0 0 0 4 17" fill="none" stroke="currentColor" strokeWidth="1.3" opacity={lit(82)} />
+      <circle cx="14" cy="9" r="1.6" fill="currentColor" />
+      <path d="M11 5 A 4.5 4.5 0 0 0 11 13" fill="none" stroke="currentColor" strokeWidth={width(0)} opacity={arc(0)} />
+      <path d="M8.5 2.8 A 7 7 0 0 0 8.5 15.2" fill="none" stroke="currentColor" strokeWidth={width(1)} opacity={arc(1)} />
+      <path d="M6 1 A 9.5 9.5 0 0 0 6 17" fill="none" stroke="currentColor" strokeWidth={width(2)} opacity={arc(2)} />
+      <path d="M3.5 0 A 12 12 0 0 0 3.5 18" fill="none" stroke="currentColor" strokeWidth={width(3)} opacity={arc(3)} />
     </svg>
   );
 }
@@ -395,7 +404,10 @@ function DiagramNodeViewInner({
         const channels: ColorChannels = {
           clear: at('clear'), red: at('red'), green: at('green'), blue: at('blue'),
         };
-        const { hex, brightness } = channelsToHue(channels);
+        const { hex } = channelsToHue(channels);
+        // Dot showing the color the sensor currently "sees" (raw channels, so a
+        // dim reading reads dim — unlike the brightness-normalized picker hue).
+        const seen = rgbToHex(channels.red * 2.55, channels.green * 2.55, channels.blue * 2.55);
         const apply = (c: ColorChannels) => {
           setSensorValue(`${node.id}:red`, c.red);
           setSensorValue(`${node.id}:green`, c.green);
@@ -404,33 +416,12 @@ function DiagramNodeViewInner({
         };
         return (
         <div className="trace-color-input">
-          <div className="trace-color-row">
-            <input
-              type="color"
-              className="trace-color-picker"
-              value={hex}
-              disabled={readOnly}
-              title="Surface color the sensor sees"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => apply(hueToChannels(e.target.value, brightness || 100))}
-            />
-            <span className="trace-slider-label" title="Brightness">☀</span>
-            <input
-              type="range"
-              className="trace-slider"
-              min="0"
-              max="100"
-              step="1"
-              disabled={readOnly}
-              value={brightness}
-              title="Brightness"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => apply(hueToChannels(hex, parseFloat(e.target.value)))}
-            />
-          </div>
           <div className="trace-color-swatches">
+            <span
+              className="trace-color-seen"
+              style={{ background: seen }}
+              title="Color the sensor currently sees"
+            />
             {COLOR_SWATCHES.map((s) => (
               <button
                 key={s.name}
@@ -443,6 +434,22 @@ function DiagramNodeViewInner({
                 onClick={(e) => { e.stopPropagation(); apply(hueToChannels(s.hex, 100)); }}
               />
             ))}
+            {/* Rainbow swatch opens the OS color picker for any custom hue. It's
+                a label wrapping a hidden native input, so a single click opens
+                the picker (no flaky open/close toggle). */}
+            <label
+              className="trace-color-swatch trace-color-rainbow"
+              title="Custom color…"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="color"
+                value={hex}
+                disabled={readOnly}
+                onChange={(e) => apply(hueToChannels(e.target.value, 100))}
+              />
+            </label>
           </div>
           <details className="trace-color-advanced" onMouseDown={(e) => e.stopPropagation()}>
             <summary title="White is estimated from RGB — verify on the real sensor">

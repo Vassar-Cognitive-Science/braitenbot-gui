@@ -1,57 +1,45 @@
-import { NODE_H } from './connectionGeometry';
+import { NODE_H, NODE_W } from './connectionGeometry';
 
 /**
- * Geometry for a motor's "drive arrow" — the trace-mode indicator that grows
- * straight out of a wheel/motor block: up from the top edge for a positive
- * (forward) signal, down from the bottom for a negative (reverse) one, scaled
- * by magnitude. Shared so the desktop app's robot overlay and the docs embed
- * draw the identical arrow. Purely a readout of the motor's value — real motion
+ * Geometry for a motor's "drive bar" — the trace-mode indicator drawn on a
+ * wheel/motor block's OUTER flank (left of the left wheel, right of the right
+ * wheel, so it never overlaps the connections that run into the block from the
+ * centre). The bar is anchored at the block's vertical middle and grows UP for a
+ * positive (forward) signal and DOWN for a negative (reverse) one, its length
+ * scaled by magnitude. Colour is the caller's job via a CSS class: green up,
+ * red down. Shared so the desktop app's robot overlay and the docs embed draw
+ * the identical indicator. Purely a readout of the motor's value — real motion
  * still needs the robot.
  *
  * All numbers are in block-space px (multiply by `blockScale`, not zoom). The
- * caller positions the SVG at the wheel center: left = cx − svgHalfW, top =
- * cy − reach, width = svgHalfW·2, height = reach·2.
+ * caller knows which side the block is on and positions the bar accordingly:
+ * left flank → `x = blockLeft − gap − thickness`; right flank → `x = blockRight
+ * + gap`. Vertically, `top = blockCenterY − length` when positive, else
+ * `blockCenterY`.
  */
-export interface WheelArrowGeometry {
-  forward: boolean;
-  svgHalfW: number;
-  reach: number;
-  /** Horizontal center of the shaft within the SVG. */
-  cx: number;
-  /** Shaft start (at the block edge). */
-  base: number;
-  /** Arrow tip. */
-  tipY: number;
-  /** Where the shaft meets the arrowhead. */
-  shaftEndY: number;
-  strokeW: number;
-  headHalf: number;
+export interface WheelBarGeometry {
+  /** True when the value is forward (bar grows up, green); false for reverse. */
+  positive: boolean;
+  /** Bar length in block px, measured from the block's vertical middle outward. */
+  length: number;
+  /** Bar thickness (width) in block px. */
+  thickness: number;
+  /** Gap in block px between the block's side edge and the bar. */
+  gap: number;
 }
 
 /**
- * Arrow geometry for a raw motor value (−100..100) at a given block scale, or
- * `null` when the wheel is effectively stopped (|value| < 1) and no arrow
+ * Drive-bar geometry for a raw motor value (−100..100) at a given block scale,
+ * or `null` when the wheel is effectively stopped (|value| < 1) and no bar
  * should be drawn.
  */
-export function wheelArrowGeometry(raw: number, blockScale: number): WheelArrowGeometry | null {
+export function wheelBarGeometry(raw: number, blockScale: number): WheelBarGeometry | null {
   const mag = Math.min(100, Math.abs(raw));
   if (mag < 1) return null;
-  const blockHalfH = (NODE_H / 2) * blockScale;
-  const maxLen = NODE_H * blockScale * 1.3;
-  const minLen = maxLen * 0.16; // shortest (visible) arrow at value 1
-  const len = minLen + ((mag - 1) / 99) * (maxLen - minLen);
-  // Arrowhead and shaft scale with length so it reads as an arrow at every size
-  // instead of a fixed head swamping a short shaft.
-  const headLen = len * 0.32;
-  const headHalf = Math.max(2, len * 0.22);
-  const strokeW = Math.max(1.5, len * 0.14);
-  const dir = raw > 0 ? -1 : 1; // screen-y: up (forward) is negative
-  const reach = blockHalfH + maxLen + 2;
-  const svgHalfW = maxLen * 0.22 + 4;
-  const cx = svgHalfW;
-  const centerY = reach; // block center within the SVG
-  const base = centerY + dir * blockHalfH; // start at the block edge
-  const tipY = base + dir * len;
-  const shaftEndY = tipY - dir * headLen;
-  return { forward: raw > 0, svgHalfW, reach, cx, base, tipY, shaftEndY, strokeW, headHalf };
+  const maxLength = NODE_H * blockScale * 0.8;
+  const minLength = maxLength * 0.14; // shortest (visible) bar at value 1
+  const length = minLength + ((mag - 1) / 99) * (maxLength - minLength);
+  const thickness = Math.max(4, NODE_W * blockScale * 0.07);
+  const gap = Math.max(2, 5 * blockScale);
+  return { positive: raw > 0, length, thickness, gap };
 }

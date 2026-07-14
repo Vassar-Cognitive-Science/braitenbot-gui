@@ -31,7 +31,7 @@ interface Pulse {
   endsAtTick: number;
 }
 
-const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
+const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, edgeInputs: {}, disconnected: new Set() };
 
 /**
  * Minimum wall-derived sim time between React state pushes for the diagram

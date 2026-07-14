@@ -38,7 +38,7 @@ import {
 import type { PrimaryAction } from '../lib/primaryAction';
 import { loadPrimaryAction, savePrimaryAction } from '../lib/primaryAction';
 import { NODE_H, NODE_W } from './connectionGeometry';
-import { wheelArrowGeometry } from './wheelArrow';
+import { wheelBarGeometry } from './wheelArrow';
 import { DiagramCanvas } from './DiagramCanvas';
 import { CommentView } from './CommentView';
 import './diagram.css';
@@ -1171,6 +1171,9 @@ export function BraitenbergDiagram({
         ...(edge.fromPort ? { fromPort: edge.fromPort } : {}),
         to: edge.to,
         ...(edge.toPort ? { toPort: edge.toPort } : {}),
+        // Spawn the weight badge near the input end rather than mid-wire, so
+        // crossing wires' badges don't collide on creation.
+        labelT: 0.3,
         weight: DEFAULT_CONNECTION_WEIGHT,
         transferMode: 'linear',
         transferPoints: [{ x: -100, y: -100 }, { x: 100, y: 100 }],
@@ -1765,40 +1768,41 @@ export function BraitenbergDiagram({
           aria-hidden="true"
         />
 
-        {/* Per-wheel drive indicator: in trace mode an arrow grows straight out
-            of each motor block — up from the block's top edge for a positive
-            (forward) signal, down from the bottom edge for a negative (reverse)
-            one, scaled by magnitude. Drawn clear of the block so its label stays
-            readable. Purely a readout of the motor's trace value — real motion
+        {/* Per-wheel drive indicator: in trace mode a small bar sits on each
+            motor block's OUTER flank (left wheel → left side, right wheel →
+            right side, clear of the connections running in from the centre). It
+            grows up from the block's middle for a positive (forward) signal and
+            down for a negative (reverse) one, scaled by magnitude — green up,
+            red down. Purely a readout of the motor's trace value — real motion
             still needs the robot. */}
         {traceMode &&
           ([
-            ['motor-left', robotLayout.leftWheelCx, robotLayout.leftWheelCy] as const,
-            ['motor-right', robotLayout.rightWheelCx, robotLayout.rightWheelCy] as const,
-          ]).map(([motorId, wheelCx, wheelCy]) => {
+            ['motor-left', robotLayout.leftWheelCx, robotLayout.leftWheelCy, true] as const,
+            ['motor-right', robotLayout.rightWheelCx, robotLayout.rightWheelCy, false] as const,
+          ]).map(([motorId, wheelCx, wheelCy, isLeft]) => {
             const raw = traceResult.nodeValues[motorId];
             if (raw === undefined) return null;
-            // Geometry is anchored to the block (scaled node box), not the
-            // background wheel, so the arrow always leaves from the block edge.
-            const g = wheelArrowGeometry(raw, blockScale);
+            const g = wheelBarGeometry(raw, blockScale);
             if (!g) return null;
+            // Block box is drawn at wheelC{x,y}·zoom with block-px dimensions, so
+            // anchor the bar to that box edge in the same mixed space.
+            const cx = wheelCx * zoom;
+            const cy = wheelCy * zoom;
+            const nodeHalfW = (NODE_W / 2) * blockScale;
+            const left = isLeft ? cx - nodeHalfW - g.gap - g.thickness : cx + nodeHalfW + g.gap;
+            const top = g.positive ? cy - g.length : cy;
             return (
-              <svg
+              <div
                 key={`${motorId}-drive`}
-                className={`wheel-drive-arrow ${g.forward ? 'forward' : 'reverse'}`}
+                className={`wheel-drive-bar ${g.positive ? 'positive' : 'negative'}`}
                 style={{
-                  left: `${wheelCx * zoom - g.svgHalfW}px`,
-                  top: `${wheelCy * zoom - g.reach}px`,
-                  width: `${g.svgHalfW * 2}px`,
-                  height: `${g.reach * 2}px`,
+                  left: `${left}px`,
+                  top: `${top}px`,
+                  width: `${g.thickness}px`,
+                  height: `${g.length}px`,
                 }}
                 aria-hidden="true"
-              >
-                <line x1={g.cx} y1={g.base} x2={g.cx} y2={g.shaftEndY} strokeWidth={g.strokeW} />
-                <polygon
-                  points={`${g.cx},${g.tipY} ${g.cx - g.headHalf},${g.shaftEndY} ${g.cx + g.headHalf},${g.shaftEndY}`}
-                />
-              </svg>
+              />
             );
           })}
 
@@ -1829,6 +1833,7 @@ export function BraitenbergDiagram({
           clientToLayer={clientToLayer}
           traceMode={traceMode}
           traceResult={traceMode ? traceResult : undefined}
+          advancedWeightViz={appSettings.advancedWeightViz}
           sensorValues={sensorValues}
           setSensorValue={setSensorValue}
           setConstantValue={setConstantValue}
@@ -1879,6 +1884,7 @@ export function BraitenbergDiagram({
           deleteConnection={deleteConnection}
           onClose={clearConfigTarget}
           capWeights={capWeights}
+          traceResult={traceMode ? traceResult : undefined}
         />
 
         <div className="canvas-zoom-overlay">

@@ -148,17 +148,14 @@
   line-height: 0;
 }
 
-/* In trace mode a non-linear edge shows both its curve thumbnail and the live
-   signal, so the reader can see the shape and the value at once. */
-.bb-diagram .connection-config-trigger.has-curve-trace {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 4px;
+/* Advanced weight visualization: the badge spells out the whole calculation,
+   so let it grow wider and keep the operators muted. */
+.bb-diagram .connection-config-trigger.advanced-weight {
+  white-space: nowrap;
 }
 
-.bb-diagram .connection-config-trigger.has-curve-trace .badge-curve-value {
-  line-height: 1;
+.bb-diagram .connection-config-trigger .badge-calc-op {
+  color: var(--muted);
 }
 
 /* Non-linear transfer-curve thumbnail drawn inside a connection badge. The
@@ -180,6 +177,20 @@
   stroke-width: 1.5;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+/* Out-of-range arrow (steep linear weight) and the live trace operating point. */
+.bb-diagram .mini-transfer-curve .mini-curve-arrow {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-point {
+  fill: #d4bc78;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.5;
 }
 
 .bb-diagram .connection-config-trigger.selected {
@@ -611,32 +622,27 @@
   margin-top: 2px;
 }
 
-.bb-diagram .trace-color-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.bb-diagram .trace-color-picker {
-  width: 24px;
-  height: 20px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: none;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
 .bb-diagram .trace-color-swatches {
   display: flex;
   gap: 3px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+/* Dot showing the color the sensor currently sees (not a picker). */
+.bb-diagram .trace-color-seen {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-self: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .bb-diagram .trace-color-swatch {
-  width: 16px;
-  height: 16px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 22px;
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.35);
   padding: 0;
@@ -645,6 +651,27 @@
 
 .bb-diagram .trace-color-swatch:hover {
   outline: 1px solid var(--accent);
+}
+
+/* The custom-color swatch: a rainbow gradient that opens the OS color picker.
+   It wraps a hidden native <input type="color"> so one click opens the dialog. */
+.bb-diagram .trace-color-rainbow {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    #f24a3a, #f2a63a, #ecec44, #4f9a4a, #4661b8, #8154ac, #f24a3a
+  );
+}
+
+.bb-diagram .trace-color-rainbow input[type='color'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .bb-diagram .trace-color-advanced > summary {
