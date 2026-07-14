@@ -5,7 +5,7 @@ title: "7. Say What You Mean"
 
 # Say What You Mean
 
-This lesson is optional. Skip it and every robot you build will run exactly as well — it just may take you longer to remember why. Nothing here changes behavior, and the robot is the reason: at upload, node names are discarded, comments are stripped before code generation, and compounds are flattened into an anonymous mesh. The machine runs identically whether a threshold is called `Dark?` or `Threshold 1`. So this lesson isn't for the robot. It's for the only reader a diagram ever has: a human — a classmate who inherits the vehicle, a teacher reading twenty of them at once, and most often future-you, two weeks from now, with no memory of what the third summation was for.
+This lesson is optional. Skip it and every robot you build will run exactly as well; it just may take you longer to remember why. Nothing here changes behavior, and the robot is the reason: at upload, node names are discarded, comments are stripped before code generation, and compounds are flattened into an anonymous mesh. The machine runs identically whether a threshold is called `Dark?` or `Threshold 1`. So this lesson isn't for the robot. It's for the only reader a diagram ever has: a human. A classmate who inherits the vehicle, a teacher reading twenty of them at once, and most often future-you, two weeks from now, with no memory of what the third summation was for.
 
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
 
@@ -81,25 +81,25 @@ Notice what the minute you spent on the first embed actually bought you. Nothing
 
 ## What a good name says
 
-Look again at the second embed and notice something the first one couldn't show you: every node already carries a small type glyph and a meta-label — a sun for an analog sensor, a sigma for a summation. That glyph already says *what kind of part this is*. A label that just repeats it ("Threshold 1" on a threshold) spends the one field you control saying nothing the icon didn't already say. The label's job is to record the node's **role** — what it's doing in this particular machine, not what category of block it happens to be.
+Look again at the second embed and notice something the first one couldn't show you: every node already carries a small type glyph and a meta-label, a sun for an analog sensor, a sigma for a summation. That glyph already says *what kind of part this is*. A label that just repeats it ("Threshold 1" on a threshold) spends the one field you control saying nothing the icon didn't already say. The label's job is to record the node's **role**: what it's doing in this particular machine, not what category of block it happens to be.
 
-Thresholds read especially well as questions, because their 0-or-100 output *is* an answer: `Dark?`, `Wall Ahead?`, and — a name you've already met — `Still stinging?` from [5. Memory](./latches-with-delay). Naming a threshold as a question turns every trace readout into a yes or no you can read at a glance, instead of a number you have to compare to a threshold you'd have to go look up.
+Thresholds read especially well as questions, because their 0-or-100 output *is* an answer: `Dark?`, `Wall Ahead?`, and (a name you've already met) `Still stinging?` from [5. Memory](./latches-with-delay). Naming a threshold as a question turns every trace readout into a yes or no you can read at a glance, instead of a number you have to compare to a threshold you'd have to go look up.
 
 For compute stages further downstream, name the *signal that comes out*, not the operation that produced it. "Gated Weave" tells you what's flowing on that wire; "Multiply 1" tells you which palette icon got dragged onto the canvas. And where a diagram has a symmetric structure, keep the names symmetric: `Left Mix` and `Right Mix`, not `Left Mix` and `Summation 2`. A mismatched pair is often the first sign that the two halves of a "symmetric" vehicle have quietly drifted apart.
 
 Renaming a node in the app is one of two moves: double-click its label right on the canvas and type (Enter confirms, Escape cancels), or select the node and edit the **Label** field in the [config panel](../getting-started/editor).
 
 :::note[You've been reading these all along]
-The names in this course were never decorative. "Latch," "Cruise Gate," "Still stinging?" — each one was doing real teaching work, telling you what the cluster was for before you'd worked out the arithmetic yourself. You've been enjoying well-named diagrams for six lessons without anyone pointing it out. This lesson is just the first time you're asked to write one.
+The names in this course were never decorative. "Latch," "Cruise Gate," "Still stinging?": each one was doing real teaching work, telling you what the cluster was for before you'd worked out the arithmetic yourself. You've been enjoying well-named diagrams for six lessons without anyone pointing it out. This lesson is just the first time you're asked to write one.
 :::
 
 ## A box with a name on it
 
-Naming has a ceiling, though. A twenty-node diagram of perfectly named nodes is still twenty nodes: your eye has to travel across all of them to find the shape of the thing. Recall Puzzle 3 in [6. Nobody Home](./subsumption-architecture): boxing the escape cluster into a compound didn't change what the robot did, but it changed what the *canvas* looked like — the architecture became visible instead of merely implied.
+Naming has a ceiling, though. A twenty-node diagram of perfectly named nodes is still twenty nodes: your eye has to travel across all of them to find the shape of the thing. Recall Puzzle 3 in [6. Nobody Home](./subsumption-architecture): boxing the escape cluster into a compound didn't change what the robot did, but it changed what the *canvas* looked like: the architecture became visible instead of merely implied.
 
-That's the new tool here: a **compound** as a legibility device, not just a wiring shortcut. A compound is a claim — "this cluster is one idea" — and the test of whether the claim is true is whether you can name it. If the best you can manage is "Compound 1," you probably haven't found a real part yet; you've taped a box shut without labeling what's inside.
+That's the new tool here: a **compound** as a legibility device, not just a wiring shortcut. A compound is a claim ("this cluster is one idea"), and the test of whether the claim is true is whether you can name it. If the best you can manage is "Compound 1," you probably haven't found a real part yet; you've taped a box shut without labeling what's inside.
 
-Ports carry names too. A compound's port names are just the labels of the compound-input and compound-output nodes inside its body, so name them for the *signal* they carry — "Turn," "Suppress" — not "Out 1". And renaming matters more here than anywhere else in the diagram: editing the Label field on any instance of a compound renames the compound **type**, so every instance updates at once. That's deliberate. The name belongs to the idea, not to the copy sitting on the canvas.
+Ports carry names too. A compound's port names are just the labels of the compound-input and compound-output nodes inside its body, so name them for the *signal* they carry, like "Turn" or "Suppress," not "Out 1". And renaming matters more here than anywhere else in the diagram: editing the Label field on any instance of a compound renames the compound **type**, so every instance updates at once. That's deliberate. The name belongs to the idea, not to the copy sitting on the canvas.
 
 One more consequence worth knowing before you build: the Comment tool is disabled while you're inside a compound body. Names are the only explanatory device available in there, so inside a box they carry all the weight a comment might otherwise share.
 
@@ -156,13 +156,13 @@ Four nodes and their wiring collapsed into one part with one input and one outpu
 
 ## Notes in the margin
 
-The embeds on this page can't show you the last tool, because it isn't a node at all. The toolbar's **Comment** button drops a gray note box onto the canvas: it sits behind the nodes, and you can move it, resize it, and edit its text freely. It's saved with the diagram like everything else, but it carries no signal and is ignored entirely when the code generator runs. Comments live on the top-level diagram only — the button is disabled the moment you're editing inside a compound body, which is part of why naming matters so much once you're in one.
+The embeds on this page can't show you the last tool, because it isn't a node at all. The toolbar's **Comment** button drops a gray note box onto the canvas: it sits behind the nodes, and you can move it, resize it, and edit its text freely. It's saved with the diagram like everything else, but it carries no signal and is ignored entirely when the code generator runs. Comments live on the top-level diagram only: the button is disabled the moment you're editing inside a compound body, which is part of why naming matters so much once you're in one.
 
-The craft question is what to put in a comment, and the honest answer is: not what the wires already show. A wire from `Bumper` to `Latch` already says the bumper connects to the latch; a comment that repeats it ("bumper connects to latch") is dead weight, and worse than dead — unlike the wire, a comment can go stale and start lying about a diagram that's since been rewired around it.
+The craft question is what to put in a comment, and the honest answer is: not what the wires already show. A wire from `Bumper` to `Latch` already says the bumper connects to the latch; a comment that repeats it ("bumper connects to latch") is dead weight. Worse than dead: unlike the wire, a comment can go stale and start lying about a diagram that's since been rewired around it.
 
 What a comment is actually good for is the numbers a stranger would trip over. Take this page's own machine. The 0.01 weight on the gate wire looks, out of context, like a typo someone forgot to fix; a note that says it's a switch, not a volume knob, and shows the arithmetic (100 × 0.01 = 1, which is all it takes to flip Multiply open) saves the next reader from "fixing" it into something that breaks the gate. The `Dark?` threshold of 40 was calibrated against one room's ambient light, and a comment saying so tells the next person to retune it rather than trust it in a different room. And from [5. Memory](./latches-with-delay): a note reading "feedback 0.95 ≈ 1.5 s hold" records tuning work that took real trial and error to find, work nobody wants to redo from scratch.
 
-A useful test, when you're not sure whether something deserves a comment: imagine handing the diagram to a classmate and walking out of the room. The three sentences you'd feel compelled to say out loud before you reached the door — those are the comments.
+A useful test, when you're not sure whether something deserves a comment: imagine handing the diagram to a classmate and walking out of the room. The three sentences you'd feel compelled to say out loud before you reached the door: those are the comments.
 
 :::note[Where does the meaning live?]
 Here's the turn this lesson has been building to. The named, boxed, commented machine from this page and the anonymous one at the top of it compile to byte-identical Arduino sketches. [6. Nobody Home](./subsumption-architecture) ended by asking whether a compound's structure is "really there" once the robot runs as a flat mesh with no boxes in it at all. The same question applies to every name and every note you've added since: a diagram is really two artifacts sharing one canvas, a machine for the robot and an explanation for the humans standing around it, and only one of those two artifacts ever uploads.
@@ -176,7 +176,7 @@ Names, compounds, and comments change nothing about how a vehicle behaves; they 
 
 - If names change nothing about behavior, what exactly is a well-named diagram *better at*, and for whom? Would your answer differ for a diagram you'll open again yourself versus one you're handing off?
 - You'll sometimes discover, mid-rename, that a cluster you thought was one idea is actually two ideas wearing a trench coat. Does naming *describe* a design that was already there, or does it *finish* designing it?
-- Future-you is a stranger who happens to share your memories — most of which will be gone by the time they arrive. How much of what you'd tell a classmate would you actually bother telling them?
+- Future-you is a stranger who happens to share your memories, most of which will be gone by the time they arrive. How much of what you'd tell a classmate would you actually bother telling them?
 
 ## What's next
 

@@ -17,6 +17,7 @@ const sidebars: SidebarsConfig = {
         'lessons/color-discrimination',
         'lessons/latches-with-delay',
         'lessons/subsumption-architecture',
+        'lessons/say-what-you-mean',
       ],
     },
     {
