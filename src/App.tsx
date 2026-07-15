@@ -61,6 +61,19 @@ export function App() {
   // touch localStorage once, on mount.
   const [editorUnlocked, setEditorUnlocked] = useState(readEditorUnlocked);
 
+  // Defer building the heavy editor (large DOM tree + store/persistence/collab
+  // hooks) until after the landing screen has painted. It's always mounted —
+  // just hidden — because the Tauri recent-file bridge, undo history, autosave
+  // and collab session all need it live; but constructing it in the first
+  // commit blocks cold-launch first paint. A post-paint rAF mounts it a frame
+  // later, well before recents (which load async) can be clicked. `view ===
+  // 'editor'` is a safety net so an immediate Editor click still mounts it.
+  const [editorReady, setEditorReady] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setEditorReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const goHome = () => setView('landing');
   const enterEditor = () => {
     setHasEnteredEditor(true);
@@ -124,17 +137,19 @@ export function App() {
           <LandingPage onEnterEditor={enterEditor} onEnterLessons={enterLessons} />
         )}
 
-        <div style={{ display: view === 'editor' ? undefined : 'none' }}>
-          <BraitenbergDiagram
-            arduino={arduino}
-            appSettings={appSettings}
-            updateAppSettings={updateAppSettings}
-            active={view === 'editor'}
-            onGoHome={goHome}
-            onDiagramOpened={enterEditor}
-            onGoToLessons={editorUnlocked ? enterLessons : undefined}
-          />
-        </div>
+        {(editorReady || view === 'editor') && (
+          <div style={{ display: view === 'editor' ? undefined : 'none' }}>
+            <BraitenbergDiagram
+              arduino={arduino}
+              appSettings={appSettings}
+              updateAppSettings={updateAppSettings}
+              active={view === 'editor'}
+              onGoHome={goHome}
+              onDiagramOpened={enterEditor}
+              onGoToLessons={editorUnlocked ? enterLessons : undefined}
+            />
+          </div>
+        )}
 
         {hasVisitedLessons && (
           <div style={{ display: view === 'lessons' ? undefined : 'none' }}>

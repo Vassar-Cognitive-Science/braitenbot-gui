@@ -431,21 +431,26 @@ export function DiagramCanvas({
   // A wire passing behind an opaque node box is invisible; compute the hidden
   // spans so ConnectionLayer can redraw them dashed on top of the nodes.
   const occludedPaths = useMemo(() => {
-    const rects = connections.length
-      ? Object.fromEntries(
-          Object.values(nodeMap).map((n) => {
-            const w = nodeWorldPos(n);
-            return [n.id, { x: w.x, y: w.y, w: NODE_W * blockScale, h: nodeRenderHeight(n, traceMode) * blockScale }];
-          }),
-        )
-      : {};
+    if (connections.length === 0) return [];
+    // Node boxes in canvas space, computed once per rebuild. Carries the id so
+    // each connection can skip its own endpoints without a keyed lookup.
+    const rects = Object.values(nodeMap).map((n) => {
+      const w = nodeWorldPos(n);
+      return { id: n.id, x: w.x, y: w.y, w: NODE_W * blockScale, h: nodeRenderHeight(n, traceMode) * blockScale };
+    });
+    // O(1) datum lookup instead of a per-connection linear scan (was O(C²)).
+    const pathById = new Map(connectionPaths.map((p) => [p.id, p]));
     const out: Array<{ id: string; d: string }> = [];
+    // Reused across connections so the endpoint filter doesn't allocate a fresh
+    // array (plus the Object.entries/filter/map churn) every frame of a drag.
+    const others: typeof rects = [];
     for (const conn of connections) {
-      const datum = connectionPaths.find((p) => p.id === conn.id);
+      const datum = pathById.get(conn.id);
       if (!datum) continue;
-      const others = Object.entries(rects)
-        .filter(([id]) => id !== conn.from && id !== conn.to)
-        .map(([, r]) => r);
+      others.length = 0;
+      for (const r of rects) {
+        if (r.id !== conn.from && r.id !== conn.to) others.push(r);
+      }
       for (const d of occludedSpans(datum.x1, datum.y1, datum.x2, datum.y2, others)) {
         out.push({ id: conn.id, d });
       }
