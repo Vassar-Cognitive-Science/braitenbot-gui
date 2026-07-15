@@ -5,15 +5,15 @@ title: "10. Rangefinders & Bumpers"
 
 # Rangefinders & Bumpers
 
-You built the avoider in [3. Don't](../lessons/obstacle-avoidance) and gave it a memory in [5. Memory](../lessons/latches-with-delay). Now mount the sensors that make both circuits real.
+You built the avoider in [3. Don't](../lessons/obstacle-avoidance) and gave it a memory in [5. Memory](../lessons/latches-with-delay). The sensors that make both circuits real are on the robot's front.
 
-## Mounting the ToF sensors
+## The ToF sensors
 
-Mount the robot's two **ToF distance sensors** (VL53L4CD) on the front, angled outward about 30° from center: one pointing front-left, one front-right. Each one measures the actual distance to whatever is in front of it with a tiny time-of-flight laser and reports it over the shared I2C bus. The **ToF Distance** node scales that reading to 0–100, with a *closer* object reading *higher* and an object at the maximum distance you set reading 0.
+The robot has two **ToF distance sensors** (VL53L4CD) on the front, angled outward about 30° from center: one pointing front-left, one front-right. Each one measures the actual distance to whatever is in front of it with a tiny time-of-flight laser and reports it over the shared I2C bus. The **ToF Distance** node scales that reading to 0–100, with a *closer* object reading *higher* and an object at the maximum distance you set reading 0.
 
-### XSHUT wiring
+### XSHUT lines
 
-**Left ToF Distance** uses XSHUT on **D8**, **Right ToF Distance** on **D12**: both must be wired, or one sensor won't come up. See [Supported Hardware ▸ I2C pins](../hardware/supported-hardware#i2c-pins) for why each ToF sensor needs its own XSHUT pin.
+Each ToF sensor has its own XSHUT line — **Left ToF Distance** on **D8**, **Right ToF Distance** on **D12** — so the two can be brought up independently on the shared I2C bus. See [Supported Hardware ▸ I2C pins](../hardware/supported-hardware#i2c-pins) for why each ToF sensor needs its own XSHUT pin.
 
 ## Calibrating the threshold
 

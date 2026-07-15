@@ -5,11 +5,11 @@ title: "9. Eyes: Photocells"
 
 # Eyes: Photocells
 
-You cross-wired two eyes in [2. Fear & Love](../lessons/fear-and-love) and let them fight the noise floor in [3. Don't](../lessons/obstacle-avoidance). Here's how to mount and tune the real ones.
+You cross-wired two eyes in [2. Fear & Love](../lessons/fear-and-love) and let them fight the noise floor in [3. Don't](../lessons/obstacle-avoidance). Here's what the real ones look like, and how to tune them.
 
-## Mounting and wiring
+## What's on the robot
 
-Mount the robot's two **light-sensor boards** on the front, angled slightly outward: one pointing left, one pointing right. Wire each board's analog output to pins **A0** (left) and **A1** (right); see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring. The board already carries the photocell and its voltage divider, so there's nothing else to add. Do **not** wire your own divider: the board does it for you.
+The robot has two **light-sensor boards** on the front, angled slightly outward: one pointing left, one pointing right. Each board's analog output is wired to pins **A0** (left) and **A1** (right); see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring. Each board already carries the photocell and its own voltage divider.
 
 When a light source is to the left of the robot, the left board gets more light and reads higher. When it's to the right, the right board reads higher. That asymmetry is all the steering circuit needs.
 

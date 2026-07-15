@@ -46,7 +46,7 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 - **Teaching with BraitenBot**: planning a class? The course overview links the
   lesson arc and the hardware build in one place.
 - **Lessons**: the full thirteen-lesson course — seven software lessons, five
-  more ("On the Robot") that mount and calibrate real sensors, and a closing
+  more ("On the Robot") that calibrate and tune real sensors, and a closing
   lesson rounding out the toolbox.
 - **Install & Setup**: installing the app and setting up Arduino.
 - **Reference**: the building blocks (nodes, connections, transfer functions,

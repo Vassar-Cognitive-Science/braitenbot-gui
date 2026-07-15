@@ -7,7 +7,7 @@ import OpenEditorButton from '@site/src/components/OpenEditorButton';
 
 # First Upload
 
-You built Vehicle 1 in [1. Your First Vehicle](../lessons/your-first-vehicle): one light sensor, two wires, two wheels. Now put it on real wheels. (Taking the lessons inside the desktop app? Its **Upload to bot** button already does this in one click, right from the lesson page. This page walks the editor's full upload flow — the one you'll use for vehicles of your own design.)
+You built Vehicle 1 in [1. Your First Vehicle](../lessons/your-first-vehicle): one light sensor, two wires, two wheels. Now run it on the real robot. (Taking the lessons inside the desktop app? Its **Upload to bot** button already does this in one click, right from the lesson page. This page walks the editor's full upload flow — the one you'll use for vehicles of your own design.)
 
 ## Meet the editor
 
@@ -29,7 +29,7 @@ toolbar button and panel, see [The Editor](../getting-started/editor).
 
 On the physical robot, the light sensor is a photoresistor, a component whose resistance changes with light intensity. It outputs a voltage that the Arduino reads as a number. BraitenBot scales this to a simple 0–100 range for you: 0 means no light, 100 means maximum brightness.
 
-The kit's sensor presets already point at the right pins: the photocell node is wired to **A0**, and the wheel servos to **D5**/**D6** (see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring). If you wired your own photoresistor to a different pin, you'd change the **Arduino Port** in the node's config panel. For the kit build, though, the presets already have it right, so there's nothing to configure before uploading.
+The kit's sensor presets already point at the right pins: the photocell node is wired to **A0**, and the wheel servos to **D5**/**D6** (see [Pin assignments](../hardware/assembly#pin-assignments) for the full kit wiring). If a sensor is on a different pin than its preset, you'd change the **Arduino Port** in the node's config panel. For the kit build, though, the presets already have it right, so there's nothing to configure before uploading.
 
 ## Upload the diagram
 

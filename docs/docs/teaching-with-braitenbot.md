@@ -8,8 +8,8 @@ BraitenBot is a ready-made unit on emergent behavior and sensorimotor
 robotics: thirteen lessons that walk students from a single sensor wired to
 a motor up to a layered, multi-behavior robot, each one built entirely on
 the wiring and weights they set themselves. The first seven run entirely in
-software, no hardware required. Five more, grouped as "On the Robot," mount
-and calibrate the real sensors and put each circuit from the software
+software, no hardware required. Five more, grouped as "On the Robot," calibrate
+and tune the real sensors and put each circuit from the software
 lessons onto a physical kit. A closing lesson rounds out the toolbox with
 the node types the course hasn't needed yet. Students with a compatible
 laptop should [install the desktop app](/install) and take the whole course
@@ -43,15 +43,14 @@ browser, and they can pair with a classmate's app for the uploads.
 8. **[First Upload](./on-the-robot/first-upload)**: put Vehicle 1 on real
    wheels, walking the full upload flow from board selection to a working
    robot.
-9. **[Eyes: Photocells](./on-the-robot/photocells)**: mount and tune the
+9. **[Eyes: Photocells](./on-the-robot/photocells)**: calibrate and tune the
    two real light sensors, plus the dead-zone and speed-cap curves real
    hardware needs.
-10. **[Rangefinders & Bumpers](./on-the-robot/tof-and-bumpers)**: mount the
-    ToF distance sensors and bump switches, and calibrate the avoidance
+10. **[Rangefinders & Bumpers](./on-the-robot/tof-and-bumpers)**: calibrate
+    the ToF distance sensors and bump switches, tuning the avoidance
     threshold against real walls.
-11. **[The Color Eye](./on-the-robot/color-sensor)**: bolt the color
-    sensor to the robot's belly and calibrate it against real floors and
-    lighting.
+11. **[The Color Eye](./on-the-robot/color-sensor)**: calibrate the color
+    sensor against real floors and lighting.
 12. **[Field Test: Let It Loose](./on-the-robot/field-test)**: put the
     full three-layer robot in a room with furniture and let it fend for
     itself.
@@ -62,8 +61,8 @@ browser, and they can pair with a classmate's app for the uploads.
 Lessons 1–7 are live, editable circuits embedded right on the page —
 identical in the app and in the browser, so a mixed class of installed and
 browser-only students works through the same sequence together. Lessons
-8–12 shift to the physical robot itself: mounting, wiring, and calibrating
-the sensors a kit actually needs. Lesson 13 returns to the browser to round
+8–12 shift to the physical robot itself: uploading to it, then calibrating
+and tuning the sensors a kit actually needs. Lesson 13 returns to the browser to round
 out the toolbox.
 
 ## Building the robots
