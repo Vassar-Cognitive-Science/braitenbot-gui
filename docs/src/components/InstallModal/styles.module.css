@@ -1,0 +1,116 @@
+/* ── InstallModal: first-visit "get the app" interstitial ──────────────────
+ *
+ * Hand-rolled, no dependency. Rendered via a portal into document.body so it
+ * sits above the navbar/sidebar regardless of where Root mounts it. Uses the
+ * site's brand tokens (custom.css) so it reads as part of the monograph
+ * theme rather than a generic overlay, and works unmodified in both the
+ * light and dark palettes those tokens define. */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: color-mix(in oklab, black 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  padding: 2rem 2rem 1.5rem;
+  background: var(--bb-surface);
+  border: 1px solid var(--bb-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px color-mix(in oklab, black 45%, transparent);
+  color: var(--bb-ink);
+  animation: bb-modal-in 220ms ease-out;
+}
+
+@keyframes bb-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.closeButton {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--bb-ink-faint);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.closeButton:hover {
+  color: var(--bb-ink);
+  background: color-mix(in oklab, var(--bb-line) 60%, transparent);
+}
+
+.heading {
+  margin: 0 1.5rem 0.6rem 0;
+  font-family: var(--bb-font-display);
+  font-weight: 600;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  color: var(--bb-ink);
+}
+
+.body {
+  margin: 0 0 1.4rem;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--bb-ink-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.altLink {
+  display: inline-block;
+  margin-top: 0.8rem;
+  font-size: 0.82rem;
+  color: var(--bb-signal-text);
+}
+
+.footer {
+  margin: 1.4rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bb-line);
+  font-size: 0.8rem;
+  color: var(--bb-ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog {
+    animation: none;
+  }
+  .closeButton {
+    transition: none;
+  }
+}

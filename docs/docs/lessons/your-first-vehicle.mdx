@@ -9,9 +9,9 @@ Imagine a moth drawn to a porch light: it simply moves faster when light hits it
 
 This is Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to build minds: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. (For the full tour of vehicles, see [Braitenberg Vehicles](../guide/braitenberg-vehicles).)
 
-Every circuit on this page is live. Start by playing.
-
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+Every circuit on this page is live. Start by playing.
 
 <InteractiveDiagram
   initialInputs={{ 'sensor': 60 }}
@@ -73,6 +73,13 @@ Someone wired this vehicle in a hurry and only connected one wheel. In bright li
   }}
   caption="The light slider stays live while you wire."
 />
+
+:::note[In the app?]
+Every editable diagram in these lessons has an **Upload to bot** button in
+its bottom-right corner: pick your board and whatever you've wired up goes
+straight onto the robot — no need to open the editor. (The button only
+exists inside the desktop app; on the website there's no robot to upload to.)
+:::
 
 That wire you just drew is the whole idea. A connection carries the sensor's value to the motor, and the connection's **weight** decides how much of it arrives. Both wires here have weight 1.0: a light reading of 75 becomes a motor speed of 75, unmodified.
 
@@ -189,4 +196,4 @@ This vehicle has a limitation: with one sensor it can only speed up or slow down
 
 [2. Fear & Love](./fear-and-love): add a second sensor and discover that the *same parts* wired two different ways produce a creature that chases light or one that flees it.
 
-Have the robot kit? [First Upload](../on-the-robot/first-upload) puts this exact circuit on real wheels.
+Have the robot kit? [8. First Upload](../on-the-robot/first-upload) puts this exact circuit on real wheels.

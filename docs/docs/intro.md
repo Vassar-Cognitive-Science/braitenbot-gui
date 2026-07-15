@@ -35,15 +35,22 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
 
 ## Finding your way around
 
-- **Lessons**: start here. Six hands-on builds that run right in your browser,
-  no install required. Play first.
+- **Start by installing the app**: grab it from the [Install page](/install),
+  open it, and choose **Lessons**. All thirteen hands-on builds are bundled
+  into the app (they work offline), and every circuit you wire there has an
+  **Upload to bot** button: pick your board and it goes straight onto a real
+  robot, no need to open the editor.
+- **Can't install it?** iPad, Chromebook, locked-down machine — no problem.
+  The same [Lessons](./lessons/your-first-vehicle) run right here in your
+  browser, nothing to set up.
 - **Teaching with BraitenBot**: planning a class? The course overview links the
   lesson arc and the hardware build in one place.
-- **Getting Started**: when you're ready to build your own, install the app,
-  set up Arduino, and learn the editor.
-- **Designing Vehicles**: reference for the building blocks (nodes, connections,
-  transfer functions, compounds, the simulator, and collaborative sessions).
-- **On the Robot**: put your vehicles on real hardware.
+- **Lessons**: the full thirteen-lesson course — seven software lessons, five
+  more ("On the Robot") that mount and calibrate real sensors, and a closing
+  lesson rounding out the toolbox.
+- **Install & Setup**: installing the app and setting up Arduino.
+- **Reference**: the building blocks (nodes, connections, transfer functions,
+  compounds, the simulator, collaborative sessions) and the editor itself.
 - **Under the Hood**: optional. What the generated Arduino sketch looks like and
   how diagrams are stored.
 
@@ -51,7 +58,8 @@ The separate **Hardware** section covers building the physical robot.
 
 ## Next steps
 
-- [Play your first lesson](./lessons/your-first-vehicle): nothing to install
+- [Install BraitenBot](/install) and take the lessons inside the app
+- [Play the first lesson in your browser](./lessons/your-first-vehicle) if you
+  can't install: nothing to set up
 - [Teaching this as a course?](./teaching-with-braitenbot): the educator overview
-- [Install BraitenBot](./getting-started/installation) when you want to build your own
 - [Explore the building blocks](./guide/nodes)

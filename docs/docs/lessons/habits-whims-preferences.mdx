@@ -1,0 +1,281 @@
+---
+sidebar_position: 13
+title: "13. Habits, Whims & Preferences"
+---
+
+# Habits, Whims & Preferences
+
+Every vehicle you've built so far is an argument between the world and a wire. A sensor reads something out there, a weight scales it, a summation adds it up, and a motor turns. Silence the sensors and the vehicle goes still: there is nothing left in the circuit to say anything. That's been true of every creature in this course, from the light-chaser in [2. Fear & Love](./fear-and-love) to the wall-avoider in [3. Don't](./obstacle-avoidance) to the grudge-holder in [5. Memory](./latches-with-delay). Even the latch, which outlasted its cause by a second and a half, still needed a bump to get started.
+
+This lesson meets the two node types that don't need a cause at all. The **Oscillator** repeats a rhythm on its own schedule, world or no world: a **habit**. The **Noise** node fires unpredictable impulses that answer to nothing: a **whim**. Neither reads a sensor. Neither has an input port. Wire either one straight to a motor and you get motion nobody outside the vehicle asked for.
+
+Alongside them, two nodes you've been using for individual wires all along get promoted to a new job. **Minimum** and **Maximum** don't generate anything themselves, but pointed at a bundle of competing signals they render a verdict: the strongest opinion wins, or a hard ceiling holds no matter how insistent the rest of the circuit gets. That's the closest thing this kit has to a **preference**.
+
+None of this is exotic wiring. Every part below has been on the palette since Lesson 1. What's new is asking what a vehicle looks like once some of its behavior comes from *inside* — a small, bounded personality riding on top of the reflexes you already know how to build.
+
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+## A tail with no sensor
+
+Here's an Oscillator wired straight to a **Positional Servo**, with nothing else in the circuit. No sensor, no threshold, no decision of any kind — just a sine wave turning a shaft back and forth.
+
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'osc', type: 'compute-oscillator', label: 'Sway', x: 60, y: 20, frequencyHz: 0.5, amplitude: 100 },
+      { id: 'tail', type: 'servo-positional', label: 'Tail', x: 60, y: 170, servoPin: '9' },
+    ],
+    connections: [
+      { id: 'c1', from: 'osc', to: 'tail', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Nothing here is watching the world. The Tail sweeps back and forth at Sway's own pace, whether or not anyone's around to see it."
+/>
+
+Watch the readout on `Sway` climb from -100 to 100 and back, twice every four seconds. That's the whole idea of a habit: a signal with a shape, repeating on a clock that belongs to the circuit, not to the room. Feed it to a [Positional Servo](../guide/nodes#positional-servo) and the shape becomes a sweep, ranging from fully one side to fully the other — a tail with no sensor, wagging for its own reasons.
+
+`Sway`'s [Oscillator](../guide/nodes#oscillator) is set to 0.5 Hz (one full swing every two seconds) and its full amplitude of 100. The wire into `Tail` carries all of it. Turn that wire down and the sweep shrinks toward the middle; turn it up and the tail commits fully to each side. Try it yourself.
+
+<InteractiveDiagram
+  editable
+  commenting
+  goal={{
+    title: 'The tail barely twitches. Turn up the wire until it commits fully to each side of its sweep.',
+    tests: [
+      {
+        label: 'commits to one side at the top of the swing',
+        phases: [{ inputs: {}, ticks: 25 }],
+        expect: [{ node: 'tail', op: 'gte', value: 60 }],
+      },
+      {
+        label: 'commits to the other side at the bottom of the swing',
+        phases: [{ inputs: {}, ticks: 75 }],
+        expect: [{ node: 'tail', op: 'lte', value: -60 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'osc', type: 'compute-oscillator', label: 'Sway', x: 60, y: 20, frequencyHz: 0.5, amplitude: 100 },
+      { id: 'tail', type: 'servo-positional', label: 'Tail', x: 60, y: 170, servoPin: '9' },
+    ],
+    connections: [
+      { id: 'c1', from: 'osc', to: 'tail', weight: 0.3, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Click the weight badge on the Sway → Tail wire and drag it up. The goal checker watches the swing at two moments a beat apart; the readout is for you. Found the weight that works? Click + Comment and record it — that's exactly the kind of number Lesson 7 said a comment is for."
+/>
+
+Notice what the goal checker just did: it never touched a sensor slider, because there's nothing to touch. It simply let the circuit run for 25 ticks and looked at the swing's peak, then reset and ran it for 75 ticks to catch the trough on the way back down. A vehicle whose behavior comes from a clock rather than a stimulus is still testable — you just test it against *time* instead of against the world.
+
+## A nervous tic
+
+An Oscillator repeats. A **Noise** node doesn't: every tick it emits a fresh random value, bounded by its amplitude but otherwise indifferent to whatever came before. Wire one to a [Digital Output](../guide/nodes#digital-output) and you get a light that flickers on whenever the whim happens to spike past the pin's threshold — a tic with no provocation.
+
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'whim', type: 'compute-noise', label: 'Fidget', x: 60, y: 20, amplitude: 100 },
+      { id: 'tic', type: 'digital-out', label: 'Tic', x: 60, y: 170, servoPin: '8', threshold: 50 },
+    ],
+    connections: [
+      { id: 'c1', from: 'whim', to: 'tic', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Fidget answers to nothing. Tic only catches the loud moments — most ticks it stays dark."
+/>
+
+`Fidget`'s [Noise](../guide/nodes#noise) node draws a fresh value in [-100, 100] every tick; `Tic`'s own threshold (50, the [Digital Output](../guide/nodes#digital-output) default) decides which of those moments are loud enough to light the LED. Turn the connecting wire down and even the loudest whim can no longer reach the threshold: total silence. Below, the wire is turned down too far — `Tic` never fires, no matter how long you watch. Turn the gain back up.
+
+<InteractiveDiagram
+  editable
+  commenting
+  goal={{
+    title: "The LED never fires — the wire is too quiet to carry a whim over Tic's threshold. Turn up the gain.",
+    tests: [
+      {
+        label: 'stays dark on an ordinary tick',
+        phases: [{ inputs: {}, ticks: 13 }],
+        expect: [{ node: 'tic', op: 'eq', value: 0 }],
+      },
+      {
+        label: 'catches the loud tick',
+        phases: [{ inputs: {}, ticks: 2 }],
+        expect: [{ node: 'tic', op: 'eq', value: 100 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'whim', type: 'compute-noise', label: 'Fidget', x: 60, y: 20, amplitude: 100 },
+      { id: 'tic', type: 'digital-out', label: 'Tic', x: 60, y: 170, servoPin: '8', threshold: 50 },
+    ],
+    connections: [
+      { id: 'c1', from: 'whim', to: 'tic', weight: 0.2, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Click the weight badge on the Fidget → Tic wire and drag it up until the goal is solved. Most ticks stay dark either way — the checker only asks for one loud tick and one quiet one. Worth a comment recording the gain you settled on and why."
+/>
+
+Notice the shape of the two tests: one demands silence, the other demands a spike, and both have to hold on the *same* wiring. That's the honest description of a nervous tic — not "always on" (that's just a light), not "never on" (that's nothing), but bounded and occasional, on a schedule nobody chose.
+
+:::note[Bounded, not caused]
+`Fidget` never asks the room a question. There's no photocell, no bumper, nothing upstream of it at all — its number is a property of the node itself, drawn fresh every tick within a fixed range. That's what makes it a *whim* rather than a *reflex*: unpredictable in the moment, but never unbounded. A real nervous tic — an eye twitch, a fidgeting hand — has exactly this character: it isn't triggered by anything you could point to, but it isn't limitless either.
+:::
+
+## Which one's closer?
+
+`Sway` and `Fidget` generate signal from nothing. **Maximum** and **Minimum** do the opposite: they generate nothing at all, but they resolve an argument between signals that already exist. Recall the inhibition pattern from [3. Don't](./obstacle-avoidance): a wall on the left throttled the *right* wheel, and a wall on the right throttled the *left* one, each eye wired to its own opposite motor. That works with one eye per side. It breaks the moment you want a *single* "something's close" alarm fed by more than one sensor, because a plain wire can't decide which of two readings to trust.
+
+Here's that vehicle, cruising forward, blind on its right. Its left [ToF Distance](../guide/nodes#tof-distance-vl53l4cd) sensor and a [Maximum](../guide/nodes#maximum) node ("nearer" reads higher, so the *larger* of two distance readings is the *closer* object) are wired up, but the right sensor is still sitting unconnected on the canvas.
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'left-tof': 0, 'right-tof': 80 }}
+  goal={{
+    title: "Blind on the right: it drives straight at anything over there. Wire the right eye into Nearest so either side can stop it.",
+    tests: [
+      {
+        label: 'a close call on the right stops it',
+        phases: [{ inputs: { 'right-tof': 90, 'left-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'a close call on the left still stops it',
+        phases: [{ inputs: { 'left-tof': 90, 'right-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'open floor: full cruise',
+        phases: [{ inputs: { 'left-tof': 0, 'right-tof': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'left-tof', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, xshutPin: '8' },
+      { id: 'right-tof', type: 'sensor-tof', label: 'Right ToF Distance', x: 460, y: 20, xshutPin: '12' },
+      { id: 'nearest', type: 'compute-max', label: 'Nearest', x: 240, y: 170 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 460, y: 170, constantValue: 50 },
+      { id: 'close', type: 'compute-threshold', label: 'Something Close?', x: 240, y: 320, threshold: 60 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 150, y: 470 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 330, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 150, y: 620, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 330, y: 620, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-tof', to: 'nearest', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'nearest', to: 'close', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.4, from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'close', to: 'lsum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'close', to: 'rsum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'lsum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'rsum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag from Right ToF Distance's bottom dot up to Nearest. The default weight of 1.0 is what you want."
+/>
+
+One wire, and the arbitration is symmetric: `Nearest` doesn't care *which* eye reported the close call, only that one of them did. `Something Close?` fires, and its -1.0 weight lands on *both* wheel sums at once, so the vehicle brakes evenly rather than pivoting away — it doesn't know which direction is safe anymore, only that it isn't this one. That's a different shape of "no" than Lesson 3's: not a turn, a full stop, exactly the behavior you'd want the instant a decision needs two sensors instead of one.
+
+:::note[Arbitrating real rangefinders]
+This is precisely the pattern for combining two physical sensors into one reflex: whatever their number, run every distance-ish reading into a single Maximum, and let the closest threat decide, rather than hand-wiring a separate "no" for every sensor you own. [10. Rangefinders & Bumpers](../on-the-robot/tof-and-bumpers) mounts a real pair of ToF sensors this same arbitration is built for.
+:::
+
+## A speed ceiling
+
+Maximum lets the loudest opinion win. **Minimum** does the opposite: wire a signal alongside a Constant and the output can never climb past whatever that constant says, no matter how insistent the signal gets. That's a *ceiling* — a personality trait as much as a safety feature, the vehicle equivalent of "it doesn't matter how excited I get, I don't go past a jog."
+
+<InteractiveDiagram
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'desired', type: 'constant', label: 'Desired Speed', x: 60, y: 20, constantValue: 40 },
+      { id: 'cap', type: 'constant', label: 'Speed Cap', x: 300, y: 20, constantValue: 60 },
+      { id: 'capped', type: 'compute-min', label: 'Capped Speed', x: 170, y: 170 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 170, y: 320, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'desired', to: 'capped', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'cap', to: 'capped', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'capped', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Slide Desired Speed above Speed Cap's 60 and watch the wheel plateau. It can ask for more; Capped Speed simply won't pass it along."
+/>
+
+Below 60, `Desired Speed` passes straight through and the wheel matches it exactly — [Minimum](../guide/nodes#minimum) of two numbers is just the smaller one, and while `Desired Speed` is smaller, it wins. Push `Desired Speed` past 60 and `Capped Speed` freezes at the ceiling; the motor stops caring how much higher you slide it. No threshold, no clamp curve, no special case: the ceiling is just what "smallest of the inputs" means once one of the inputs stops moving.
+
+## Show it
+
+One more piece of hardware belongs in this lesson: the [TM1637 Display](../guide/nodes#tm1637-display), a 4-digit 7-segment readout. It takes any signal and shows it as a number, which makes it a natural way to expose the arbitration from `Nearest` — the reading the robot is actually reacting to — as something a bystander can read at a glance, not just infer from wheel speed.
+
+<InteractiveDiagram
+  initialInputs={{ 'left-tof': 80, 'right-tof': 30 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'left-tof', type: 'sensor-tof', label: 'Left ToF Distance', x: 20, y: 20, xshutPin: '8' },
+      { id: 'right-tof', type: 'sensor-tof', label: 'Right ToF Distance', x: 460, y: 20, xshutPin: '12' },
+      { id: 'nearest', type: 'compute-max', label: 'Nearest', x: 240, y: 170 },
+      { id: 'fwd', type: 'constant', label: 'Forward', x: 460, y: 170, constantValue: 50 },
+      { id: 'close', type: 'compute-threshold', label: 'Something Close?', x: 240, y: 320, threshold: 60 },
+      { id: 'gauge', type: 'display-tm1637', label: 'Readout', x: 460, y: 320, clkPin: '10', gpioPin: '11', brightness: 3 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 150, y: 470 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 330, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 150, y: 620, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 330, y: 620, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-tof', to: 'nearest', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-tof', to: 'nearest', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'nearest', to: 'close', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'nearest', to: 'gauge', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.4, from: 'fwd', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.7, from: 'fwd', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'close', to: 'lsum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'close', to: 'rsum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'lsum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', from: 'rsum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Readout mirrors Nearest as a plain number. Drag either sensor slider and watch the digits track whichever eye is currently closer."
+/>
+
+Nothing about the robot's behavior changed: `Readout` carries no signal onward, so the code that drives the wheels is identical with or without it. What changed is legibility, the same trade [7. Say What You Mean](./say-what-you-mean) made with labels and comments, except this device makes it legible on the *robot itself*, in a room where nobody has the diagram open.
+
+## What you've learned
+
+Every earlier lesson built behavior out of the world coming in. This one built behavior out of the vehicle itself: an Oscillator ticking on its own schedule, a Noise node firing whims that answer to nothing, a Maximum resolving two sensors into one verdict, a Minimum holding a hard line no signal can push past. None of these needed a new idea about wiring — every part here has been sitting on the palette since Lesson 1. What changed was noticing that a summation, a threshold, and now a max or a min can face *inward* as easily as outward, and that a vehicle wired that way isn't just reacting anymore.
+
+You've now used every node type this course teaches. The [Nodes reference](../guide/nodes) is the complete catalog, in case you want the exact formula behind any of them one more time.
+
+### Questions to sit with
+
+- `Sway` moves without being asked and `Fidget` fires without being provoked. Is either of those closer to what you'd call a *want*, or are they just numbers with a shape, same as everything else in this course?
+- A vehicle with a hard speed ceiling behaves, from the outside, like one that's simply cautious. Is there a difference between "cautious" and "capped," or is caution just what a cap looks like from a distance?
+- You arbitrated two sensors into one verdict with a single Maximum node. Real nervous systems do a great deal of this kind of pooling — many noisy inputs collapsed into one decision. Does knowing the mechanism make the resulting behavior feel less like a decision, or does a decision just *mean* this kind of collapsing, all the way down?
+
+## What's next
+
+That's the course. Every node type, every wiring pattern, every trick this kit has is now something you've built with your own hands rather than just read about. A few places to go from here:
+
+- The [guide section](../guide/nodes) is the reference you'll actually reach for once you're designing on your own: node formulas, transfer functions, compound nodes, connections, all in one place.
+- If you're teaching this material to someone else, [Teaching with BraitenBot](../teaching-with-braitenbot) covers how the course is meant to be run, in a classroom or otherwise.
+- Have the kit, or want it? The [Install page](/install) has the desktop app, which bundles this entire course inside the editor you actually upload from.

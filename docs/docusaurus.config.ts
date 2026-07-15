@@ -139,7 +139,7 @@ const config: Config = {
           title: 'Software',
           items: [
             { label: 'Lessons', to: '/docs/lessons/your-first-vehicle' },
-            { label: 'Getting Started', to: '/docs/getting-started/installation' },
+            { label: 'Install & Setup', to: '/docs/getting-started/installation' },
             { label: 'Nodes', to: '/docs/guide/nodes' },
           ],
         },

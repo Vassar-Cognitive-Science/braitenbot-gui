@@ -53,16 +53,7 @@ default *linear* mode the signal is simply scaled:
 output = source signal × weight
 ```
 
-| Weight | Effect |
-|--------|--------|
-| 1.0 | Pass-through (no change) |
-| 0.5 | Halve the signal |
-| 0.0 | Block the signal entirely |
-| -0.5 | Halve and invert |
-| -1.0 | Full inversion |
-
-For example, a sensor reading of 80 through a weight of 0.5 arrives as 40; through
-a weight of -1 it arrives as -80.
+See a weight in action, wired up hands-on, in the [Your First Vehicle lesson](../lessons/your-first-vehicle).
 
 :::tip A weight already covers every straight line through the origin
 Because linear mode is just multiplication, any response that's a **straight line
@@ -135,11 +126,9 @@ few iterations ago instead of the current one:
         └─────── Sensor ──────────────┘
 ```
 
-Each loop:
-
-1. The delay node outputs the value it buffered N iterations ago.
-2. Every other node computes normally using that value.
-3. At the end of the loop, the delay node captures its current input for later.
+Each loop, the delay node outputs the value it buffered N iterations ago, every
+other node computes normally using that value, and only then does the delay
+capture its current input for the next iteration.
 
 The delay time is configurable (0–10,000 ms); BraitenBot converts it to a number
 of loop iterations (delay time ÷ loop period) and buffers that many past values.

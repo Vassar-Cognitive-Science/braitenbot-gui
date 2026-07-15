@@ -2,24 +2,8 @@ import React from 'react';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 
-import releaseData from '../data/latest-release.json';
+import { release, PLATFORMS } from '../lib/releaseAssets';
 import styles from './install.module.css';
-
-type Asset = { name: string; url: string };
-type ReleaseData = {
-  version: string | null;
-  releaseUrl: string;
-  publishedAt: string | null;
-  assets: Partial<Record<'macos-arm64' | 'macos-x64' | 'windows', Asset>>;
-};
-
-const release = releaseData as ReleaseData;
-
-const PLATFORMS: { key: keyof ReleaseData['assets']; label: string; hint: string }[] = [
-  { key: 'macos-arm64', label: 'macOS (Apple Silicon)', hint: 'M1/M2/M3 and newer' },
-  { key: 'macos-x64', label: 'macOS (Intel)', hint: '2020 and earlier Macs' },
-  { key: 'windows', label: 'Windows', hint: '64-bit installer' },
-];
 
 function DownloadButtons() {
   const hasAssets = Object.keys(release.assets).length > 0;

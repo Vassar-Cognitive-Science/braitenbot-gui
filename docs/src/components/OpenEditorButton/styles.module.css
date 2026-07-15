@@ -1,0 +1,32 @@
+/* ── OpenEditorButton: lesson 8's "now open the editor" moment ─────────────
+ *
+ * Hand-rolled, no dependency. Uses the site's brand tokens (custom.css) so
+ * it reads as part of the monograph theme rather than a generic call-to-
+ * action, and works unmodified in both the light and dark palettes those
+ * tokens define. */
+
+.wrap {
+  margin: 1.5rem 0;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  background: var(--bb-surface);
+  border: 1px solid var(--bb-line);
+  border-radius: 12px;
+}
+
+.note {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--bb-surface);
+  border: 1px dashed var(--bb-line);
+  border-radius: 12px;
+  color: var(--bb-ink-soft);
+  font-size: 0.95rem;
+}
+
+.note p {
+  margin: 0;
+}

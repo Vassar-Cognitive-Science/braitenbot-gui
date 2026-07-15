@@ -64,16 +64,7 @@ Both the trace simulation and the code generator **flatten** compound instances 
 
 A compound type cannot contain an instance of itself (directly or indirectly). BraitenBot detects recursive compound references and reports a validation error.
 
-## Design patterns with compounds
+## See also
 
-### Sensor preprocessor
-
-Group a sensor with a threshold or transfer curve into a compound. Now you can drop calibrated sensors without reconfiguring each one.
-
-### Behavior module
-
-Group a complete sensor-to-motor pathway (minus the wheel motors themselves) into a compound. Use this to build subsumption layers; see the [subsumption architecture lesson](../lessons/subsumption-architecture).
-
-### Signal filter
-
-Group delay + summation nodes into a compound to create a reusable latch circuit. See [latches with delay](../lessons/latches-with-delay).
+- **Behavior module** (a sensor-to-motor pathway grouped into a compound, minus the wheel motors) — [Nobody Home](../lessons/subsumption-architecture)
+- **Signal filter / latch** (delay + summation grouped into a compound) — [Memory](../lessons/latches-with-delay)

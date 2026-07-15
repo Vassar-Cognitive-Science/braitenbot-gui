@@ -23,11 +23,13 @@ No microcontroller logic, no if-statements, no planning. The vehicle's behavior 
 
 ## The classic vehicles
 
-Braitenberg named a few of these wiring patterns himself. You can build every one of them in the [Fear & Love lesson](../lessons/fear-and-love); here's what to expect from each:
+Braitenberg named a few of these wiring patterns himself:
 
-- **Vehicle 2a, "fear"**: each sensor wired to the motor on the **same** side (ipsilateral), positive weight. Light on the left speeds up the left motor, so the vehicle's nose swings away from the source and it flees, faster the brighter the light gets.
-- **Vehicle 2b, "aggression"**: each sensor cross-wired to the **opposite** motor (contralateral), positive weight. Light on the left now speeds up the *right* motor, turning the vehicle toward the source and charging at it as it gets closer. This is also roughly how phototaxis works in biology: many organisms steer toward light using this same contralateral wiring between photoreceptors and motor neurons.
-- **Vehicle 3, "love"**: 2b's cross-wiring again, but with negative weights over a Constant baseline that drives both motors forward. Light on one side inhibits the opposite motor instead of exciting it, so the vehicle still turns toward the source but slows as it nears, parking gently beside it. The lesson's "keep it moving in the dark" puzzle has you build the baseline-plus-inhibition circuit that makes this behavior possible.
+- **Vehicle 2a, "fear"**: each sensor wired to the motor on the same side (ipsilateral), positive weight.
+- **Vehicle 2b, "aggression"**: each sensor cross-wired to the opposite motor (contralateral), positive weight.
+- **Vehicle 3, "love"**: 2b's cross-wiring again, with negative weights over a Constant baseline.
+
+Build all three hands-on in the [Fear & Love lesson](../lessons/fear-and-love).
 
 ## The power of the idea
 
@@ -40,7 +42,7 @@ The remarkable thing about Braitenberg vehicles is that they demonstrate how the
 | Cross-wired | Negative | Approaches gently |
 | Same-side | Negative | Slows near stimulus, orients away |
 
-Build the first three yourself, hands-on, in the [Fear & Love lesson](../lessons/fear-and-love). The fourth (same-side wiring with negative weights) is a good one to reason through on your own, or to try in [trace mode](./simulation).
+The first three are the ones from the table above; the fourth (same-side wiring with negative weights) is a good one to reason through on your own, or to try in [trace mode](./simulation).
 
 Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior, and it's the principle that BraitenBot is built around.
 

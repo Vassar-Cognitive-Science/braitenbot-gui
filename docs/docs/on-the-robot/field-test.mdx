@@ -1,6 +1,6 @@
 ---
 sidebar_position: 5
-title: "Field Test: Let It Loose"
+title: "12. Field Test: Let It Loose"
 ---
 
 # Field Test: Let It Loose
@@ -35,11 +35,15 @@ These holds are **shorter** than the table in the [Memory lesson](../lessons/lat
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Wheels twitch even in a dark, empty room | Photocell noise floor (readings of 5–15 leaking through linear weights) | Add a dead-zone transfer curve, or set the threshold above the noise; see [Eyes: Photocells](./photocells) |
-| Robot turns *toward* walls and hugs them | Inhibition sign or wiring flipped: a positive weight (or same-side wiring) turns avoidance into attraction | Check that each Detect threshold cross-wires to the *opposite* Mix with weight **-1.0**; see [Rangefinders & Bumpers](./tof-and-bumpers) |
+| Wheels twitch even in a dark, empty room | Photocell noise floor (readings of 5–15 leaking through linear weights) | Add a dead-zone transfer curve, or set the threshold above the noise; see [9. Eyes: Photocells](./photocells) |
+| Robot turns *toward* walls and hugs them | Inhibition sign or wiring flipped: a positive weight (or same-side wiring) turns avoidance into attraction | Check that each Detect threshold cross-wires to the *opposite* Mix with weight **-1.0**; see [10. Rangefinders & Bumpers](./tof-and-bumpers) |
 | Robot ignores bumps entirely | Bumper node missing INPUT_PULLUP, so the press never reads as 100 | Use the Bump presets (D2/D3) with pullup enabled; see [Digital sensors](../hardware/supported-hardware#digital-sensors) |
 | Color node reads zeros | A second I2C device is wired to the bus but missing from the diagram, silently interfering | Add every wired I2C device to the diagram (or unplug it), then re-upload |
 
 ## When in doubt, test the hardware
 
 If a symptom survives the table above, take the behavior out of the equation: run the built-in [hardware test](../hardware/testing) to check every sensor, switch, display, and wheel one at a time. It's the fastest way to tell a wiring problem from a wiring-diagram problem.
+
+## What's next
+
+The hardware arc ends here: every sensor is mounted, tuned, and running on the real robot. [13. Habits, Whims & Preferences](../lessons/habits-whims-preferences) closes out the course with the node types the lessons haven't needed yet: internal states like Oscillator and Noise, arbitration with Min and Max, and the remaining output nodes.

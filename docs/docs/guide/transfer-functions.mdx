@@ -17,14 +17,7 @@ Every new connection starts in **linear** mode with a weight between -1 and +1:
 output = input × weight
 ```
 
-This is the simplest transfer: the weight scales the signal proportionally. A weight of 1 passes the signal unchanged, 0.5 halves it, -1 inverts it, and 0 blocks it entirely.
-
-### When to use linear transfer
-
-Linear weights are sufficient when you want:
-- Direct proportional control (sensor strength maps linearly to motor speed)
-- Simple inhibition (negative weight)
-- Signal attenuation (fractional weight)
+This is the simplest transfer: the weight scales the signal proportionally. A weight of 1 passes the signal unchanged, 0.5 halves it, -1 inverts it, and 0 blocks it entirely. See it wired up hands-on in [Your First Vehicle](../lessons/your-first-vehicle).
 
 ## Non-linear transfer (custom curves)
 
@@ -58,7 +51,7 @@ Ignore small signals, respond only to strong ones:
 
 Points: (-100, 0), (50, 0), (100, 100)
 
-This is useful for filtering out sensor noise: the vehicle won't react until the signal exceeds a threshold, then responds proportionally.
+Filters out sensor noise near zero. See [9. Eyes: Photocells](../on-the-robot/photocells) for calibrating a real dead zone, and [Don't](../lessons/obstacle-avoidance) for it in a circuit.
 
 #### Sigmoid-like response
 
@@ -97,7 +90,7 @@ Respond briskly to weak signals, but plateau instead of maxing out:
 
 Points: (-100, 0), (0, 0), (30, 60), (60, 60), (100, 60)
 
-The motor reaches 60% speed quickly (by input 30) but plateaus there. On a light follower this cures overshoot: the vehicle approaches briskly from a distance but can't charge past the source, so it settles beside it instead of orbiting. That's Braitenberg's Vehicle 3 "love" behavior, encoded in a single curve.
+Caps motor speed so a close-range sensor can't overdrive the motor. See [9. Eyes: Photocells](../on-the-robot/photocells) for tuning one against a real sensor.
 
 #### Step function
 

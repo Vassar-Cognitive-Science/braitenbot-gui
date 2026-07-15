@@ -156,11 +156,49 @@ Four nodes and their wiring collapsed into one part with one input and one outpu
 
 ## Notes in the margin
 
-The embeds on this page can't show you the last tool, because it isn't a node at all. The toolbar's **Comment** button drops a gray note box onto the canvas: it sits behind the nodes, and you can move it, resize it, and edit its text freely. It's saved with the diagram like everything else, but it carries no signal and is ignored entirely when the code generator runs. Comments live on the top-level diagram only: the button is disabled the moment you're editing inside a compound body, which is part of why naming matters so much once you're in one.
+The last tool isn't a node at all. The toolbar's **Comment** button drops a gray note box onto the canvas: it sits behind the nodes, and you can move it, resize it, and edit its text freely. It's saved with the diagram like everything else, but it carries no signal and is ignored entirely when the code generator runs. Comments live on the top-level diagram only: the button is disabled the moment you're editing inside a compound body, which is part of why naming matters so much once you're in one.
 
 The craft question is what to put in a comment, and the honest answer is: not what the wires already show. A wire from `Bumper` to `Latch` already says the bumper connects to the latch; a comment that repeats it ("bumper connects to latch") is dead weight. Worse than dead: unlike the wire, a comment can go stale and start lying about a diagram that's since been rewired around it.
 
 What a comment is actually good for is the numbers a stranger would trip over. Take this page's own machine. The 0.01 weight on the gate wire looks, out of context, like a typo someone forgot to fix; a note that says it's a switch, not a volume knob, and shows the arithmetic (100 × 0.01 = 1, which is all it takes to flip Multiply open) saves the next reader from "fixing" it into something that breaks the gate. The `Dark?` threshold of 40 was calibrated against one room's ambient light, and a comment saying so tells the next person to retune it rather than trust it in a different room. And from [5. Memory](./latches-with-delay): a note reading "feedback 0.95 ≈ 1.5 s hold" records tuning work that took real trial and error to find, work nobody wants to redo from scratch.
+
+Here's the night-weaver one more time, with both of those notes actually written down. Drag a note box by its grip to move it, drag its corner to resize it, or click into the text to edit it. There's also a blank spot bottom-left with room for one of your own: click **+ Comment** and write the third thing you'd tell a classmate before leaving the room.
+
+<InteractiveDiagram
+  editable
+  commenting
+  initialInputs={{ 'photo': 15 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Light Level', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'osc', type: 'compute-oscillator', label: 'Weave', x: 280, y: 20, frequencyHz: 0.5, amplitude: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 560, y: 20, constantValue: 40 },
+      { id: 'dark', type: 'compute-threshold', label: 'Dark?', x: 60, y: 170, threshold: 40, thresholdOp: '<' },
+      { id: 'gate', type: 'compute-multiply', label: 'Gated Weave', x: 280, y: 170 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Mix', x: 380, y: 330 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Mix', x: 580, y: 330 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 380, y: 480, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 480, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'dark', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'osc', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.5, from: 'dark', to: 'gate', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.3, from: 'gate', to: 'lsum', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.55, from: 'gate', to: 'rsum', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.3, from: 'cruise', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', labelT: 0.55, from: 'cruise', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+    comments: [
+      { id: 'comment-gate', x: 60, y: 580, width: 280, height: 120, text: "0.01 here isn't a volume knob, it's a switch: 100 × 0.01 = 1, just enough to flip Gated Weave open once Dark? fires. Don't round it up — a bigger weight leaks the weave through even in daylight." },
+      { id: 'comment-dark', x: 380, y: 580, width: 280, height: 120, text: "40 was calibrated against this room's ambient light. Retune it, don't trust it, in a different room." },
+    ],
+  }}
+  caption="Same night-weaver, its two trickiest numbers explained in place. The empty patch at the bottom is yours."
+/>
 
 A useful test, when you're not sure whether something deserves a comment: imagine handing the diagram to a classmate and walking out of the room. The three sentences you'd feel compelled to say out loud before you reached the door: those are the comments.
 
@@ -180,4 +218,8 @@ Names, compounds, and comments change nothing about how a vehicle behaves; they 
 
 ## What's next
 
-You've finished the course. [Field Test: Let It Loose](../on-the-robot/field-test) puts the whole architecture on the real robot; a room with furniture is the only benchmark that matters. If you want the mechanics of grouping, ungrouping, and editing compound bodies in more depth, the [compound nodes reference](../guide/compound-nodes) covers them directly.
+Have the kit? [8. First Upload](../on-the-robot/first-upload) starts the hardware arc: five lessons mounting real sensors and putting each circuit you've built on the physical robot.
+
+No kit, or done with hardware for now? [13. Habits, Whims & Preferences](./habits-whims-preferences) closes out the course with the node types the lessons haven't needed yet.
+
+Either way, if you want the mechanics of grouping, ungrouping, and editing compound bodies in more depth, the [compound nodes reference](../guide/compound-nodes) covers them directly.

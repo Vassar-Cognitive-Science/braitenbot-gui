@@ -7,6 +7,52 @@ title: The Editor
 
 The BraitenBot editor is a single-screen workspace with four main areas.
 
+## Landing screen
+
+Launching the desktop app always opens on a landing screen first, before
+either the editor or the lessons load — this is deliberate, so a student
+picking up the app isn't dropped straight into the Arduino setup gate before
+deciding what they're there to do.
+
+Two large cards choose where to go:
+
+- **Editor**: build and upload wiring diagrams to your robot. Opens the
+  workspace described on this page.
+- **Lessons**: the same hands-on tutorials from the [Lessons](../lessons/your-first-vehicle)
+  section of this site, bundled into the app so they work fully offline —
+  no network connection needed once the app is installed.
+
+Below the cards, a row of low-emphasis links opens in your system's default
+browser: **GitHub** (the source repository), **Documentation** (this site),
+and **Report an issue**. The installed app version is shown alongside them.
+
+The landing screen appears on every launch; it's never skipped or
+remembered. Once you're inside the Editor or Lessons, a **Home** button
+(see below) takes you back to it without losing your place — the editor
+keeps your diagram and undo history, and Lessons keeps your scroll position
+and current page.
+
+## Lessons (offline, in the app)
+
+Choosing **Lessons** from the landing screen opens the same lessons you'd
+read on the website, rendered in a bundled, offline copy with a slim toolbar
+above it (a **Home** button, to return to the landing screen, joined by an
+**Editor** button once you've unlocked the editor — see below). Every
+lesson's interactive diagrams work exactly as they do on the public site —
+drag nodes, wire connections, run the simulation — with one addition: each
+editable diagram gets an **Upload to bot** button that isn't shown on the
+website. Clicking it opens a small board-picker dialog and puts the circuit
+you just wired straight onto the robot, without leaving the lesson or
+opening the Editor. See [Your First Vehicle](../lessons/your-first-vehicle)
+for where that button first appears.
+
+The Editor itself stays out of reach from Lessons until [8. First
+Upload](../on-the-robot/first-upload) explicitly unlocks it with an "Open the
+Editor" button. After that, an **Editor** button appears in the Lessons
+toolbar and a **Lessons** button appears in the canvas toolbar, so switching
+between the two is a single click from then on — before that point, the
+landing screen is the only way between them.
+
 ## Layout
 
 ```
@@ -107,6 +153,10 @@ In **trace mode**, each wheel's motor block also grows a drive arrow straight ou
 ## Canvas toolbar (top)
 
 The toolbar is divided into functional groups:
+
+### Home
+- **Home**: at the far left of the toolbar, returns to the [landing screen](#landing-screen). Your diagram and undo history aren't lost — the editor keeps running in the background and picks up exactly where you left it when you come back.
+- **Lessons**: shown next to Home once you've unlocked the editor (see [Lessons](#lessons-offline-in-the-app)), switches straight to the Lessons view without losing your place in either.
 
 ### Group
 - **Group**: select 2 or more nodes, then click to combine them into a compound node

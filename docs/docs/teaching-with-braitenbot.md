@@ -5,12 +5,20 @@ title: Teaching with BraitenBot
 # Teaching with BraitenBot
 
 BraitenBot is a ready-made unit on emergent behavior and sensorimotor
-robotics: six lessons that walk students from a single sensor wired to a
-motor up to a layered, multi-behavior robot, each one built entirely on the
-wiring and weights they set themselves, plus an optional coda on writing
-diagrams other humans can read. Every lesson runs live in the browser, so a
-class can start with zero install. Then, if you're building the hardware,
-the exact same diagrams upload to a real Arduino-driven robot.
+robotics: thirteen lessons that walk students from a single sensor wired to
+a motor up to a layered, multi-behavior robot, each one built entirely on
+the wiring and weights they set themselves. The first seven run entirely in
+software, no hardware required. Five more, grouped as "On the Robot," mount
+and calibrate the real sensors and put each circuit from the software
+lessons onto a physical kit. A closing lesson rounds out the toolbox with
+the node types the course hasn't needed yet. Students with a compatible
+laptop should [install the desktop app](/install) and take the whole course
+inside it: the lessons are bundled in (they work offline), and every
+embedded diagram has an **Upload to bot** button that puts a student's edits
+straight onto a real Arduino-driven robot — pick a board and go, no editor
+detour. For students who can't install anything — iPads, Chromebooks,
+locked-down school machines — every lesson also runs live right here in the
+browser, and they can pair with a classmate's app for the uploads.
 
 ## The course at a glance
 
@@ -32,9 +40,31 @@ the exact same diagrams upload to a real Arduino-driven robot.
 7. **[Say What You Mean](./lessons/say-what-you-mean)**: an optional coda
    on naming, compounds, and comments — making diagrams legible to the
    next human, not the robot.
+8. **[First Upload](./on-the-robot/first-upload)**: put Vehicle 1 on real
+   wheels, walking the full upload flow from board selection to a working
+   robot.
+9. **[Eyes: Photocells](./on-the-robot/photocells)**: mount and tune the
+   two real light sensors, plus the dead-zone and speed-cap curves real
+   hardware needs.
+10. **[Rangefinders & Bumpers](./on-the-robot/tof-and-bumpers)**: mount the
+    ToF distance sensors and bump switches, and calibrate the avoidance
+    threshold against real walls.
+11. **[The Color Eye](./on-the-robot/color-sensor)**: bolt the color
+    sensor to the robot's belly and calibrate it against real floors and
+    lighting.
+12. **[Field Test: Let It Loose](./on-the-robot/field-test)**: put the
+    full three-layer robot in a room with furniture and let it fend for
+    itself.
+13. **[Habits, Whims & Preferences](./lessons/habits-whims-preferences)**:
+    the rest of the toolbox — internal states via Oscillator, Noise, Min,
+    and Max, and the output nodes the course hasn't used yet.
 
-Every lesson is a set of live, editable circuits embedded right on the
-page. Students need nothing installed to work through the whole sequence.
+Lessons 1–7 are live, editable circuits embedded right on the page —
+identical in the app and in the browser, so a mixed class of installed and
+browser-only students works through the same sequence together. Lessons
+8–12 shift to the physical robot itself: mounting, wiring, and calibrating
+the sensors a kit actually needs. Lesson 13 returns to the browser to round
+out the toolbox.
 
 ## Building the robots
 

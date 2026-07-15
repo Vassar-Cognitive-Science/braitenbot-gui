@@ -91,30 +91,7 @@ The oscilloscope panel at the bottom shows a rolling history (**5 seconds by def
 
 The oscilloscope samples at the configured loop period (matching what the hardware would do), so the time axis is accurate to the real-time behavior.
 
-## How simulation works
-
-On each loop iteration, the trace simulation runs the same four steps the hardware does:
-
-1. **Flatten** compound instances into their body nodes
-2. **Topologically sort** the graph (excluding delay inputs)
-3. **Forward pass**: compute each node in order using current sensor values
-4. **Deferred phase**: update delay ring buffers
-
-The simulation matches the hardware behavior exactly: the same execution order, the same transfer functions, the same delay semantics. What you see in trace mode is what the robot will do.
-
-### Delay nodes in simulation
-
-Delay nodes maintain state across simulation ticks. They use ring buffers sized to the configured delay time and loop period. On each tick:
-
-1. Read the buffered value from N ticks ago
-2. After all nodes compute, write the current input to the buffer
-
-This two-phase approach ensures that feedback cycles produce stable, predictable results.
-
-### Oscillator and noise nodes
-
-- **Oscillator** nodes generate a sine wave based on simulation time, using the configured frequency and amplitude
-- **Noise** nodes generate a new random value each tick
+For exactly how the simulator executes a diagram, see [Under the Hood](../under-the-hood).
 
 ## Calibrating with trace mode
 
