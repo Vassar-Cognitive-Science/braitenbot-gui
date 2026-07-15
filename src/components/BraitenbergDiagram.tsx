@@ -27,9 +27,11 @@ import type { ConfigTarget } from './diagramShared';
 import type { useArduino } from '../hooks/useArduino';
 import { useSerialMonitor } from '../hooks/useSerialMonitor';
 import {
+  BookIcon,
   ChevronDownIcon,
   CommentIcon,
   GroupIcon,
+  HomeIcon,
   SearchIcon,
   SettingsIcon,
   UngroupIcon,
@@ -126,12 +128,29 @@ interface BraitenbergDiagramProps {
    *  the board auto-swap setting). Diagram-level prefs live in the doc store. */
   appSettings: AppSettings;
   updateAppSettings: UpdateAppSettings;
+  /** False while the editor is hidden behind the landing/lessons view. Global
+   *  keyboard shortcuts no-op while inactive so they don't fire on a
+   *  display:none'd editor. */
+  active: boolean;
+  /** Toolbar Home button — returns to the landing screen. */
+  onGoHome: () => void;
+  /** Fired after every successful file-driven load (File → Load, a recent
+   *  file, a lesson's "Open in Editor"), so App can switch to the editor. */
+  onDiagramOpened?: () => void;
+  /** Progressive unlock: only set once the student has unlocked the editor
+   *  from lesson 8 (see App.tsx's 'braitenbot:open-editor' listener). Absent
+   *  before that — the landing screen stays the only route to Lessons. */
+  onGoToLessons?: () => void;
 }
 
 export function BraitenbergDiagram({
   arduino,
   appSettings,
   updateAppSettings,
+  active,
+  onGoHome,
+  onDiagramOpened,
+  onGoToLessons,
 }: BraitenbergDiagramProps) {
   const {
     tauriAvailable,
@@ -222,6 +241,12 @@ export function BraitenbergDiagram({
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const lastAppliedLayoutRef = useRef<RobotOverlayLayout | null>(null);
   const fallbackIdCounterRef = useRef(0);
+  // Mirrors `active` for the global keydown handler below, so that effect
+  // doesn't need `active` in its dependency array (which would tear down and
+  // re-register the window listener on every view switch).
+  const activeRef = useRef(active);
+  // eslint-disable-next-line react-hooks/refs
+  activeRef.current = active;
   // Trace mode + sensor inputs live in the shared `trace` Y.Map (backed by the
   // doc even solo). In a session, entering/exiting trace and moving a slider
   // syncs to every participant; solo, behavior is unchanged (untracked writes,
@@ -541,6 +566,7 @@ export function BraitenbergDiagram({
     isPristine: isDiagramPristine,
     resetToDefault,
     sessionRole,
+    onDiagramOpened,
   });
 
   // Group the currently-selected nodes into a new compound. Boundary-
@@ -752,7 +778,7 @@ export function BraitenbergDiagram({
   useEffect(() => {
     if (!tauriAvailable) return;
     let unlisten: (() => void) | undefined;
-    listen('menu://view-home', () => {
+    listen('menu://view-reset', () => {
       breakFollow();
       resetView();
     }).then((fn) => {
@@ -1024,6 +1050,10 @@ export function BraitenbergDiagram({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // The editor stays mounted (display:none) while the landing/lessons view
+      // is showing, so this listener stays registered too — no-op here rather
+      // than fire shortcuts (undo, select-all, reset view…) at a hidden editor.
+      if (!activeRef.current) return;
       // Ignore shortcuts while typing in a form control, or while any dialog is
       // open (so e.g. Backspace over the generated-code dialog doesn't delete
       // the node selected on the canvas behind it).
@@ -1365,6 +1395,30 @@ export function BraitenbergDiagram({
       <NodePalette compoundTypes={compoundTypes} isEditingCompound={editingPath.length > 0} />
 
       <div className="canvas-toolbar">
+        <button
+          type="button"
+          className="toolbar-btn toolbar-secondary"
+          onClick={onGoHome}
+          title="Home"
+          aria-label="Home"
+        >
+          <HomeIcon />
+        </button>
+
+        {onGoToLessons && (
+          <button
+            type="button"
+            className="toolbar-btn toolbar-secondary"
+            onClick={onGoToLessons}
+            title="Lessons"
+            aria-label="Lessons"
+          >
+            <BookIcon />
+          </button>
+        )}
+
+        <div className="toolbar-separator" />
+
         <div className="toolbar-group">
           <span className="toolbar-group-label">Group</span>
           <button

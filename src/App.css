@@ -1752,6 +1752,175 @@ select,
   font-weight: 600;
 }
 
+/* ── Quick upload (lesson → robot) ──
+   Same overlay/panel language as the setup modal, but at z-index 900 —
+   deliberately BELOW .setup-overlay's 1000, so a fresh install's one-time
+   core setup overlays this dialog and reveals it when setup completes. */
+.quick-upload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 7, 0.82);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+  padding: 2rem;
+}
+
+.quick-upload-modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-width: 520px;
+  width: 100%;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+}
+
+.quick-upload-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.quick-upload-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.quick-upload-modal p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.quick-upload-detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.quick-upload-errors {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.quick-upload-errors li {
+  margin-bottom: 0.35rem;
+}
+
+.quick-upload-board {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.quick-upload-board-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.quick-upload-board-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.quick-upload-hint {
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--muted);
+}
+
+.quick-upload-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+/* Scoped under .quick-upload-modal so these outrank the `.quick-upload-modal p`
+   muted default above. */
+.quick-upload-modal .quick-upload-success {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.quick-upload-modal .quick-upload-error p {
+  color: #d98a7a;
+}
+
+.quick-upload-error-details {
+  margin-bottom: 1rem;
+}
+
+.quick-upload-error-details summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.quick-upload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.quick-upload-primary {
+  background: var(--accent);
+  color: #0f1410;
+  border: none;
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick-upload-primary:hover {
+  filter: brightness(1.1);
+}
+
+.quick-upload-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.quick-upload-cancel {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--muted);
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.quick-upload-cancel:hover {
+  background: var(--surface-soft);
+  border-color: var(--text);
+}
+
 .oscilloscope {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -2382,101 +2551,7 @@ select,
   white-space: nowrap;
 }
 
-/* --- Comment (annotation) boxes -------------------------------------------
-   Inert explanatory notes drawn behind the nodes. Gray on purpose so they
-   read as marginalia rather than as part of the signal-flow graph. */
-.diagram-comment {
-  position: absolute;
-  z-index: 0;
-  /* World layer is pointer-events:none; opt back in like nodes/badges do,
-     or clicks fall through to the canvas (pan) and the textarea can't focus. */
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  border: 1px dashed var(--muted);
-  border-radius: 8px;
-  background: rgba(144, 140, 126, 0.1);
-  color: var(--text);
-  overflow: hidden;
-}
-
-.diagram-comment-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem;
-  padding: 0.15em 0.35em;
-  background: rgba(144, 140, 126, 0.16);
-  cursor: move;
-  user-select: none;
-  touch-action: none;
-}
-
-.diagram-comment-grip {
-  color: var(--muted);
-  line-height: 1;
-  letter-spacing: -0.05em;
-}
-
-.diagram-comment-delete {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  line-height: 1;
-  padding: 0 0.15em;
-  border-radius: 4px;
-}
-
-.diagram-comment-delete:hover {
-  color: var(--text);
-  background: rgba(144, 140, 126, 0.25);
-}
-
-.diagram-comment-text {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  resize: none;
-  border: none;
-  outline: none;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: 1.35;
-  padding: 0.35em 0.5em;
-}
-
-.diagram-comment-text::placeholder {
-  color: var(--muted);
-  opacity: 0.7;
-}
-
-.diagram-comment-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  touch-action: none;
-  background: linear-gradient(
-    135deg,
-    transparent 0 50%,
-    var(--muted) 50% 60%,
-    transparent 60% 75%,
-    var(--muted) 75% 85%,
-    transparent 85%
-  );
-  opacity: 0.6;
-}
-
-.diagram-comment-resize:hover {
-  opacity: 1;
-}
+/* (.diagram-comment* rules extracted to components/diagram.css) */
 
 /* The upload progress bar shares the canvas cell, pinned to the top as a thin
    overlay strip so it never reflows the toolbar or canvas. */
@@ -2551,4 +2626,546 @@ select,
 @keyframes upload-progress-slide {
   0% { left: -40%; }
   100% { left: 100%; }
+}
+
+/* ── Landing screen ──
+   Same height budget as .diagram-layout (calc(100vh - 2rem), .app-main's
+   1rem padding on each side). Borrows the docs homepage's "page from the
+   book" language — eyebrow fig-label, big serif title, hand-inked phototaxis
+   scene, staggered rise-in — recolored for the app's dark theme. */
+.landing-screen {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 2rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.landing-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(1.25rem, 3vh, 2.5rem);
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 0;
+}
+
+/* Hero — text left, inked figure right (the website's asymmetric layout). */
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+}
+
+.landing-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The eyebrow's trailing rule — a fig-label on a hairline, as in the docs. */
+.landing-eyebrow::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+
+.landing-title {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2.6rem, 6vw, 4rem);
+  font-weight: 600;
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.landing-tagline {
+  margin: 0 0 1.75rem;
+  font-style: italic;
+  font-size: clamp(1.05rem, 1.8vw, 1.3rem);
+  line-height: 1.3;
+  color: var(--accent);
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+/* CTA pair in the website's primary/ghost spirit, sized as small cards so
+   the Editor/Lessons descriptions still get a line each. */
+.landing-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 205px;
+  padding: 0.85rem 1.1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.landing-cta-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.landing-cta-desc {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+/* Primary: "stamped ink" — filled, high contrast. */
+.landing-cta-primary {
+  background: var(--text);
+  border: 1px solid var(--text);
+  color: var(--bg);
+}
+
+.landing-cta-primary .landing-cta-desc {
+  color: color-mix(in oklab, var(--bg) 75%, var(--text));
+}
+
+.landing-cta-primary:hover {
+  transform: translateY(-2px);
+  background: color-mix(in oklab, var(--text) 86%, var(--accent));
+}
+
+/* Ghost: outlined, recedes until hovered. */
+.landing-cta-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.landing-cta-ghost .landing-cta-desc {
+  color: var(--muted);
+}
+
+.landing-cta-ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.landing-cta-arrow {
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.landing-cta:hover .landing-cta-arrow {
+  transform: translateX(3px);
+}
+
+/* ── The inked phototaxis figure ── */
+
+.landing-figure {
+  margin: 0;
+}
+
+.landing-scene {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.landing-figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.landing-figcaption strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.landing-trajectory {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 1.5 11;
+  animation: landing-flow 1.1s linear infinite;
+}
+
+.landing-start-dot {
+  fill: var(--accent);
+}
+
+.landing-lamp-bulb {
+  stroke: var(--text);
+  stroke-width: 1.4;
+}
+
+.landing-lamp-rays {
+  stroke: #d9a24a;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.landing-lamp-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0.45;
+  animation: landing-breathe 3.6s ease-in-out infinite;
+}
+
+/* the vehicle, driving the plotted curve (path duplicated from TRAJECTORY in
+   LandingPage.tsx — keep the two in sync) */
+.landing-vehicle {
+  transform-box: fill-box;
+  transform-origin: center;
+  offset-path: path('M 58 314 C 150 316, 214 300, 258 258 S 330 150, 360 102');
+  offset-rotate: auto;
+  offset-distance: 0%;
+  animation: landing-drive 9s cubic-bezier(0.42, 0, 0.28, 1) infinite;
+}
+
+.landing-v-body {
+  fill: var(--surface);
+  stroke: var(--text);
+  stroke-width: 1.4;
+}
+
+.landing-v-wheel {
+  fill: var(--text);
+}
+
+.landing-v-stalk {
+  stroke: var(--text);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.landing-v-sensor {
+  fill: var(--accent);
+  stroke: var(--text);
+  stroke-width: 1.1;
+}
+
+/* No handwriting font in the app bundle — an italic serif margin note reads
+   as a penned annotation without pulling in another webfont. */
+.landing-note {
+  font-family: inherit;
+  font-style: italic;
+  font-size: 17px;
+  fill: var(--muted);
+}
+
+.landing-note-arrow {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+@keyframes landing-drive {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  72% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+  82% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+  100% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+}
+
+@keyframes landing-flow {
+  to {
+    stroke-dashoffset: -13;
+  }
+}
+
+@keyframes landing-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.14);
+  }
+}
+
+/* Staggered rise-in (delays set inline per element). */
+.landing-rise {
+  animation: landing-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion: show everything immediately, park the vehicle mid-path,
+   hold the lamp, drop the flow. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise {
+    animation: none;
+  }
+  .landing-vehicle {
+    animation: none;
+    offset-distance: 56%;
+    opacity: 1;
+  }
+  .landing-lamp-glow {
+    animation: none;
+    opacity: 0.5;
+  }
+  .landing-trajectory {
+    animation: none;
+  }
+  .landing-cta,
+  .landing-cta-arrow {
+    transition: none;
+  }
+}
+
+/* ── Recent designs (Tauri-only) ── */
+
+.landing-recents {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.landing-recents-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.landing-recents-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.landing-open-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.landing-open-file:hover {
+  color: var(--accent);
+}
+
+.landing-open-file:hover .landing-cta-arrow {
+  transform: translateX(3px);
+}
+
+.landing-recents-empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--muted);
+}
+
+.landing-recents-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.5rem;
+}
+
+.landing-recent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.landing-recent:hover {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+
+.landing-recent-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.landing-recent-time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.landing-recent-path {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* truncate on the LEFT so the filename end stays visible */
+  text-align: left;
+}
+
+/* ── Landing footer ── */
+
+.landing-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  padding: 1rem 0 0.25rem;
+}
+
+.landing-footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.landing-footer-link:hover {
+  color: var(--text);
+}
+
+.landing-version {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* Narrow windows: stack the hero, figure first (as on the website). */
+@media (max-width: 900px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  .landing-figure {
+    order: -1;
+  }
+  .landing-scene {
+    max-width: 340px;
+  }
+}
+
+/* ── Lessons view ──
+   The Docusaurus site bundled into the app, shown offline in an iframe. Same
+   height budget as .diagram-layout so it fills the same space the editor
+   would. */
+.lessons-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 2rem);
+  gap: 0.75rem;
+}
+
+.lessons-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.lessons-iframe {
+  border: 0;
+  width: 100%;
+  flex: 1;
+  background: var(--bg);
+  border-radius: 3px;
+}
+
+.lessons-missing-notice {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.lessons-missing-notice code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text);
 }

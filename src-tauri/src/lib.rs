@@ -123,7 +123,7 @@ pub fn run() {
                 let _ = app_handle.emit("menu://load", ());
             }
             "view_home" => {
-                let _ = app_handle.emit("menu://view-home", ());
+                let _ = app_handle.emit("menu://view-reset", ());
             }
             "view_check" => {
                 let _ = app_handle.emit("menu://view-check", ());
@@ -151,6 +151,8 @@ pub fn run() {
             arduino::install_drivers,
             diagram_io::save_diagram,
             diagram_io::load_diagram,
+            diagram_io::read_diagram,
+            diagram_io::paths_exist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
