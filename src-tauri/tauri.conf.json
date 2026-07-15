@@ -14,9 +14,9 @@
       {
         "title": "BraitenBot GUI",
         "width": 1280,
-        "height": 820,
+        "height": 960,
         "minWidth": 900,
-        "minHeight": 600,
+        "minHeight": 720,
         "resizable": true,
         "fullscreen": false,
         "dragDropEnabled": false
