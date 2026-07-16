@@ -1,4 +1,4 @@
-import type { CompoundTypeDefinition, DiagramConnection, DiagramNode, OutputPortId } from '../types/diagram';
+import type { CompoundTypeDefinition, DiagramConnection, DiagramNode, OutputPortId, TransferMode, TransferPoint } from '../types/diagram';
 import { TYPE_BY_ID, getInputPorts, getOutputPorts } from '../types/diagram';
 
 /**
@@ -160,6 +160,34 @@ export function weightToColor(weight: number): string {
   }
 }
 
+/**
+ * The transfer graph of a plain scalar weight: a straight line through the
+ * origin with slope = weight, i.e. y = weight·x. This lets a linear weight be
+ * drawn with the same graph as a transfer curve — a curve is just this line
+ * with extra points — so the two read as the same kind of thing across badges
+ * and editors.
+ *
+ * The returned endpoints sit where the line leaves the −100…100 box: at the
+ * left/right edges when |weight| ≤ 1, or the top/bottom edges when |weight| > 1
+ * (a slope too steep to fit). `weightExceedsRange` reports the latter so the
+ * renderer can cap the line with an out-of-range arrow rather than drawing a
+ * misleading corner-to-corner diagonal.
+ */
+export function weightLinePoints(weight: number): TransferPoint[] {
+  if (weight === 0) return [{ x: -100, y: 0 }, { x: 100, y: 0 }];
+  const ax = Math.min(100, 100 / Math.abs(weight));
+  return [
+    { x: -ax, y: -weight * ax },
+    { x: ax, y: weight * ax },
+  ];
+}
+
+/** True when a linear weight's line is too steep to fit the −100…100 box
+ *  (|weight| > 1), i.e. its output saturates before the input reaches ±100. */
+export function weightExceedsRange(weight: number): boolean {
+  return Math.abs(weight) > 1;
+}
+
 export function signalToStroke(signal: number): { color: string; width: number; opacity: number } {
   const abs = Math.min(Math.abs(signal), 1);
   const width = 1.2 + abs * 2.5;
@@ -177,11 +205,50 @@ export function signalToStroke(signal: number): { color: string; width: number; 
   }
 }
 
+/** A node's occupied box in canvas space (for occlusion tests). */
+export interface NodeRect { x: number; y: number; w: number; h: number }
+
+/**
+ * The portions of a connection's curve that pass *behind* an opaque node box,
+ * returned as polyline path `d` strings so the caller can redraw them dashed
+ * on a layer above the nodes (a wire hidden under a node is otherwise
+ * invisible). `rects` must already exclude the connection's own endpoint nodes.
+ *
+ * Samples the bézier and collects maximal runs of samples that fall inside some
+ * rect; a short polyline through the sampled points reads as a smooth dashed
+ * arc at these sizes.
+ */
+export function occludedSpans(
+  x1: number, y1: number, x2: number, y2: number, rects: NodeRect[],
+): string[] {
+  if (rects.length === 0) return [];
+  const SAMPLES = 48;
+  const inside = (p: { x: number; y: number }) =>
+    rects.some((r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h);
+  const spans: string[] = [];
+  let run: Array<{ x: number; y: number }> = [];
+  const flush = () => {
+    if (run.length >= 2) {
+      spans.push(run.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' '));
+    }
+    run = [];
+  };
+  for (let i = 0; i <= SAMPLES; i++) {
+    const p = bezierPointAt(x1, y1, x2, y2, i / SAMPLES);
+    if (inside(p)) run.push(p);
+    else flush();
+  }
+  flush();
+  return spans;
+}
+
 /** Rendered geometry for one connection: bézier path plus badge anchor. */
 export interface ConnectionPathDatum {
   id: string;
   d: string;
   weight: number;
+  transferMode: TransferMode;
+  transferPoints: TransferPoint[];
   x1: number;
   y1: number;
   x2: number;
@@ -244,6 +311,8 @@ export function computeConnectionPaths(
         id: connection.id,
         d: makePath(x1, y1, x2, y2),
         weight: connection.weight,
+        transferMode: connection.transferMode,
+        transferPoints: connection.transferPoints,
         x1, y1, x2, y2,
         midX: badge.x,
         midY: badge.y,

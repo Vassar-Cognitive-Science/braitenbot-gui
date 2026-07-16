@@ -1,4 +1,4 @@
-/* Homepage — asymmetric monograph layout with a live vehicle schematic. */
+/* Homepage: asymmetric monograph layout with a live vehicle schematic. */
 
 .page {
   --measure: 34rem;
@@ -70,7 +70,7 @@
   align-items: center;
 }
 
-/* Primary CTA: a "stamped" ink button — high contrast, the green stays for signal. */
+/* Primary CTA: a "stamped" ink button, high contrast, the green stays for signal. */
 .ctaPrimary {
   display: inline-flex;
   align-items: center;
@@ -84,6 +84,7 @@
   letter-spacing: 0.04em;
   border: 1px solid var(--bb-ink);
   border-radius: var(--ifm-global-radius);
+  cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 0.25s ease;
 }
@@ -137,7 +138,7 @@
 /* ------------------------------------------------------- Schematic figure */
 
 /* Frameless: the illustration sits directly on the page's graph-paper grid,
-   as if drawn onto the page. No box, no surface — just art + a caption rule. */
+   as if drawn onto the page. No box, no surface: just art + a caption rule. */
 .figure {
   margin: 0;
   position: relative;

@@ -1,8 +1,10 @@
 import { useCallback, useEffect } from 'react';
-import type { DiagramConnection, DiagramNode, TransferPoint } from '../types/diagram';
-import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import type { DiagramConnection, DiagramNode, ThresholdOp, TransferPoint } from '../types/diagram';
+import { TYPE_BY_ID, COLOR_GAINS, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM, DEFAULT_THRESHOLD_OP } from '../types/diagram';
 import type { DiagramStore } from '../doc/DiagramStore';
 import { TransferCurveEditor } from './TransferCurveEditor';
+import { weightLinePoints } from './connectionGeometry';
+import type { TraceResult } from '../hooks/useTraceSimulation';
 import { NumberInput } from './NumberInput';
 import {
   clampWeight,
@@ -28,6 +30,9 @@ interface ConfigPanelProps {
   onClose: () => void;
   /** When false, connection weights accept any value (no [-1, 1] cap). */
   capWeights: boolean;
+  /** Live trace data when trace mode is on; lets the transfer graph show the
+   *  current operating point (input → output) on the selected connection. */
+  traceResult?: TraceResult;
 }
 
 export function ConfigPanel({
@@ -39,6 +44,7 @@ export function ConfigPanel({
   deleteConnection,
   onClose,
   capWeights,
+  traceResult,
 }: ConfigPanelProps) {
   // One undo entry per config-target "session". A session begins when the
   // selected target changes (including after an undo/redo, which clears the
@@ -215,9 +221,16 @@ export function ConfigPanel({
                 </select>
               </label>
               <p className="config-description">
-                This sensor exposes four output anchors — clear, red, green, blue.
-                Drag from the specific anchor to wire that channel. Raise the
-                gain if readings are too low in dim light.
+                This sensor exposes four output anchors — White (W), Red, Green,
+                and Blue. Drag from a specific anchor to wire that channel.
+                <br />
+                <strong>White</strong> is the sensor's unfiltered channel: it
+                reads the <em>total</em> light hitting the sensor across all
+                colors, so brighter surroundings give a higher value. Wire it when
+                you want the robot to react to how light or dark it is regardless
+                of color (e.g. steer toward or away from a bright spot); use Red,
+                Green, or Blue when the actual color matters. Raise the gain if
+                readings are too low in dim light.
               </p>
             </>
           )}
@@ -267,16 +280,35 @@ export function ConfigPanel({
           )}
 
           {TYPE_BY_ID[selectedNode.type].mode === 'threshold' && (
-            <label>
-              Threshold Value
-              <NumberInput
-                min={-100}
-                max={100}
-                step={1}
-                value={selectedNode.threshold ?? 50}
-                onChange={(value) => patchNode(selectedNode.id, { threshold: value })}
-              />
-            </label>
+            <>
+              <label>
+                Comparison
+                <select
+                  value={selectedNode.thresholdOp ?? DEFAULT_THRESHOLD_OP}
+                  onChange={(e) =>
+                    patchNode(selectedNode.id, { thresholdOp: e.target.value as ThresholdOp })
+                  }
+                >
+                  <option value=">">input &gt; threshold</option>
+                  <option value="<">input &lt; threshold</option>
+                  <option value=">=">input ≥ threshold</option>
+                  <option value="<=">input ≤ threshold</option>
+                </select>
+              </label>
+              <label>
+                Threshold Value
+                <NumberInput
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={selectedNode.threshold ?? 50}
+                  onChange={(value) => patchNode(selectedNode.id, { threshold: value })}
+                />
+              </label>
+              <p className="config-description">
+                Fires (outputs 100) while <b>input {selectedNode.thresholdOp ?? DEFAULT_THRESHOLD_OP} {selectedNode.threshold ?? 50}</b>, else 0.
+              </p>
+            </>
           )}
 
           {TYPE_BY_ID[selectedNode.type].mode === 'delay' && (
@@ -434,11 +466,26 @@ export function ConfigPanel({
               value={selectedConnection.transferMode ?? 'linear'}
               onChange={(event) => {
                 const mode = event.target.value as 'linear' | 'nonlinear';
+                if (mode === 'linear') {
+                  // Keep existing points around so toggling back to curve
+                  // mode restores them instead of re-seeding from scratch.
+                  patchConnection(selectedConnection.id, { transferMode: 'linear' });
+                  return;
+                }
+                // Seed the curve from the weight line it's replacing (unless a
+                // curve was already shaped) so behavior doesn't jump when the
+                // dropdown flips modes.
+                const hasCurve = (selectedConnection.transferPoints?.length ?? 0) >= 2;
+                const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
+                const seeded = hasCurve
+                  ? selectedConnection.transferPoints
+                  : [
+                      { x: -100, y: clamp(-100 * selectedConnection.weight) },
+                      { x: 100, y: clamp(100 * selectedConnection.weight) },
+                    ];
                 patchConnection(selectedConnection.id, {
-                  transferMode: mode,
-                  transferPoints: selectedConnection.transferPoints?.length
-                    ? selectedConnection.transferPoints
-                    : [{ x: -100, y: -100 }, { x: 100, y: 100 }],
+                  transferMode: 'nonlinear',
+                  transferPoints: seeded,
                 });
               }}
             >
@@ -446,6 +493,42 @@ export function ConfigPanel({
               <option value="nonlinear">Non-linear (curve)</option>
             </select>
           </label>
+
+          {(() => {
+            // Live operating point (input → output) for the selected edge,
+            // drawn on the transfer graph while tracing.
+            const inX = traceResult?.edgeInputs?.[selectedConnection.id];
+            const outY = traceResult?.edgeSignals?.[selectedConnection.id];
+            const operatingPoint =
+              inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
+            const isCurve = selectedConnection.transferMode === 'nonlinear';
+            // Linear edges are drawn with the same editor as curves, seeded
+            // with the line through the origin (slope = weight) — so the two
+            // modes read as the same kind of graph, and shaping the line (a
+            // click or drag) is literally adding points to it.
+            const graphPoints: TransferPoint[] = isCurve
+              ? (selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }])
+              : weightLinePoints(selectedConnection.weight);
+            return (
+              <TransferCurveEditor
+                points={graphPoints}
+                operatingPoint={operatingPoint}
+                onChange={(pts: TransferPoint[]) => {
+                  if (isCurve) {
+                    patchConnection(selectedConnection.id, { transferPoints: pts });
+                  } else {
+                    // Shaping the weight-line adds/moves a point → it becomes
+                    // a curve. Patch both fields in one call so this is a
+                    // single undo entry.
+                    patchConnection(selectedConnection.id, {
+                      transferMode: 'nonlinear',
+                      transferPoints: pts,
+                    });
+                  }
+                }}
+              />
+            );
+          })()}
 
           {(selectedConnection.transferMode ?? 'linear') === 'linear' && (
             <>
@@ -455,17 +538,28 @@ export function ConfigPanel({
               {capWeights && (
                 <label>
                   Connection Weight
-                  <input
-                    type="range"
-                    min="-1"
-                    max="1"
-                    step="0.05"
-                    value={selectedConnection.weight}
-                    onChange={(event) => {
-                      const value = clampWeight(parseFloat(event.target.value));
-                      patchConnection(selectedConnection.id, { weight: value });
-                    }}
-                  />
+                  <div className="weight-slider">
+                    <input
+                      className="weight-slider-input"
+                      type="range"
+                      min="-1"
+                      max="1"
+                      step="0.05"
+                      value={selectedConnection.weight}
+                      onChange={(event) => {
+                        const value = clampWeight(parseFloat(event.target.value));
+                        patchConnection(selectedConnection.id, { weight: value });
+                      }}
+                    />
+                    {/* Scale under the track: the extremes (−1 / +1) and the
+                        zero (no-coupling) midpoint, so the sign and magnitude
+                        read at a glance. */}
+                    <div className="weight-slider-scale" aria-hidden="true">
+                      <span className="weight-slider-tick">−1</span>
+                      <span className="weight-slider-tick weight-slider-tick-zero">0</span>
+                      <span className="weight-slider-tick">+1</span>
+                    </div>
+                  </div>
                 </label>
               )}
               <label>
@@ -479,15 +573,6 @@ export function ConfigPanel({
                 />
               </label>
             </>
-          )}
-
-          {selectedConnection.transferMode === 'nonlinear' && (
-            <TransferCurveEditor
-              points={selectedConnection.transferPoints ?? [{ x: -100, y: -100 }, { x: 100, y: 100 }]}
-              onChange={(pts: TransferPoint[]) =>
-                patchConnection(selectedConnection.id, { transferPoints: pts })
-              }
-            />
           )}
 
           <button

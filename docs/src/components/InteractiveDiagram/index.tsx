@@ -3,12 +3,14 @@ import type { Dispatch, SetStateAction } from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import type {
   CompoundTypeDefinition,
+  DiagramComment,
   DiagramConnection,
   DiagramNode,
   NodeTypeId,
   OutputPortId,
+  TransferPoint,
 } from '@app/types/diagram';
-import { TYPE_BY_ID } from '@app/types/diagram';
+import { DEFAULT_COMMENT_HEIGHT, DEFAULT_COMMENT_WIDTH, TYPE_BY_ID } from '@app/types/diagram';
 import { useScopeSimulation } from '@app/hooks/useScopeSimulation';
 import {
   buildSimulationPlan,
@@ -17,7 +19,12 @@ import {
 } from '@app/hooks/useTraceSimulation';
 import type { ConfigTarget } from '@app/components/diagramShared';
 import { DiagramCanvas } from '@app/components/DiagramCanvas';
-import { NODE_H, NODE_W, computeConnectionPaths } from '@app/components/connectionGeometry';
+import { CommentView } from '@app/components/CommentView';
+import { NODE_H, NODE_W, computeConnectionPaths, weightLinePoints } from '@app/components/connectionGeometry';
+import { MiniTransferCurve } from '@app/components/MiniTransferCurve';
+import { TransferCurveEditor } from '@app/components/TransferCurveEditor';
+import { isEmbeddedInApp, sendToBot } from '@site/src/lib/appBridge';
+import { RobotOverlay } from './RobotOverlay';
 // The app's diagram presentation layer (nodes, connections, trace UI). Scoped
 // under `.bb-diagram`, so it renders as a self-contained dark panel and leaks
 // nothing into the Docusaurus theme. Aliased CSS import resolves through the
@@ -45,6 +52,13 @@ import './styles.css';
  * into component state (deep-cloned from the prop so Reset restores the original)
  * while the live simulation keeps running through every edit — `useScopeSimulation`
  * rebuilds its plan whenever the nodes/connections array identity changes.
+ *
+ * `diagram.comments` (margin notes, the app's Comment tool) always render,
+ * behind the wiring like in the app. They stay read-only unless both
+ * `editable` and `commenting` are set, at which point they become
+ * move/resize/edit/delete-able and a "+ Comment" footer button adds more —
+ * same state-lives-in-the-component / Reset-restores-the-original pattern as
+ * nodes and connections.
  */
 /**
  * One assertion evaluated against the simulated node values after a test's
@@ -89,6 +103,9 @@ export interface InteractiveDiagramProps {
     nodes: DiagramNode[];
     connections: DiagramConnection[];
     compoundTypes?: CompoundTypeDefinition[];
+    /** Authored margin notes (gray boxes behind the nodes) — the app's
+     *  Comment tool. Render read-only unless `editable && commenting`. */
+    comments?: DiagramComment[];
   };
   caption?: string;
   /**
@@ -131,6 +148,36 @@ export interface InteractiveDiagramProps {
    * solved it stays solved until Reset. Meaningless without `editable`.
    */
   goal?: DiagramGoal;
+  /**
+   * Range for the weight popover's slider, controlling both its bounds and the
+   * tick labels shown beneath it. `'signed'` (default) spans −1…1 with −1/0/1
+   * ticks; `'positive'` spans 0…1 with 0/1 ticks — use it in early lessons
+   * where negative weights haven't been introduced yet.
+   */
+  weightRange?: 'signed' | 'positive';
+  /**
+   * Show the **Weight / Curve** switch in the weight popover, letting the reader
+   * turn a scalar weight into a draggable transfer curve (and back). Off by
+   * default so the option only appears once transfer curves have been
+   * introduced in the lessons. Requires `editable`; an edge that is already a
+   * curve stays editable regardless of this flag.
+   */
+  curveEditing?: boolean;
+  /**
+   * Show the "click to view graph" nudge next to each curve badge. Off by
+   * default; enable it only on the first diagram that introduces curves so the
+   * hint appears once and never nags again on later curve diagrams.
+   */
+  curveHint?: boolean;
+  /**
+   * Let the reader use the Comment tool: an "+ Comment" button in the footer
+   * drops a note box, and every authored/added comment becomes movable,
+   * resizable, editable, and deletable. Off by default so the tool only
+   * appears once a lesson has introduced it (the precedent is `curveEditing`).
+   * Requires `editable`. Authored `diagram.comments` still render — read-only
+   * — when this is off or the embed isn't editable.
+   */
+  commenting?: boolean;
 }
 
 /** Symmetric world padding around the node bounds (world px, pre-scale). */
@@ -142,9 +189,9 @@ const TRACE_MARGIN = 40;
 /** Floor on the fit-to-width shrink so nodes stay close to app-native size;
  *  wider diagrams scroll horizontally rather than shrink past this. */
 const MIN_SCALE = 0.72;
-/** Clamp on the auto-derived viewport height (screen px). */
+/** Floor on the auto-derived viewport height (screen px); no ceiling — the
+ *  panel grows to fit tall diagrams rather than scrolling vertically. */
 const MIN_HEIGHT = 260;
-const MAX_HEIGHT = 560;
 const DEFAULT_CONNECTION_WEIGHT = 1;
 
 // ── Static layout shared by SSR fallback and live component ────────────────
@@ -158,11 +205,13 @@ interface Layout {
 
 /**
  * World-space content box: the node bounds (min/max x,y grown by NODE_W/NODE_H)
- * expanded by symmetric `PAD`. `offsetX/Y` shift raw node coordinates so the
- * padded content sits at the world origin.
+ * PLUS any comment box bounds, expanded by symmetric `PAD`. `offsetX/Y` shift
+ * raw coordinates so the padded content sits at the world origin. Comments
+ * count toward the bounds so an authored note beside the nodes isn't clipped
+ * or ignored by the fit.
  */
-function computeLayout(nodes: DiagramNode[]): Layout {
-  if (nodes.length === 0) {
+function computeLayout(nodes: DiagramNode[], comments: DiagramComment[] = []): Layout {
+  if (nodes.length === 0 && comments.length === 0) {
     return { offsetX: PAD, offsetY: PAD, contentW: 400, contentH: 300 };
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -171,6 +220,12 @@ function computeLayout(nodes: DiagramNode[]): Layout {
     minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + NODE_W);
     maxY = Math.max(maxY, n.y + NODE_H);
+  }
+  for (const c of comments) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + c.width);
+    maxY = Math.max(maxY, c.y + c.height);
   }
   return {
     offsetX: -minX + PAD,
@@ -195,13 +250,16 @@ function computeEpochFit(
   overflowsX: boolean;
   viewportH: number;
 } {
+  const contentH = layout.contentH + (traceMode ? TRACE_MARGIN : 0);
   const scale = Math.max(MIN_SCALE, Math.min(1, availW / layout.contentW));
   const scaledW = layout.contentW * scale;
-  const scaledH = (layout.contentH + (traceMode ? TRACE_MARGIN : 0)) * scale;
+  const scaledH = contentH * scale;
   const overflowsX = scaledW > availW + 0.5;
   const worldOffsetX = overflowsX ? 0 : Math.max(0, (availW - scaledW) / 2);
-  const viewportH =
-    heightOverride ?? Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(scaledH)));
+  // The embed always grows to fit its content height rather than showing a
+  // vertical scrollbar — a tall diagram (e.g. subsumption) just makes a taller
+  // panel. (Width can still scroll horizontally for very wide graphs.)
+  const viewportH = heightOverride ?? Math.max(MIN_HEIGHT, Math.round(scaledH));
   return { scale, worldOffsetX, overflowsX, viewportH };
 }
 
@@ -211,7 +269,6 @@ function computeEpochFit(
 // toggles / pulse) stay live via the trace passthrough props.
 const NOOP = () => {};
 const NOOP_SET_SELECTED: Dispatch<SetStateAction<Set<string>>> = () => {};
-const NOOP_SET_CONFIG: Dispatch<SetStateAction<ConfigTarget | null>> = () => {};
 const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
 
 /** Deep clone of the diagram's structural arrays so editing never mutates the
@@ -225,6 +282,10 @@ function cloneConnections(connections: DiagramConnection[]): DiagramConnection[]
     transferPoints: c.transferPoints.map((p) => ({ ...p })),
   }));
 }
+/** Plain object spread suffices — a comment has no nested arrays/objects. */
+function cloneComments(comments: DiagramComment[]): DiagramComment[] {
+  return comments.map((c) => ({ ...c }));
+}
 
 function uuid(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -235,6 +296,11 @@ function uuid(): string {
 /** New node ids follow the app convention `{type}-{uuid}`. */
 function makeNodeId(type: NodeTypeId): string {
   return `${type}-${uuid()}`;
+}
+
+/** New comment ids follow the app convention `comment-{uuid}`. */
+function makeCommentId(): string {
+  return `comment-${uuid()}`;
 }
 
 /**
@@ -324,6 +390,17 @@ interface DiagramPanelProps {
   nodes: DiagramNode[];
   connections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
+  /** Margin notes to render behind the nodes. Defaults to []. */
+  comments?: DiagramComment[];
+  /** Whether comments are live-editable (move/resize/edit/delete + the
+   *  "+ Comment" add button). Off → every comment renders read-only. */
+  commentsEditable?: boolean;
+  onCommentMove?: (id: string, x: number, y: number) => void;
+  onCommentResize?: (id: string, width: number, height: number) => void;
+  onCommentChangeText?: (id: string, text: string) => void;
+  onCommentDelete?: (id: string) => void;
+  /** Presence gates the "+ Comment" footer button. */
+  onAddComment?: () => void;
   /** Explicit viewport height override (px). When omitted the panel derives its
    *  height from the scaled content. */
   height?: number;
@@ -341,12 +418,20 @@ interface DiagramPanelProps {
   traceResult?: {
     nodeValues: Record<string, number>;
     edgeSignals: Record<string, number>;
+    edgeInputs: Record<string, number>;
     disconnected: Set<string>;
   };
   /** Goal banner text; rendered above the canvas when present. */
   goalTitle?: string;
   /** Whether the goal is currently solved (flips the banner state). */
   goalSolved?: boolean;
+  /** Weight popover slider range + tick labels. Defaults to 'signed'. */
+  weightRange?: 'signed' | 'positive';
+  /** Show the Weight/Curve mode switch in the popover (editable diagrams). */
+  curveEditing?: boolean;
+  /** Show the "click to view graph" nudge next to curve badges (first curve
+   *  diagram only). */
+  curveHint?: boolean;
   // ── editing (all optional; omit → view-only) ─────────────────────────────
   editable?: boolean;
   palette?: NodeTypeId[];
@@ -360,10 +445,20 @@ interface DiagramPanelProps {
   onAddNode?: (type: NodeTypeId) => void;
   onDeleteSelection?: () => void;
   onSetWeight?: (id: string, weight: number) => void;
+  onSetTransferMode?: (id: string, mode: 'linear' | 'nonlinear') => void;
+  onSetTransferPoints?: (id: string, points: TransferPoint[]) => void;
   onDeleteConnection?: (id: string) => void;
   onReset?: () => void;
   /** True when reset would change something (an edit or non-default input). */
   canReset?: boolean;
+  /**
+   * Send the current wiring to the desktop app for direct upload — the host
+   * opens a board-picker/upload dialog (bridge to `src/App.tsx` via
+   * `postMessage`; see `@site/src/lib/appBridge`). Only ever set by
+   * `LiveDiagram` when `editable && isEmbeddedInApp`; omitted (and thus
+   * invisible) on the public website and in the SSR fallback.
+   */
+  onUploadToBot?: () => void;
   /**
    * Epoch layout: stable fit computed at mount (or on Reset / container resize).
    * Editable panels receive this from LiveDiagram so drag, add, and delete never
@@ -387,6 +482,13 @@ function DiagramPanel({
   nodes,
   connections,
   compoundTypes,
+  comments = [],
+  commentsEditable = false,
+  onCommentMove,
+  onCommentResize,
+  onCommentChangeText,
+  onCommentDelete,
+  onAddComment,
   height,
   sensorValues,
   setSensor,
@@ -399,6 +501,9 @@ function DiagramPanel({
   traceResult,
   goalTitle,
   goalSolved = false,
+  weightRange = 'signed',
+  curveEditing = false,
+  curveHint = false,
   editable = false,
   palette,
   selectedNodeIds,
@@ -411,23 +516,35 @@ function DiagramPanel({
   onAddNode,
   onDeleteSelection,
   onSetWeight,
+  onSetTransferMode,
+  onSetTransferPoints,
   onDeleteConnection,
   onReset,
   canReset = false,
+  onUploadToBot,
   epochLayout,
   onAvailWMeasured,
 }: DiagramPanelProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Editable embeds get their config target from the parent LiveDiagram; a
+  // plain (view-only / playable) embed owns its own, so a curve badge can still
+  // be clicked to inspect its transfer curve. `setConfigTarget` being defined
+  // signals the parent is managing it.
+  const [ownConfigTarget, setOwnConfigTarget] = useState<ConfigTarget | null>(null);
+  const effConfigTarget = setConfigTarget ? configTarget : ownConfigTarget;
+  const effSetConfigTarget = setConfigTarget ?? setOwnConfigTarget;
 
   // For view-only embeds (no epochLayout prop), compute layout + fit inline,
   // responding to both node positions and container width (ResizeObserver).
   // For editable embeds, the epoch values come from the parent LiveDiagram and
   // are stable across drags/adds/deletes.
   const inlineLayout = useMemo(
-    () => (!epochLayout ? computeLayout(nodes) : null),
-    // Intentionally re-runs when nodes change, but only for view-only panels.
+    () => (!epochLayout ? computeLayout(nodes, comments) : null),
+    // Intentionally re-runs when nodes/comments change, but only for
+    // view-only panels.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [epochLayout, nodes],
+    [epochLayout, nodes, comments],
   );
 
   // availW is needed only for view-only panels (to compute inline fit). For
@@ -491,19 +608,25 @@ function DiagramPanel({
   // For editable embeds we track the current node extents independently of the
   // epoch so the world grows without triggering a re-fit.
   const currentExtentW = useMemo(() => {
-    if (nodes.length === 0) return epochLayout?.layout.contentW ?? inlineLayout!.contentW;
+    if (nodes.length === 0 && comments.length === 0) {
+      return epochLayout?.layout.contentW ?? inlineLayout!.contentW;
+    }
     let maxX = -Infinity;
     for (const n of nodes) maxX = Math.max(maxX, n.x + NODE_W);
+    for (const c of comments) maxX = Math.max(maxX, c.x + c.width);
     // Extent = epochOffsetX brings node coords into world space, plus right PAD.
     return maxX + epochOffsetX + PAD;
-  }, [nodes, epochOffsetX, epochLayout, inlineLayout]);
+  }, [nodes, comments, epochOffsetX, epochLayout, inlineLayout]);
 
   const currentExtentH = useMemo(() => {
-    if (nodes.length === 0) return epochLayout?.layout.contentH ?? inlineLayout!.contentH;
+    if (nodes.length === 0 && comments.length === 0) {
+      return epochLayout?.layout.contentH ?? inlineLayout!.contentH;
+    }
     let maxY = -Infinity;
     for (const n of nodes) maxY = Math.max(maxY, n.y + NODE_H);
+    for (const c of comments) maxY = Math.max(maxY, c.y + c.height);
     return maxY + epochOffsetY + PAD + (traceMode ? TRACE_MARGIN : 0);
-  }, [nodes, epochOffsetY, traceMode, epochLayout, inlineLayout]);
+  }, [nodes, comments, epochOffsetY, traceMode, epochLayout, inlineLayout]);
 
   // A ref that always holds the current epoch values so stable callbacks can
   // read them without needing new function identities.
@@ -578,7 +701,7 @@ function DiagramPanel({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!editable) return;
       if (e.key === 'Escape') {
-        setConfigTarget?.(null);
+        effSetConfigTarget(null);
         setSelectedNodeIds?.(new Set());
         return;
       }
@@ -592,22 +715,44 @@ function DiagramPanel({
         }
       }
     },
-    [editable, hasSelection, onDeleteSelection, setConfigTarget, setSelectedNodeIds],
+    [editable, hasSelection, onDeleteSelection, effSetConfigTarget, setSelectedNodeIds],
   );
 
   // ── weight popover position (for the selected connection's badge) ─────────
   const popover = useMemo(() => {
-    if (!editable || configTarget?.kind !== 'connection') return null;
-    const conn = connections.find((c) => c.id === configTarget.id);
+    if (effConfigTarget?.kind !== 'connection') return null;
+    const conn = connections.find((c) => c.id === effConfigTarget.id);
     if (!conn) return null;
+    const isCurve = conn.transferMode === 'nonlinear';
+    // Both weights and curves are inspectable any time — in trace the badge
+    // shows the live value, and clicking it opens the weight/curve popover so
+    // you can read (or, when editable, reshape) the transfer curve while the
+    // simulation runs.
     const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
     const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1, traceMode);
     const path = paths.find((p) => p.id === conn.id);
     if (!path) return null;
     // Badge is at (midX, midY) in layer px; the world div is scaled, so the
     // screen offset inside the (unscaled) `.id-canvas` is midX/Y * scale.
-    return { conn, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
-  }, [editable, configTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
+    return { conn, isCurve, left: worldOffsetX + path.midX * scale, top: path.midY * scale };
+  }, [editable, curveEditing, effConfigTarget, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
+
+  // "Click here to view graph" hints: one per curve edge (in both trace and
+  // design mode, since the graph opens either way), hidden only while that
+  // badge's own popover is open, so the reader knows the badge is inspectable.
+  const curveHints = useMemo(() => {
+    if (!curveHint) return [];
+    const curveEdges = connections.filter((c) => c.transferMode === 'nonlinear');
+    if (curveEdges.length === 0) return [];
+    const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const paths = computeConnectionPaths(connections, (id) => nodeMap[id], nodeWorldPos, compoundTypes, 1, traceMode);
+    return curveEdges
+      .map((c) => {
+        const path = paths.find((p) => p.id === c.id);
+        return path ? { id: c.id, left: worldOffsetX + path.midX * scale, top: path.midY * scale } : null;
+      })
+      .filter((h): h is { id: string; left: number; top: number } => h !== null);
+  }, [curveHint, connections, nodes, nodeWorldPos, compoundTypes, scale, worldOffsetX, traceMode]);
 
   // Dismiss the popover on outside click (Escape is handled by the canvas keydown).
   useEffect(() => {
@@ -616,20 +761,22 @@ function DiagramPanel({
       const target = e.target as HTMLElement | null;
       if (target?.closest('.id-weight-popover')) return;
       if (target?.closest('.connection-config-trigger')) return;
-      setConfigTarget?.(null);
+      effSetConfigTarget(null);
     };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
-  }, [popover, setConfigTarget]);
+  }, [popover, effSetConfigTarget]);
 
   const selectedNodeId =
     editable && selectedNodeIds && selectedNodeIds.size === 1 ? [...selectedNodeIds][0] : null;
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : undefined;
 
-  // Vertical scroll: if the current content extents exceed the fixed viewport
-  // height we want overflow-y: auto so the user can scroll to see everything.
+  // Vertical scroll fallback: the initial viewport already grows to the full
+  // content height (no vertical scrollbar on load), but while editing a reader
+  // can drag a node below the current extents — then overflow-y: auto lets them
+  // scroll to it rather than losing it off-panel.
   const scaledCurrentH = currentExtentH * scale;
-  const overflowsY = editable && scaledCurrentH > viewportH + 0.5;
+  const overflowsY = scaledCurrentH > viewportH + 0.5;
 
   return (
     <div className="id-frame">
@@ -644,6 +791,13 @@ function DiagramPanel({
           </span>
           <span className="id-goal-text">{goalTitle}</span>
           {goalSolved && <span className="id-goal-badge">Solved</span>}
+          {goalSolved && (
+            <span className="id-goal-burst" aria-hidden="true">
+              {Array.from({ length: 10 }, (_, i) => (
+                <span key={i} style={{ ['--i' as string]: i }} />
+              ))}
+            </span>
+          )}
         </div>
       )}
       {editable && palette && palette.length > 0 && (
@@ -675,10 +829,14 @@ function DiagramPanel({
         onMouseDown={
           editable
             ? (e) => {
-                // Clicking empty canvas clears selection + closes the popover.
-                if (e.target === e.currentTarget) {
+                // Clicking empty space (anywhere not on a node or weight badge)
+                // clears the selection and closes the popover, so wires return
+                // to full opacity. The scaled `.id-world` div covers the canvas,
+                // so an exact currentTarget check would miss most empty clicks.
+                const t = e.target as HTMLElement;
+                if (!t.closest('.diagram-node') && !t.closest('.connection-config-trigger')) {
                   setSelectedNodeIds?.(new Set());
-                  setConfigTarget?.(null);
+                  effSetConfigTarget(null);
                 }
               }
             : undefined
@@ -694,6 +852,37 @@ function DiagramPanel({
             left: worldOffsetX,
           }}
         >
+          {/* Comments render before the robot overlay/canvas so they sit
+              behind the wiring, matching the app. `zoom={1}` because this
+              div already lives inside the scaled `.id-world`; each comment is
+              pre-shifted by the epoch offset (world coords, like nodeWorldPos)
+              and shifted back on move. */}
+          {comments.map((comment) => {
+            const shifted: DiagramComment = {
+              ...comment,
+              x: comment.x + epochOffsetX,
+              y: comment.y + epochOffsetY,
+            };
+            return (
+              <CommentView
+                key={comment.id}
+                comment={shifted}
+                zoom={1}
+                readOnly={!commentsEditable}
+                onMove={(id, x, y) => onCommentMove?.(id, x - epochOffsetX, y - epochOffsetY)}
+                onResize={(id, width, height) => onCommentResize?.(id, width, height)}
+                onChangeText={(id, text) => onCommentChangeText?.(id, text)}
+                onDelete={(id) => onCommentDelete?.(id)}
+                onInteractStart={NOOP}
+              />
+            );
+          })}
+          <RobotOverlay
+            nodes={nodes}
+            worldPos={nodeWorldPos}
+            traceMode={traceMode}
+            traceResult={traceMode ? traceResult : undefined}
+          />
           <DiagramCanvas
             nodes={nodes}
             connections={connections}
@@ -712,8 +901,8 @@ function DiagramPanel({
             readOnly={traceResult === undefined}
             selectedNodeIds={selectedNodeIds ?? (EMPTY_SELECTION as Set<string>)}
             setSelectedNodeIds={setSelectedNodeIds ?? NOOP_SET_SELECTED}
-            configTarget={configTarget}
-            setConfigTarget={setConfigTarget ?? NOOP_SET_CONFIG}
+            configTarget={effConfigTarget}
+            setConfigTarget={effSetConfigTarget}
             onNodeMove={editable ? onNodeMove : undefined}
             onNodeDragStart={undefined}
             onNodeDragEnd={undefined}
@@ -743,39 +932,141 @@ function DiagramPanel({
           </button>
         )}
 
-        {/* Lightweight weight editor near the connection badge (badge click). */}
-        {popover && (
+        {/* Weight / curve editor near the connection badge (badge click). Every
+            edge is shown as one graph: a plain weight is the straight line
+            y = weight·x through the origin; a curve is that same graph with
+            extra points. So linear and curve read as the same thing, and
+            "adding a curve" is literally adding points to the line. */}
+        {popover && (() => {
+          const conn = popover.conn;
+          const isCurve = conn.transferMode === 'nonlinear';
+          const canEditCurve = editable && curveEditing;
+          const graphPoints = isCurve ? conn.transferPoints : weightLinePoints(conn.weight);
+          // In trace mode, mark where the live signal sits on the graph.
+          const inX = traceMode ? traceResult?.edgeInputs?.[conn.id] : undefined;
+          const outY = traceMode ? traceResult?.edgeSignals?.[conn.id] : undefined;
+          const operatingPoint =
+            inX !== undefined && outY !== undefined ? { x: inX, y: outY } : null;
+          return (
           <div
             className="id-weight-popover"
             style={{ left: popover.left, top: popover.top }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="id-weight-row">
-              <span className="id-weight-label">weight</span>
-              <span className="id-weight-value">{popover.conn.weight.toFixed(2)}</span>
-            </div>
-            <input
-              type="range"
-              min={-1}
-              max={1}
-              step={0.05}
-              value={popover.conn.weight}
-              onChange={(e) => onSetWeight?.(popover.conn.id, Number(e.target.value))}
-            />
-            <button
-              type="button"
-              className="id-weight-delete"
-              onClick={() => onDeleteConnection?.(popover.conn.id)}
-            >
-              Delete connection
-            </button>
+            {canEditCurve && (
+              <div className="id-weight-modes" role="group" aria-label="Connection mode">
+                <button
+                  type="button"
+                  className={`id-weight-mode${!isCurve ? ' active' : ''}`}
+                  onClick={() => onSetTransferMode?.(conn.id, 'linear')}
+                >
+                  Weight
+                </button>
+                <button
+                  type="button"
+                  className={`id-weight-mode${isCurve ? ' active' : ''}`}
+                  onClick={() => onSetTransferMode?.(conn.id, 'nonlinear')}
+                >
+                  Curve
+                </button>
+              </div>
+            )}
+
+            {/* The graph. Editable curve editing → the draggable editor (dragging
+                or adding a point to a weight-line turns it into a curve). Otherwise
+                a read-only thumbnail of the line or curve. */}
+            {canEditCurve ? (
+              <div className="id-weight-curve-editor">
+                <TransferCurveEditor
+                  points={graphPoints}
+                  operatingPoint={operatingPoint}
+                  onChange={(pts) => {
+                    if (isCurve) {
+                      onSetTransferPoints?.(conn.id, pts);
+                    } else {
+                      // Shaping the weight-line adds points → it becomes a curve.
+                      onSetTransferMode?.(conn.id, 'nonlinear');
+                      onSetTransferPoints?.(conn.id, pts);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="id-weight-curve">
+                <MiniTransferCurve
+                  points={graphPoints}
+                  weight={isCurve ? undefined : conn.weight}
+                  operatingPoint={operatingPoint}
+                />
+              </div>
+            )}
+
+            {/* A plain weight keeps its numeric value + slope slider; a curve
+                has no single weight, so it shows the clamp note instead. */}
+            {isCurve ? (
+              <p className="id-weight-note">Values outside −100…100 are clamped.</p>
+            ) : (
+              <>
+                <div className="id-weight-row">
+                  <span className="id-weight-label">weight</span>
+                  <span className="id-weight-value">{conn.weight.toFixed(2)}</span>
+                </div>
+                {editable && (
+                  <>
+                    <input
+                      type="range"
+                      min={weightRange === 'positive' ? 0 : -1}
+                      max={1}
+                      step={0.05}
+                      value={conn.weight}
+                      onChange={(e) => onSetWeight?.(conn.id, Number(e.target.value))}
+                    />
+                    {/* Reference ticks under the slider — the range's key stops, so
+                        the scale reads at a glance (like the app's weight control). */}
+                    <div className={`id-weight-ticks ${weightRange}`} aria-hidden="true">
+                      {(weightRange === 'positive' ? ['0', '1'] : ['−1', '0', '1']).map((t) => (
+                        <span key={t}>{t}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {editable && (
+              <button
+                type="button"
+                className="id-weight-delete"
+                onClick={() => onDeleteConnection?.(conn.id)}
+              >
+                Delete connection
+              </button>
+            )}
           </div>
+          );
+        })()}
+
+        {/* "Click here to view graph" nudges toward each curve badge, so readers
+            know the transfer curve is inspectable. Hidden while the badge's own
+            popover is open. */}
+        {curveHints.map((hint) =>
+          popover?.conn.id === hint.id ? null : (
+            <div
+              key={`hint-${hint.id}`}
+              className="id-curve-hint"
+              style={{ left: hint.left, top: hint.top }}
+              aria-hidden="true"
+            >
+              <span className="id-curve-hint-arrow">↖</span>
+              <span className="id-curve-hint-text">click to view graph</span>
+            </div>
+          ),
         )}
 
         {rejectedNotice && <div className="id-notice">{rejectedNotice}</div>}
       </div>
 
-      {(editable || onReset || onToggleTrace) && (
+      {(editable || onReset || onToggleTrace || onUploadToBot || onAddComment) && (
         <div className="id-footer">
           {editable && (
             <span className="id-hint">
@@ -796,6 +1087,26 @@ function DiagramPanel({
                 }
               >
                 {traceMode ? 'Exit Trace' : 'Trace Signal Flow'}
+              </button>
+            )}
+            {onAddComment && (
+              <button
+                type="button"
+                className="id-add-comment"
+                onClick={onAddComment}
+                title="Drop a note box on the canvas"
+              >
+                + Comment
+              </button>
+            )}
+            {onUploadToBot && (
+              <button
+                type="button"
+                className="id-upload-bot"
+                onClick={onUploadToBot}
+                title="Pick your board and put this wiring straight onto the robot"
+              >
+                Upload to bot
               </button>
             )}
             {onReset && (
@@ -827,6 +1138,10 @@ function LiveDiagram({
   palette,
   initialTrace,
   goal,
+  weightRange,
+  curveEditing,
+  curveHint,
+  commenting,
 }: {
   diagram: InteractiveDiagramProps['diagram'];
   height?: number;
@@ -836,15 +1151,23 @@ function LiveDiagram({
   palette?: NodeTypeId[];
   initialTrace: boolean;
   goal?: DiagramGoal;
+  weightRange: 'signed' | 'positive';
+  curveEditing: boolean;
+  curveHint: boolean;
+  commenting: boolean;
 }) {
   const compoundTypes = useMemo(() => diagram.compoundTypes ?? [], [diagram.compoundTypes]);
   const loopPeriodMs = diagram.loopPeriodMs ?? 50;
+  const initialComments = useMemo(() => diagram.comments ?? [], [diagram.comments]);
 
   // Editable structure lives in state, deep-cloned from the prop so Reset can
   // restore the pristine original and edits never mutate the caller's object.
   const [editNodes, setEditNodes] = useState<DiagramNode[]>(() => cloneNodes(diagram.nodes));
   const [editConnections, setEditConnections] = useState<DiagramConnection[]>(() =>
     cloneConnections(diagram.connections),
+  );
+  const [editComments, setEditComments] = useState<DiagramComment[]>(() =>
+    cloneComments(initialComments),
   );
 
   const [sensorValues, setSensorValues] = useState<Record<string, number>>(initialInputs);
@@ -873,7 +1196,9 @@ function LiveDiagram({
   // `null` before the first width measurement; the panel seed-renders with a
   // fallback until the ResizeObserver fires.
   const [epochAvailW, setEpochAvailW] = useState<number | null>(null);
-  const [epochLayout, setEpochLayout] = useState<Layout>(() => computeLayout(diagram.nodes));
+  const [epochLayout, setEpochLayout] = useState<Layout>(() =>
+    computeLayout(diagram.nodes, initialComments),
+  );
   // Epoch trace mode tracks the trace state AT THE TIME the epoch was computed
   // (mount), so the trace-margin bottom-room in the viewport height matches
   // the initial render. View-only embeds don't need this because they re-derive
@@ -903,6 +1228,10 @@ function LiveDiagram({
   // Structural source: the edited arrays when editable, else the prop directly.
   const baseNodes = editable ? editNodes : diagram.nodes;
   const baseConnections = editable ? editConnections : diagram.connections;
+  // Comments follow the same editable/prop split — cloned into state whenever
+  // the embed is editable (regardless of `commenting`) so Reset behaves
+  // uniformly; `commenting` only gates whether the UI lets them be touched.
+  const baseComments = editable ? editComments : initialComments;
 
   const nodes = useMemo(() => {
     if (Object.keys(constantOverrides).length === 0) return baseNodes;
@@ -911,6 +1240,7 @@ function LiveDiagram({
     );
   }, [baseNodes, constantOverrides]);
   const connections = baseConnections;
+  const comments = baseComments;
 
   // ── Goal checking ─────────────────────────────────────────────────────────
   //
@@ -990,6 +1320,9 @@ function LiveDiagram({
           ...(edge.fromPort ? { fromPort: edge.fromPort } : {}),
           to: edge.to,
           ...(edge.toPort ? { toPort: edge.toPort } : {}),
+          // Spawn the weight badge near the input end (not mid-wire), matching
+          // the authored convention and keeping crossing wires' badges apart.
+          labelT: 0.3,
           weight: DEFAULT_CONNECTION_WEIGHT,
           transferMode: 'linear' as const,
           transferPoints: [
@@ -1013,11 +1346,90 @@ function LiveDiagram({
     setDirty(true);
   }, []);
 
+  // Switch a connection between a scalar weight and a transfer curve. When
+  // turning a linear wire into a curve, seed the curve with the straight line
+  // its weight already describes (y = weight · x, clamped) so behavior doesn't
+  // jump — the student then reshapes it by dragging points.
+  const onSetTransferMode = useCallback((id: string, mode: 'linear' | 'nonlinear') => {
+    setEditConnections((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        if (mode === 'linear') return { ...c, transferMode: 'linear' as const };
+        const hasCurve = c.transferPoints && c.transferPoints.length >= 2;
+        const clamp = (v: number) => Math.max(-100, Math.min(100, Math.round(v)));
+        const seeded = hasCurve
+          ? c.transferPoints
+          : [
+              { x: -100, y: clamp(-100 * c.weight) },
+              { x: 100, y: clamp(100 * c.weight) },
+            ];
+        return { ...c, transferMode: 'nonlinear' as const, transferPoints: seeded };
+      }),
+    );
+    setDirty(true);
+  }, []);
+
+  const onSetTransferPoints = useCallback((id: string, points: TransferPoint[]) => {
+    setEditConnections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, transferPoints: points } : c)),
+    );
+    setDirty(true);
+  }, []);
+
   const onDeleteConnection = useCallback((id: string) => {
     setEditConnections((prev) => prev.filter((c) => c.id !== id));
     setConfigTarget((cur) => (cur?.kind === 'connection' && cur.id === id ? null : cur));
     setDirty(true);
   }, []);
+
+  // ── comment mutations (move/resize/edit/delete + add) ────────────────────
+  const onCommentMove = useCallback((id: string, x: number, y: number) => {
+    setEditComments((prev) => prev.map((c) => (c.id === id ? { ...c, x, y } : c)));
+    setDirty(true);
+  }, []);
+
+  const onCommentResize = useCallback((id: string, width: number, height: number) => {
+    setEditComments((prev) => prev.map((c) => (c.id === id ? { ...c, width, height } : c)));
+    setDirty(true);
+  }, []);
+
+  const onCommentChangeText = useCallback((id: string, text: string) => {
+    setEditComments((prev) => prev.map((c) => (c.id === id ? { ...c, text } : c)));
+    setDirty(true);
+  }, []);
+
+  const onCommentDelete = useCallback((id: string) => {
+    setEditComments((prev) => prev.filter((c) => c.id !== id));
+    setDirty(true);
+  }, []);
+
+  // Drop a fresh default-size comment near the top-left of the visible
+  // content, nudging down past any node/comment already sitting there —
+  // mirrors onAddNode's placement/collision logic.
+  const onAddComment = useCallback(() => {
+    setEditComments((prev) => {
+      const x = clampX(-epochOffsetX + PAD);
+      let y = clampY(-epochOffsetY + PAD);
+      const collides = (py: number) =>
+        editNodes.some(
+          (n) => Math.abs(n.y - py) < DEFAULT_COMMENT_HEIGHT && Math.abs(n.x - x) < DEFAULT_COMMENT_WIDTH,
+        ) ||
+        prev.some(
+          (c) => Math.abs(c.y - py) < DEFAULT_COMMENT_HEIGHT && Math.abs(c.x - x) < DEFAULT_COMMENT_WIDTH,
+        );
+      while (collides(y)) y += DEFAULT_COMMENT_HEIGHT + 24;
+      const comment: DiagramComment = {
+        id: makeCommentId(),
+        x,
+        y: clampY(y),
+        width: DEFAULT_COMMENT_WIDTH,
+        height: DEFAULT_COMMENT_HEIGHT,
+        text: '',
+      };
+      return [...prev, comment];
+    });
+    setDirty(true);
+  }, [clampX, clampY, epochOffsetX, epochOffsetY, editNodes]);
 
   const onDeleteSelection = useCallback(() => {
     setSelectedNodeIds((selected) => {
@@ -1066,6 +1478,7 @@ function LiveDiagram({
   const onReset = useCallback(() => {
     setEditNodes(cloneNodes(diagram.nodes));
     setEditConnections(cloneConnections(diagram.connections));
+    setEditComments(cloneComments(initialComments));
     setSensorValues(initialInputs);
     setConstantOverrides({});
     setSelectedNodeIds(new Set());
@@ -1075,20 +1488,52 @@ function LiveDiagram({
     setGoalSolved(false);
     // Recompute the epoch layout from the initial nodes (restores the exact
     // fit the reader saw on first load).
-    setEpochLayout(computeLayout(diagram.nodes));
+    setEpochLayout(computeLayout(diagram.nodes, initialComments));
     setDirty(false);
-  }, [diagram.nodes, diagram.connections, initialInputs, initialTrace]);
+  }, [diagram.nodes, diagram.connections, initialComments, initialInputs, initialTrace]);
 
   // Build the epochLayout prop for DiagramPanel: null until first measurement.
   const epochLayoutProp = epochFit
     ? { layout: epochLayout, ...epochFit }
     : undefined;
 
+  // "Upload to bot" bridge: only meaningful for an editable embed running
+  // inside the desktop app's Lessons iframe (a no-op postMessage elsewhere,
+  // so the button is hidden rather than shown-but-useless). The host app
+  // opens its board-picker/upload dialog with this circuit. Serializes the
+  // CURRENT live wiring — the same `nodes`/`connections`/`comments` the canvas
+  // renders, constant-slider overrides included — into a full DiagramState.
+  // capWeights isn't modeled by the embed (uncapped weights aren't a thing it
+  // exposes), so it takes the app's own default.
+  const onUploadToBot = useCallback(() => {
+    sendToBot({
+      nodes,
+      connections,
+      loopPeriodMs,
+      capWeights: true,
+      pulseDurationMs,
+      compoundTypes,
+      comments,
+    });
+  }, [nodes, connections, comments, loopPeriodMs, pulseDurationMs, compoundTypes]);
+
+  // Comments become live-editable only once both `editable` and `commenting`
+  // are set; an editable-but-not-commenting embed still shows authored
+  // comments, read-only (and still uploads them).
+  const commentsEditable = editable && commenting;
+
   return (
     <DiagramPanel
       nodes={nodes}
       connections={connections}
       compoundTypes={compoundTypes}
+      comments={comments}
+      commentsEditable={commentsEditable}
+      onCommentMove={onCommentMove}
+      onCommentResize={onCommentResize}
+      onCommentChangeText={onCommentChangeText}
+      onCommentDelete={onCommentDelete}
+      onAddComment={commentsEditable ? onAddComment : undefined}
       height={height}
       sensorValues={sensorValues}
       setSensor={setSensor}
@@ -1101,6 +1546,9 @@ function LiveDiagram({
       traceResult={traceResult}
       goalTitle={goal?.title}
       goalSolved={goalSolved}
+      weightRange={weightRange}
+      curveEditing={curveEditing}
+      curveHint={curveHint}
       editable={editable}
       palette={palette}
       selectedNodeIds={selectedNodeIds}
@@ -1113,9 +1561,12 @@ function LiveDiagram({
       onAddNode={onAddNode}
       onDeleteSelection={onDeleteSelection}
       onSetWeight={onSetWeight}
+      onSetTransferMode={onSetTransferMode}
+      onSetTransferPoints={onSetTransferPoints}
       onDeleteConnection={onDeleteConnection}
       onReset={onReset}
       canReset={dirty || traceOn !== initialTrace}
+      onUploadToBot={editable && isEmbeddedInApp ? onUploadToBot : undefined}
       epochLayout={epochLayoutProp}
       onAvailWMeasured={handleAvailWMeasured}
     />
@@ -1142,6 +1593,7 @@ function StaticDiagram({
       nodes={diagram.nodes}
       connections={diagram.connections}
       compoundTypes={diagram.compoundTypes ?? []}
+      comments={diagram.comments ?? []}
       height={height}
       sensorValues={{}}
       setSensor={NOOP}
@@ -1150,7 +1602,8 @@ function StaticDiagram({
       pulsingId={null}
       pulseDurationMs={pulseDurationMs}
       // Reserve the same layout as the hydrated view so the height doesn't jump
-      // on hydration; there are no live values, so nodes render read-only.
+      // on hydration; there are no live values, so nodes AND comments render
+      // read-only.
       traceMode={initialTrace}
       traceResult={undefined}
       goalTitle={goalTitle}
@@ -1168,6 +1621,10 @@ export default function InteractiveDiagram({
   palette,
   initialTrace = true,
   goal,
+  weightRange = 'signed',
+  curveEditing = false,
+  curveHint = false,
+  commenting = false,
 }: InteractiveDiagramProps) {
   // A palette implies editing.
   const isEditable = editable || (palette !== undefined && palette.length > 0);
@@ -1194,6 +1651,10 @@ export default function InteractiveDiagram({
             palette={palette}
             initialTrace={initialTrace}
             goal={goal}
+            weightRange={weightRange}
+            curveEditing={curveEditing}
+            curveHint={curveHint}
+            commenting={commenting}
           />
         )}
       </BrowserOnly>

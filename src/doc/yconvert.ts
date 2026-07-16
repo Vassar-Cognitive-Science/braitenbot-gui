@@ -1,5 +1,10 @@
 import * as Y from 'yjs';
-import type { CompoundTypeDefinition, DiagramConnection, DiagramNode } from '../types/diagram';
+import type {
+  CompoundTypeDefinition,
+  DiagramComment,
+  DiagramConnection,
+  DiagramNode,
+} from '../types/diagram';
 
 // Plain <-> Yjs conversion. Each node/connection is a nested Y.Map keyed by its
 // own property names so concurrent edits to different properties merge cleanly.
@@ -21,6 +26,12 @@ export function nodeToYMap(node: DiagramNode): Y.Map<unknown> {
 export function connectionToYMap(connection: DiagramConnection): Y.Map<unknown> {
   const map = new Y.Map<unknown>();
   fillYMap(map, connection as unknown as Record<string, unknown>);
+  return map;
+}
+
+export function commentToYMap(comment: DiagramComment): Y.Map<unknown> {
+  const map = new Y.Map<unknown>();
+  fillYMap(map, comment as unknown as Record<string, unknown>);
   return map;
 }
 
@@ -72,6 +83,14 @@ export function readConnections(container: Y.Map<Y.Map<unknown>>): DiagramConnec
   return sortedMaps(container).map(readConnection);
 }
 
+export function readComment(map: Y.Map<unknown>): DiagramComment {
+  return map.toJSON() as DiagramComment;
+}
+
+export function readComments(container: Y.Map<Y.Map<unknown>>): DiagramComment[] {
+  return sortedMaps(container).map(readComment);
+}
+
 export function readCompoundType(id: string, map: Y.Map<unknown>): CompoundTypeDefinition {
   const nodes = map.get('nodes') as Y.Map<Y.Map<unknown>>;
   const connections = map.get('connections') as Y.Map<Y.Map<unknown>>;
@@ -91,17 +110,22 @@ export function loadDiagramInto(
   nodes: Y.Map<Y.Map<unknown>>,
   connections: Y.Map<Y.Map<unknown>>,
   compoundTypes: Y.Map<Y.Map<unknown>>,
+  comments: Y.Map<Y.Map<unknown>>,
   meta: Y.Map<unknown>,
   state: {
     nodes: DiagramNode[];
     connections: DiagramConnection[];
     compoundTypes: CompoundTypeDefinition[];
+    comments: DiagramComment[];
     loopPeriodMs: number;
+    capWeights: boolean;
+    pulseDurationMs: number;
   },
 ): void {
   nodes.clear();
   connections.clear();
   compoundTypes.clear();
+  comments.clear();
   for (const node of state.nodes) nodes.set(node.id, nodeToYMap(node));
   for (const connection of state.connections) {
     connections.set(connection.id, connectionToYMap(connection));
@@ -109,5 +133,10 @@ export function loadDiagramInto(
   for (const def of state.compoundTypes) {
     compoundTypes.set(def.id, compoundTypeToYMap(def));
   }
+  for (const comment of state.comments) {
+    comments.set(comment.id, commentToYMap(comment));
+  }
   meta.set('loopPeriodMs', state.loopPeriodMs);
+  meta.set('capWeights', state.capWeights);
+  meta.set('pulseDurationMs', state.pulseDurationMs);
 }

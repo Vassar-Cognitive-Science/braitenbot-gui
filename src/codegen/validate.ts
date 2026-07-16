@@ -517,7 +517,7 @@ export function validateGraph(
     if (!reachable.has(output.id)) {
       errors.push({
         nodeId: topLevelId(output.id),
-        message: `${TYPE_BY_ID[output.type].displayName} '${label(output.id)}' is not connected to any sensor`,
+        message: `${TYPE_BY_ID[output.type].displayName} '${label(output.id)}' has no signal reaching it — trace a path back to a sensor, constant, or other source, or it will stay at rest.`,
         severity: 'warning',
       });
     }
@@ -554,13 +554,23 @@ export function validateGraph(
   // incoming edge; every compute node needs at least one outgoing edge.
   const computeNodes = nodes.filter((n) => TYPE_BY_ID[n.type].kind === 'compute');
   for (const compute of computeNodes) {
-    const requiresInputs = TYPE_BY_ID[compute.type].hasInputs ?? false;
+    const typeDef = TYPE_BY_ID[compute.type];
+    const requiresInputs = typeDef.hasInputs ?? false;
     const hasIncoming = connections.some((c) => c.to === compute.id);
     const hasOutgoing = connections.some((c) => c.from === compute.id);
-    if ((requiresInputs && !hasIncoming) || !hasOutgoing) {
+    const needsInput = requiresInputs && !hasIncoming;
+    const needsOutput = !hasOutgoing;
+    if (needsInput || needsOutput) {
+      // Name the missing side so the fix is obvious, rather than a vague
+      // "not connected".
+      const missing = needsInput && needsOutput
+        ? 'an input and an output'
+        : needsInput
+          ? 'an input'
+          : 'an output';
       errors.push({
         nodeId: compute.id,
-        message: `Compute node '${compute.label}' is not connected`,
+        message: `${typeDef.displayName} '${compute.label}' needs ${missing} to do anything — connect it into the signal path.`,
         severity: 'warning',
       });
     }

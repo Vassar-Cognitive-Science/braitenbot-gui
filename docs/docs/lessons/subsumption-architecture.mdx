@@ -1,0 +1,477 @@
+---
+sidebar_position: 6
+title: "6. Nobody Home"
+---
+
+# Nobody Home
+
+So far every creature you've built has had one behavior: drive toward light, veer from walls, reverse on a bump. A real robot needs all of them at once, and the moment you say that, a question sneaks in. When cruise says "forward" and avoidance says "hard right" at the same instant, who decides?
+
+This lesson abandons an assumption you might not know you were making: that somewhere in a behaving robot there is a *decider*, a central place where options are weighed and a choice is issued. There isn't one here. Cruise, avoid, and escape all run at once, and a higher-priority behavior simply **switches the lower ones off** when it needs control. As you wire it up, look for the spot where you expect a controller to live, and notice the robot works fine without it.
+
+You've already built every part. The cruise-plus-avoid pattern is [3. Don't](./obstacle-avoidance); the decaying bump latch is [5. Memory](./latches-with-delay). Today you stack them into three layers, with one rule doing all the arbitration: **a higher layer suppresses a lower one by shutting a gate on it.**
+
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+<InteractiveDiagram
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 105, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 380, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 600, y: 10, xshutPin: '12' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 820, y: 10, constantValue: 50 },
+      { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 140 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 140, delayMs: 20 },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 380, y: 140, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 600, y: 140, threshold: 60 },
+      { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 270, threshold: 10 },
+      { id: 'gate', type: 'compute-threshold', label: 'Cruise Gate', x: 490, y: 270, threshold: 50, thresholdOp: '<' },
+      { id: 'gated-cruise', type: 'compute-multiply', label: 'Gated Cruise', x: 690, y: 270 },
+      { id: 'esc-gate', type: 'compute-threshold', label: 'Lower Gate', x: 10, y: 400, threshold: 50, thresholdOp: '<' },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 300, y: 400 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 520, y: 400 },
+      { id: 'left-gated', type: 'compute-multiply', label: 'Left Gated', x: 300, y: 530 },
+      { id: 'right-gated', type: 'compute-multiply', label: 'Right Gated', x: 520, y: 530 },
+      { id: 'left-final', type: 'compute-summation', label: 'Left Final', x: 300, y: 660 },
+      { id: 'right-final', type: 'compute-summation', label: 'Right Final', x: 520, y: 660 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 300, y: 790, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 520, y: 790, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'left-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'right-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'cruise', to: 'gated-cruise', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.5, from: 'gate', to: 'gated-cruise', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'gated-cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'gated-cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'left-detect', to: 'left-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.32, from: 'left-detect', to: 'right-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', labelT: 0.68, from: 'right-detect', to: 'right-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', labelT: 0.66, from: 'right-detect', to: 'left-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'bumper', to: 'escape-latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c14', labelT: 0.26, from: 'escape-latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c15', labelT: 0.5, from: 'delay', to: 'escape-latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c16', from: 'escape-latch', to: 'escape-active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c17', from: 'escape-active', to: 'esc-gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c18', from: 'left-mix', to: 'left-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c19', labelT: 0.5, from: 'esc-gate', to: 'left-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c20', from: 'right-mix', to: 'right-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c21', labelT: 0.5, from: 'esc-gate', to: 'right-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c22', from: 'left-gated', to: 'left-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c23', from: 'right-gated', to: 'right-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c24', from: 'escape-active', to: 'left-final', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c25', from: 'escape-active', to: 'right-final', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c26', from: 'left-final', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c27', from: 'right-final', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Three layers, no boss. Drag a wall toward it, then pulse the bumper mid-swerve. Each gate closes the layer below it."
+/>
+
+Three clusters feed the wheels. **Cruise** (the constant, top right) always says +50 forward. **Avoid** (the ToF sensors and detectors) turns away from a near wall. **Escape** (the bumper and decay latch, left) reverses both wheels for about a second after a bump. Every layer runs all the time. What keeps them from fighting is the two **gates**: the Cruise Gate shuts cruise off whenever a wall is seen, and the Lower Gate shuts the entire cruise-plus-avoid output off whenever escape is active. Priority lives in which gate controls which layer.
+
+Now build the pecking order yourself, one gate at a time.
+
+## Puzzle 1: Wire the cruise gate
+
+Two layers first: cruise plus avoid. The turn behavior is already wired, a near wall on the left drives the right wheel back and the left wheel forward. But there's a problem: cruise never turns off, so it fights the turn. On a wall, cruise's +50 keeps pushing forward while avoid tries to pivot, and the robot just veers instead of turning cleanly out of trouble.
+
+The fix is a **gate**. The **Cruise Gate** is a Threshold set to `input < 50`, so it outputs 100 (open) while its input is low and 0 (shut) once its input climbs. It already feeds the **Gated Cruise** multiply through a tiny 0.01 weight, which turns that 0-or-100 into an on/off switch: cruise passes at full strength when the gate is open, and vanishes when it shuts. All that's missing is telling the gate *when* to shut. Wire both **Left Detect** and **Right Detect** into the Cruise Gate. Now any wall drives the gate's input up, the gate shuts, and cruise steps aside so the turn is clean.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'left-ir': 80, 'right-ir': 0 }}
+  goal={{
+    title: 'Cruise fights the turn. Gate it off when a wall appears, so the robot pivots cleanly.',
+    tests: [
+      {
+        label: 'wall on the left pivots it right',
+        phases: [{ inputs: { 'left-ir': 80, 'right-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 40 },
+        ],
+      },
+      {
+        label: 'wall on the right pivots it left',
+        phases: [{ inputs: { 'right-ir': 80, 'left-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'gte', value: 40 },
+        ],
+      },
+      {
+        label: 'open floor cruises straight',
+        phases: [{ inputs: { 'left-ir': 0, 'right-ir': 0 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 20, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 470, y: 10, xshutPin: '12' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 240, y: 10, constantValue: 50 },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 20, y: 150, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 470, y: 150, threshold: 60 },
+      { id: 'gate', type: 'compute-threshold', label: 'Cruise Gate', x: 245, y: 160, threshold: 50, thresholdOp: '<' },
+      { id: 'gated-cruise', type: 'compute-multiply', label: 'Gated Cruise', x: 240, y: 290 },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 150, y: 420 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 350, y: 420 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 150, y: 550, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 350, y: 550, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.24, from: 'cruise', to: 'gated-cruise', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.5, from: 'gate', to: 'gated-cruise', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'gated-cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'gated-cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'left-detect', to: 'left-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.28, from: 'left-detect', to: 'right-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', from: 'right-detect', to: 'right-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', labelT: 0.28, from: 'right-detect', to: 'left-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c26', from: 'left-mix', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c27', from: 'right-mix', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Draw two wires: Left Detect and Right Detect into the Cruise Gate. Then pull a wall close and watch cruise switch off."
+/>
+
+### How the gate works
+
+Walk the arithmetic for a wall on the left. Left Distance reads 80, so Left Detect fires at 100. That 100 reaches the Cruise Gate, whose input is now well above 50, so `input < 50` is false and the gate outputs 0. The Gated Cruise multiply takes cruise (50) times the gate (0), and cruise collapses to 0. With cruise gone, the only thing left driving the wheels is avoid: Left Detect sends +0.5 to the left wheel (+50) and −0.5 to the right wheel (−50). The robot pivots away.
+
+| Left Mix input | Value |
+|---|---|
+| Gated Cruise | 0 (gate shut) |
+| Left Detect (+0.5) | +50 |
+| **Left wheel** | **+50** |
+
+| Right Mix input | Value |
+|---|---|
+| Gated Cruise | 0 (gate shut) |
+| Left Detect (−0.5) | −50 |
+| **Right wheel** | **−50** |
+
+This is what suppression means here: cruise is still running, still faithfully outputting +50, but the gate holds it out of the sum entirely while a wall is present. The moment the wall clears, Left Detect drops to 0, the gate's input falls below 50, `input < 50` is true again, the gate reopens, and cruise flows back in with no transition logic anywhere.
+
+## Puzzle 2: Give escape the master switch
+
+Two layers handle most rooms, but rangefinders have blind spots: a thin chair leg, or a surface angled so the laser scatters away instead of bouncing back. Sometimes the first the robot knows of an obstacle is the *thud*. That's what the bumper is for, and the bump response must outrank everything, both wheels, no exceptions.
+
+The escape cluster is pre-built on the left. It's the decay latch from [5. Memory](./latches-with-delay): a bump charges the Escape Latch, the Delay feeds 95% of it back each tick, and the sum decays for about a second before dropping to 0. **Escape Active** turns that into a clean 0-or-100 flag. Escape also already drives both wheels into reverse when it fires.
+
+The one missing piece is the **master switch**. The **Lower Gate** (another `input < 50` threshold) sits over the *entire* cruise-plus-avoid output, feeding both Gated multiplies through 0.01 weights, exactly like the Cruise Gate sits over cruise. Right now its input is empty, so it never shuts, and on a bump the reversing escape signal has to fight the cruise still flowing underneath. Wire **Escape Active** into the **Lower Gate**. Now a bump shuts the whole lower machine off at once, and escape has the wheels to itself.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  goal={{
+    title: 'A bump must override both lower layers. Gate them off so escape reverses cleanly, then hands control back.',
+    tests: [
+      {
+        label: 'a bump reverses both wheels',
+        phases: [
+          { inputs: { bumper: 100, 'left-ir': 0, 'right-ir': 0 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'the escape expires and cruise resumes',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 150 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+      {
+        label: 'avoidance still works without a bump',
+        phases: [{ inputs: { 'left-ir': 80, bumper: 0 }, ticks: 5 }],
+        expect: [{ node: 'right-motor', op: 'lte', value: -40 }],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 105, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 380, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 600, y: 10, xshutPin: '12' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 820, y: 10, constantValue: 50 },
+      { id: 'escape-latch', type: 'compute-summation', label: 'Escape Latch', x: 10, y: 140 },
+      { id: 'delay', type: 'compute-delay', label: 'Delay', x: 200, y: 140, delayMs: 20 },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 380, y: 140, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 600, y: 140, threshold: 60 },
+      { id: 'escape-active', type: 'compute-threshold', label: 'Escape Active', x: 10, y: 270, threshold: 10 },
+      { id: 'gate', type: 'compute-threshold', label: 'Cruise Gate', x: 490, y: 270, threshold: 50, thresholdOp: '<' },
+      { id: 'gated-cruise', type: 'compute-multiply', label: 'Gated Cruise', x: 690, y: 270 },
+      { id: 'esc-gate', type: 'compute-threshold', label: 'Lower Gate', x: 10, y: 400, threshold: 50, thresholdOp: '<' },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 300, y: 400 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 520, y: 400 },
+      { id: 'left-gated', type: 'compute-multiply', label: 'Left Gated', x: 300, y: 530 },
+      { id: 'right-gated', type: 'compute-multiply', label: 'Right Gated', x: 520, y: 530 },
+      { id: 'left-final', type: 'compute-summation', label: 'Left Final', x: 300, y: 660 },
+      { id: 'right-final', type: 'compute-summation', label: 'Right Final', x: 520, y: 660 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 300, y: 790, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 520, y: 790, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'left-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'right-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'cruise', to: 'gated-cruise', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.5, from: 'gate', to: 'gated-cruise', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'gated-cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'gated-cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'left-detect', to: 'left-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.24, from: 'left-detect', to: 'right-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', labelT: 0.68, from: 'right-detect', to: 'right-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', labelT: 0.24, from: 'right-detect', to: 'left-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'bumper', to: 'escape-latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c14', labelT: 0.26, from: 'escape-latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c15', labelT: 0.5, from: 'delay', to: 'escape-latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+      { id: 'c16', from: 'escape-latch', to: 'escape-active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c18', from: 'left-mix', to: 'left-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c19', labelT: 0.5, from: 'esc-gate', to: 'left-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c20', from: 'right-mix', to: 'right-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c21', labelT: 0.5, from: 'esc-gate', to: 'right-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c22', from: 'left-gated', to: 'left-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c23', from: 'right-gated', to: 'right-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c24', from: 'escape-active', to: 'left-final', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c25', from: 'escape-active', to: 'right-final', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c26', from: 'left-final', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c27', from: 'right-final', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Draw one wire: Escape Active into the Lower Gate. Then pulse the Bumper (▶) and watch both wheels snap into reverse for about a second."
+/>
+
+Notice what makes escape the top layer. It isn't a bigger number; its reverse wires are −0.5, the same magnitude avoid uses. Escape wins because its gate sits *above* avoid's: the Lower Gate shuts off the whole cruise-plus-avoid machine, while the Cruise Gate only reaches cruise. Priority is the gate hierarchy, not the weights.
+
+### When layers collide
+
+Two scenarios, and the gates settle both without a referee.
+
+**Bump while avoiding a wall.** The bumper is pressed and Left Distance reads 80 at the same time. The wall shuts the Cruise Gate, so cruise is already gone. The bump fires Escape Active, which shuts the Lower Gate, so the entire left-mix / right-mix output (cruise *and* avoid) is multiplied by 0. All that reaches the wheels is escape's reverse: both Final sums get −50. The robot backs straight out, and avoid's turn is held off until escape expires.
+
+**Escape ends, wall still there.** About a second after the bump, the latch decays below 10, Escape Active drops to 0, and the Lower Gate reopens. Left Distance still reads 80, so the Cruise Gate is still shut and avoid is still turning. The robot resumes its pivot with no gap and no handoff protocol. Each gate just watches its own input and opens or shuts.
+
+:::note[Why a gate, not a bigger number]
+
+An earlier instinct might be to make escape "win" by giving it a huge weight that overpowers the others at a summation. That doesn't work: weights clamp to −1…1, so a single connection can't outshout two others stacked against it, and even if it could, the loser is still adding noise to the sum. A gate is cleaner. It removes the lower layer from the arithmetic entirely, so there's nothing to overpower. Suppression by subtraction is a tug-of-war; suppression by gating is a switch.
+
+:::
+
+## Puzzle 3: Your diagram got unwieldy
+
+Look back at what you just wired: twenty nodes, and the *idea*, three layers in a pecking order, is nowhere on the canvas. You have to squint to see the architecture through the plumbing. But you already know the clusters have names. Four nodes on the left are "escape." Name them, and that whole corner becomes one box.
+
+That's what a **compound** is: a cluster of nodes collapsed into a single box with named input and output ports. The internal wiring still exists, but from the outside it's a single part with a clean interface. Below, the escape latch has been boxed into an **Escape** compound with one output port, **Suppress**, that carries its Escape Active signal. Everything else is exactly the machine you just built, except Escape's Suppress port connects to nothing.
+
+Wire **Suppress** into the **Lower Gate** (to shut the lower layers) and into both **Final** sums at −0.5 (to drive the reverse). Then let the goal tests prove the boxed machine is the same animal.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'bumper': 0, 'left-ir': 0, 'right-ir': 0 }}
+  goal={{
+    title: 'Same machine, one named box. Wire Escape into the mix and prove nothing changed.',
+    tests: [
+      {
+        label: 'wall on the left pivots it right',
+        phases: [{ inputs: { 'left-ir': 80, 'right-ir': 0, bumper: 0 }, ticks: 5 }],
+        expect: [
+          { node: 'right-motor', op: 'lte', value: -40 },
+          { node: 'left-motor', op: 'gte', value: 40 },
+        ],
+      },
+      {
+        label: 'a bump reverses both wheels',
+        phases: [
+          { inputs: { bumper: 100, 'left-ir': 0, 'right-ir': 0 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 10 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'lte', value: -40 },
+          { node: 'right-motor', op: 'lte', value: -40 },
+        ],
+      },
+      {
+        label: 'the escape expires and cruise resumes',
+        phases: [
+          { inputs: { bumper: 100 }, ticks: 5 },
+          { inputs: { bumper: 0 }, ticks: 150 },
+        ],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    loopPeriodMs: 20,
+    compoundTypes: [
+      {
+        id: 'escape-behavior',
+        displayName: 'Escape',
+        body: {
+          nodes: [
+            { id: 'in-bumper', type: 'compound-input', label: 'Bumper', x: 100, y: 20 },
+            { id: 'latch', type: 'compute-summation', label: 'Latch', x: 100, y: 150 },
+            { id: 'delay', type: 'compute-delay', label: 'Delay', x: 280, y: 150, delayMs: 20 },
+            { id: 'active', type: 'compute-threshold', label: 'Active', x: 100, y: 280, threshold: 10 },
+            { id: 'out-suppress', type: 'compound-output', label: 'Suppress', x: 100, y: 410 },
+          ],
+          connections: [
+            { id: 'e1', from: 'in-bumper', to: 'latch', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e2', from: 'latch', to: 'delay', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e3', from: 'delay', to: 'latch', weight: 0.95, transferMode: 'linear', transferPoints: [] },
+            { id: 'e4', from: 'latch', to: 'active', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'e5', from: 'active', to: 'out-suppress', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'bumper', type: 'sensor-digital', label: 'Bumper', x: 10, y: 10, arduinoPort: '2', pullup: true },
+      { id: 'left-ir', type: 'sensor-tof', label: 'Left Distance', x: 380, y: 10, xshutPin: '8' },
+      { id: 'right-ir', type: 'sensor-tof', label: 'Right Distance', x: 600, y: 10, xshutPin: '12' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 820, y: 10, constantValue: 50 },
+      { id: 'escape', type: 'compound', label: 'Escape', x: 10, y: 150, compoundTypeId: 'escape-behavior' },
+      { id: 'left-detect', type: 'compute-threshold', label: 'Left Detect', x: 380, y: 150, threshold: 60 },
+      { id: 'right-detect', type: 'compute-threshold', label: 'Right Detect', x: 600, y: 150, threshold: 60 },
+      { id: 'gate', type: 'compute-threshold', label: 'Cruise Gate', x: 490, y: 290, threshold: 50, thresholdOp: '<' },
+      { id: 'gated-cruise', type: 'compute-multiply', label: 'Gated Cruise', x: 690, y: 290 },
+      { id: 'esc-gate', type: 'compute-threshold', label: 'Lower Gate', x: 40, y: 420, threshold: 50, thresholdOp: '<' },
+      { id: 'left-mix', type: 'compute-summation', label: 'Left Mix', x: 300, y: 420 },
+      { id: 'right-mix', type: 'compute-summation', label: 'Right Mix', x: 520, y: 420 },
+      { id: 'left-gated', type: 'compute-multiply', label: 'Left Gated', x: 300, y: 550 },
+      { id: 'right-gated', type: 'compute-multiply', label: 'Right Gated', x: 520, y: 550 },
+      { id: 'left-final', type: 'compute-summation', label: 'Left Final', x: 300, y: 680 },
+      { id: 'right-final', type: 'compute-summation', label: 'Right Final', x: 520, y: 680 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 300, y: 810, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 520, y: 810, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'left-ir', to: 'left-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'right-ir', to: 'right-detect', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'left-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'right-detect', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'cruise', to: 'gated-cruise', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.5, from: 'gate', to: 'gated-cruise', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'gated-cruise', to: 'left-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'gated-cruise', to: 'right-mix', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'left-detect', to: 'left-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.24, from: 'left-detect', to: 'right-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', labelT: 0.7, from: 'right-detect', to: 'right-mix', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', labelT: 0.24, from: 'right-detect', to: 'left-mix', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'bumper', to: 'escape', toPort: 'in-bumper', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c18', from: 'left-mix', to: 'left-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c19', labelT: 0.5, from: 'esc-gate', to: 'left-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c20', from: 'right-mix', to: 'right-gated', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c21', labelT: 0.5, from: 'esc-gate', to: 'right-gated', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c22', from: 'left-gated', to: 'left-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c23', from: 'right-gated', to: 'right-final', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c26', from: 'left-final', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c27', from: 'right-final', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag three wires from Escape's Suppress port: one to the Lower Gate, and one to each Final sum at −0.5."
+/>
+
+The tests are the same ones you passed in Puzzles 1 and 2. That's the point: boxing a behavior changes nothing about the machine. Compounds are purely an organizational tool, a way to see the architecture instead of the plumbing.
+
+The bigger payoff is **reuse**, and it comes from the same box-up move you just did to Escape, applied to a smaller cluster.
+
+Remember the dead-zone-plus-threshold trick from [3. Don't](./obstacle-avoidance): a curve that ignores noise near zero, feeding a threshold that fires a clean detection. That's two nodes you'd otherwise rewire in front of *every* sensor. So box them up: select the summation and the threshold, collapse them into a compound with one input port (the raw reading) and one output port (the clean detection), and call it **Calibrated Sensor**. Now it's one part with a clean interface, exactly like Escape: double-click any instance to open the box and you'll find those same two nodes inside.
+
+And because every source in BraitenBot emits the same 0–100 signal, that one box doesn't care what hardware feeds it. Here it is stamped out four times across two completely different sensor types:
+
+<InteractiveDiagram
+  initialInputs={{ 'tof-l': 55, 'tof-r': 8, 'photo-l': 40, 'photo-r': 5 }}
+  diagram={{
+    compoundTypes: [
+      {
+        id: 'calibrated-sensor',
+        displayName: 'Calibrated Sensor',
+        body: {
+          nodes: [
+            { id: 'in-port', type: 'compound-input', label: 'In', x: 60, y: 20 },
+            { id: 'in-sum', type: 'compute-summation', label: 'In', x: 60, y: 140 },
+            { id: 'detected', type: 'compute-threshold', label: 'Detected', x: 60, y: 260, threshold: 30 },
+            { id: 'out-port', type: 'compound-output', label: 'Detected', x: 60, y: 380 },
+          ],
+          connections: [
+            { id: 'b1', from: 'in-port', to: 'in-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'b2', from: 'in-sum', to: 'detected', weight: 1.0, transferMode: 'nonlinear', transferPoints: [{ x: -100, y: 0 }, { x: 15, y: 0 }, { x: 100, y: 100 }] },
+            { id: 'b3', from: 'detected', to: 'out-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'tof-l', type: 'sensor-tof', label: 'Left Obstacle', x: 20, y: 20, xshutPin: '8' },
+      { id: 'tof-r', type: 'sensor-tof', label: 'Right Obstacle', x: 200, y: 20, xshutPin: '12' },
+      { id: 'photo-l', type: 'sensor-analog', label: 'Left Light', x: 380, y: 20, arduinoPort: 'A0' },
+      { id: 'photo-r', type: 'sensor-analog', label: 'Right Light', x: 560, y: 20, arduinoPort: 'A1' },
+      { id: 'cal-1', type: 'compound', label: 'Calibrated', x: 20, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-2', type: 'compound', label: 'Calibrated', x: 200, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-3', type: 'compound', label: 'Calibrated', x: 380, y: 200, compoundTypeId: 'calibrated-sensor' },
+      { id: 'cal-4', type: 'compound', label: 'Calibrated', x: 560, y: 200, compoundTypeId: 'calibrated-sensor' },
+    ],
+    connections: [
+      { id: 'c1', from: 'tof-l', to: 'cal-1', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'tof-r', to: 'cal-2', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'photo-l', to: 'cal-3', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'photo-r', to: 'cal-4', toPort: 'in-port', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="One 'Calibrated Sensor' compound, four instances, reused across two different sensor types. The left ToF is above threshold, so its calibrated output reads 100."
+/>
+
+Two of the instances are cleaning up laser-distance data and two are cleaning up photocell data, but the compound neither knows nor cares. Adjust the threshold once inside the shared body and all four update.
+
+:::note[Intelligence without a boss]
+
+No part of this robot is "in charge." No layer knows the others exist. Priority isn't a decision anyone makes; it falls out of which gate sits above which, the way a master switch cuts a whole circuit regardless of what that circuit was doing. The competent-looking whole has no center.
+
+This is the idea Rodney Brooks built behavior-based robotics on in the 1980s: **intelligence without representation**. Skip the central model of the world and the planner that reasons over it. Layer many simple sensor-to-motor behaviors and let higher layers gate lower ones off when they need control. It works unnervingly well, and it raises a question that won't quite go away: if a robot can be this competent with nobody home, how sure are you that *you* have a boss inside, rather than a very good committee?
+
+:::
+
+## What you've learned
+
+You stacked three independent behaviors, cruise, avoid, and escape, into a robot that navigates, dodges, and recovers, with no controller anywhere in it. Priority is nothing but a hierarchy of gates: a wall shuts the Cruise Gate, a bump shuts the Lower Gate over everything below it, and when the gates reopen the quieter layers flow back in on their own. Then you named a cluster, and part of the machine became a single legible box without changing the robot at all.
+
+### Questions to sit with
+
+- Nothing in this robot chooses between behaviors, yet it reliably does the "right" one. Does arbitration require an arbiter, or just a switch in the right place?
+- Watching the finished robot dodge, reverse, and resume, you'll instinctively narrate one continuous agent. But it's three deaf modules and a couple of gates. Which is the illusion, the unified agent or the separateness of the parts?
+- Your compound vanishes at upload; the robot runs as one flat mesh. If the modular structure isn't in the machine, is it "really there," or only in your understanding of it?
+
+## What's next
+
+[7. Say What You Mean](./say-what-you-mean) is a short optional coda on naming, compounds, and comments: making diagrams like this one readable by someone who isn't you.
+
+Have the kit? [12. Field Test: Let It Loose](../on-the-robot/field-test) puts this exact three-layer architecture on the real robot. A room with furniture is the only benchmark that matters.

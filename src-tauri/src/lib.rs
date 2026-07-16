@@ -36,6 +36,10 @@ pub fn run() {
                 Some("CmdOrCtrl+O"),
             )?;
 
+            // On macOS "Settings…" stays in the app menu (below) per platform
+            // convention. Windows/Linux reach settings through the in-app gear
+            // button instead, so it's no longer added to the File menu here.
+            #[cfg(target_os = "macos")]
             let settings_item = MenuItem::with_id(
                 app_handle,
                 "app_settings",
@@ -44,19 +48,31 @@ pub fn run() {
                 Some("CmdOrCtrl+,"),
             )?;
 
-            // On macOS "Settings…" lives in the app menu (below); everywhere
-            // else there's no app menu, so it goes under File.
-            #[allow(unused_mut)]
-            let mut file_builder = SubmenuBuilder::new(app_handle, "File")
+            let file_menu = SubmenuBuilder::new(app_handle, "File")
                 .item(&new_item)
                 .separator()
                 .item(&save_item)
-                .item(&load_item);
-            #[cfg(not(target_os = "macos"))]
-            {
-                file_builder = file_builder.separator().item(&settings_item);
-            }
-            let file_menu = file_builder.build()?;
+                .item(&load_item)
+                .build()?;
+
+            let view_home_item = MenuItem::with_id(
+                app_handle,
+                "view_home",
+                "Go to Main View",
+                true,
+                Some("CmdOrCtrl+0"),
+            )?;
+            let view_check_item = MenuItem::with_id(
+                app_handle,
+                "view_check",
+                "Check for Errors / Warnings",
+                true,
+                None::<&str>,
+            )?;
+            let view_menu = SubmenuBuilder::new(app_handle, "View")
+                .item(&view_home_item)
+                .item(&view_check_item)
+                .build()?;
 
             let test_sketch_item = MenuItem::with_id(
                 app_handle,
@@ -90,7 +106,11 @@ pub fn run() {
             {
                 builder = builder.item(&app_menu);
             }
-            builder.item(&file_menu).item(&hardware_menu).build()
+            builder
+                .item(&file_menu)
+                .item(&view_menu)
+                .item(&hardware_menu)
+                .build()
         })
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
             "diagram_new" => {
@@ -101,6 +121,12 @@ pub fn run() {
             }
             "diagram_load" => {
                 let _ = app_handle.emit("menu://load", ());
+            }
+            "view_home" => {
+                let _ = app_handle.emit("menu://view-reset", ());
+            }
+            "view_check" => {
+                let _ = app_handle.emit("menu://view-check", ());
             }
             "hardware_test" => {
                 let _ = app_handle.emit("menu://upload-test-sketch", ());
@@ -118,12 +144,15 @@ pub fn run() {
             arduino::cancel_upload,
             arduino::start_serial_monitor,
             arduino::stop_serial_monitor,
+            arduino::write_serial,
             arduino::check_avr_core,
             arduino::install_avr_core,
             arduino::check_driver_issue,
             arduino::install_drivers,
             diagram_io::save_diagram,
             diagram_io::load_diagram,
+            diagram_io::read_diagram,
+            diagram_io::paths_exist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

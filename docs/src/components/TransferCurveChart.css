@@ -8,6 +8,12 @@
   border: 1px solid #33342b;
   border-radius: 6px;
   padding: 0.5rem 0.25rem 0 0.25rem;
+  /* Square, like the in-app transfer-curve editor (~230×220). The wrapper is
+     capped at `maxWidth` (set inline) and stays square on narrower screens. */
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .tc-caption {

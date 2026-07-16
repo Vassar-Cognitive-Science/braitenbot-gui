@@ -13,10 +13,12 @@ import { formatTraceValue } from '../hooks/useTraceSimulation';
 import { DiagramNodeView } from './DiagramNodeView';
 import { ConnectionLayer } from './ConnectionLayer';
 import {
+  NODE_W,
   computeConnectionPaths,
   makePath,
   nearestTOnCurve,
   nodeRenderHeight,
+  occludedSpans,
   portOffsetX,
 } from './connectionGeometry';
 
@@ -64,8 +66,11 @@ export interface DiagramCanvasProps {
   traceResult?: {
     nodeValues: Record<string, number>;
     edgeSignals: Record<string, number>;
+    edgeInputs: Record<string, number>;
     disconnected: Set<string>;
   };
+  /** Show the full `input × weight = output` calc on trace badges. */
+  advancedWeightViz?: boolean;
   /** Sensor slider/toggle inputs, keyed nodeId or `${id}:${channel}`. */
   sensorValues: Record<string, number>;
   setSensorValue: (key: string, value: number) => void;
@@ -106,6 +111,10 @@ export interface DiagramCanvasProps {
   onConnectionLabelT?: (id: string, labelT: number) => void;
   /** Double-click a compound instance to enter its body. */
   onEnterCompound?: (compoundTypeId: string) => void;
+  /** Rename a node (double-click its label). Omit to disable inline rename. */
+  onRenameNode?: (id: string, label: string) => void;
+  /** Right-click a node — the host opens its context menu at the given point. */
+  onNodeContextMenu?: (id: string, clientX: number, clientY: number) => void;
   /** A link draft started (true) or ended (false) — app toggles `.linking` chrome. */
   onLinkDraftChange?: (active: boolean) => void;
 
@@ -129,6 +138,7 @@ export function DiagramCanvas({
   clientToLayer,
   traceMode,
   traceResult,
+  advancedWeightViz,
   sensorValues,
   setSensorValue,
   setConstantValue,
@@ -147,6 +157,8 @@ export function DiagramCanvas({
   onConnectionRejected,
   onConnectionLabelT,
   onEnterCompound,
+  onRenameNode,
+  onNodeContextMenu,
   onLinkDraftChange,
   remoteHighlight = EMPTY_HIGHLIGHT,
   onPointerWorldMove,
@@ -172,6 +184,7 @@ export function DiagramCanvas({
     connections,
     compoundTypes,
     blockScale,
+    selectedNodeIds,
     clientToWorld,
     clientToLayer,
     nodeWorldPos,
@@ -190,6 +203,7 @@ export function DiagramCanvas({
     connections,
     compoundTypes,
     blockScale,
+    selectedNodeIds,
     clientToWorld,
     clientToLayer,
     nodeWorldPos,
@@ -210,6 +224,9 @@ export function DiagramCanvas({
   // Set true when a badge drag crosses the threshold, so the trailing click on
   // pointer-up doesn't also open the connection config.
   const badgeClickSuppressRef = useRef(false);
+  // Set true when a multi-node drag actually moves, so the trailing click on
+  // the grabbed node doesn't collapse the selection down to just that node.
+  const nodeClickSuppressRef = useRef(false);
 
   // ── node dragging ───────────────────────────────────────────────────────
 
@@ -220,11 +237,22 @@ export function DiagramCanvas({
     if (!s0.onNodeMove || !s0.clientToWorld) return;
     const node = s0.nodeMap[nodeId];
     if (!node) return;
-    // Grab offset within the node, in world coords: clientToWorld is affine,
-    // so `world − offset` tracks the cursor exactly under any pan/zoom/scale.
+    // If the grabbed node is part of a multi-node selection, drag the whole
+    // selection together; otherwise just the grabbed node. Wheel nodes are
+    // anchored and never move. Positions are captured at grab time and the
+    // world-space drag delta is applied to each, so they keep their layout.
+    const moveIds = s0.selectedNodeIds.has(nodeId) && s0.selectedNodeIds.size > 1
+      ? [...s0.selectedNodeIds]
+      : [nodeId];
+    const movers: { id: string; x0: number; y0: number }[] = [];
+    for (const id of moveIds) {
+      if (isWheelNode(id)) continue;
+      const n = s0.nodeMap[id];
+      if (n) movers.push({ id, x0: n.x, y0: n.y });
+    }
+    // Grab point in world coords: clientToWorld is affine, so the delta from
+    // here tracks the cursor exactly under any pan/zoom/scale.
     const grab = s0.clientToWorld(event.clientX, event.clientY);
-    const offsetX = grab.x - node.x;
-    const offsetY = grab.y - node.y;
     let started = false;
     const move = (e: globalThis.MouseEvent) => {
       const s = stateRef.current;
@@ -235,8 +263,13 @@ export function DiagramCanvas({
       if (!started) {
         started = true;
         s.onNodeDragStart?.(nodeId);
+        // Swallow the click that follows a multi-node drag so it doesn't
+        // reset the selection to just the grabbed node.
+        if (movers.length > 1) nodeClickSuppressRef.current = true;
       }
-      s.onNodeMove?.(nodeId, world.x - offsetX, world.y - offsetY);
+      const dx = world.x - grab.x;
+      const dy = world.y - grab.y;
+      for (const m of movers) s.onNodeMove?.(m.id, m.x0 + dx, m.y0 + dy);
       s.onPointerWorldMove?.(world, nodeId);
     };
     const up = () => {
@@ -385,6 +418,46 @@ export function DiagramCanvas({
     [connections, nodeMap, nodeWorldPos, compoundTypes, blockScale, traceMode],
   );
 
+  // Emphasize the wires touching a selected node so they're easy to trace.
+  const emphasizedConnectionIds = useMemo(() => {
+    if (selectedNodeIds.size === 0) return null;
+    const ids = new Set<string>();
+    for (const c of connections) {
+      if (selectedNodeIds.has(c.from) || selectedNodeIds.has(c.to)) ids.add(c.id);
+    }
+    return ids;
+  }, [connections, selectedNodeIds]);
+
+  // A wire passing behind an opaque node box is invisible; compute the hidden
+  // spans so ConnectionLayer can redraw them dashed on top of the nodes.
+  const occludedPaths = useMemo(() => {
+    if (connections.length === 0) return [];
+    // Node boxes in canvas space, computed once per rebuild. Carries the id so
+    // each connection can skip its own endpoints without a keyed lookup.
+    const rects = Object.values(nodeMap).map((n) => {
+      const w = nodeWorldPos(n);
+      return { id: n.id, x: w.x, y: w.y, w: NODE_W * blockScale, h: nodeRenderHeight(n, traceMode) * blockScale };
+    });
+    // O(1) datum lookup instead of a per-connection linear scan (was O(C²)).
+    const pathById = new Map(connectionPaths.map((p) => [p.id, p]));
+    const out: Array<{ id: string; d: string }> = [];
+    // Reused across connections so the endpoint filter doesn't allocate a fresh
+    // array (plus the Object.entries/filter/map churn) every frame of a drag.
+    const others: typeof rects = [];
+    for (const conn of connections) {
+      const datum = pathById.get(conn.id);
+      if (!datum) continue;
+      others.length = 0;
+      for (const r of rects) {
+        if (r.id !== conn.from && r.id !== conn.to) others.push(r);
+      }
+      for (const d of occludedSpans(datum.x1, datum.y1, datum.x2, datum.y2, others)) {
+        out.push({ id: conn.id, d });
+      }
+    }
+    return out;
+  }, [connections, connectionPaths, nodeMap, nodeWorldPos, blockScale, traceMode]);
+
   const draftSrc = linkDraft ? nodeMap[linkDraft.id] : undefined;
 
   return (
@@ -392,7 +465,11 @@ export function DiagramCanvas({
       <ConnectionLayer
         paths={connectionPaths}
         edgeSignals={traceMode ? traceResult?.edgeSignals : undefined}
+        edgeInputs={traceMode ? traceResult?.edgeInputs : undefined}
+        advancedWeightViz={advancedWeightViz}
         selectedConnectionId={selectedConnectionId}
+        emphasizedConnectionIds={emphasizedConnectionIds}
+        occludedPaths={occludedPaths}
         remoteHighlight={remoteHighlight}
         draggingBadgeId={draggingBadgeId}
         onBadgePointerDown={onConnectionLabelT ? beginBadgeDrag : undefined}
@@ -482,9 +559,12 @@ export function DiagramCanvas({
             isPulsing={pulsingId === node.id}
             pulseDurationMs={pulseDurationMs}
             beginNodeDrag={beginNodeDrag}
+            clickSuppressRef={nodeClickSuppressRef}
             beginLinkDrag={beginLinkDrag}
             completeLink={completeLink}
             enterCompound={onEnterCompound ?? NOOP_ENTER}
+            onRename={onRenameNode}
+            onContextMenu={onNodeContextMenu}
             pulseSensor={pulseSensor}
             setSelectedNodeIds={setSelectedNodeIds}
             setConfigTarget={setConfigTarget}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface SerialMonitorProps {
   /** Port the monitor is bound to, shown in the header (e.g. /dev/ttyACM0). */
@@ -12,6 +12,8 @@ interface SerialMonitorProps {
   onReconnect: () => void;
   /** Stop the monitor and hide the panel. */
   onClose: () => void;
+  /** Send a line to the board over serial (e.g. a test-sketch command). */
+  onSend: (text: string) => void;
 }
 
 /**
@@ -27,10 +29,19 @@ export function SerialMonitor({
   onClear,
   onReconnect,
   onClose,
+  onSend,
 }: SerialMonitorProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Whether the view is pinned to the bottom (true until the user scrolls up).
   const stickRef = useRef(true);
+  const [input, setInput] = useState('');
+
+  const submitInput = () => {
+    const text = input.trim();
+    if (!text) return;
+    onSend(text);
+    setInput('');
+  };
 
   const handleScroll = () => {
     const el = scrollRef.current;
@@ -117,6 +128,31 @@ export function SerialMonitor({
           ))
         )}
       </div>
+      <form
+        className="serial-monitor-send"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitInput();
+        }}
+      >
+        <input
+          type="text"
+          className="serial-monitor-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={running ? 'Send to board (e.g. 5, n, p)…' : 'Reconnect to send'}
+          disabled={!running}
+          aria-label="Send serial command"
+        />
+        <button
+          type="submit"
+          className="toolbar-btn toolbar-secondary"
+          disabled={!running || input.trim().length === 0}
+          title="Send this line to the board"
+        >
+          Send
+        </button>
+      </form>
     </div>
   );
 }

@@ -31,6 +31,16 @@ type RustUploadResult = {
 
 export type UploadStatus = 'idle' | 'compiling' | 'uploading' | 'success' | 'error';
 
+/**
+ * Fine-grained compile/upload progress from the Rust backend. `percent` is null
+ * when the underlying tool reports no percentage (compiling, or an uploader that
+ * prints no progress bar) — the UI shows an indeterminate bar then.
+ */
+export interface UploadProgress {
+  phase: 'compile' | 'upload';
+  percent: number | null;
+}
+
 export type CoreInstallStatus = 'idle' | 'checking' | 'installing' | 'success' | 'error';
 
 /**
@@ -49,7 +59,7 @@ export type DriverInstallStatus = 'idle' | 'installing' | 'error';
  * Hook for driving arduino-cli through the Tauri backend. Handles board
  * detection and the compile-then-upload flow.
  */
-export function useArduino() {
+export function useArduino(autoSelectIdentifiedBoard: boolean) {
   const tauriAvailable = isTauri();
   const [cliAvailable, setCliAvailable] = useState<boolean>(false);
   const [cliVersion, setCliVersion] = useState<string | null>(null);
@@ -57,6 +67,7 @@ export function useArduino() {
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<BoardInfo | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [lastResult, setLastResult] = useState<UploadResult | null>(null);
   const [coreInstalled, setCoreInstalled] = useState<boolean | null>(null);
   const [coreInstallStatus, setCoreInstallStatus] = useState<CoreInstallStatus>('idle');
@@ -96,13 +107,20 @@ export function useArduino() {
     try {
       const detected = await invoke<BoardInfo[]>('list_boards');
       setBoards(detected);
-      // Keep the user's selection if its port is still present; otherwise
-      // auto-select the first board with a known FQBN.
       setSelectedBoard((current) => {
-        if (current && detected.some((b) => b.port === current.port)) {
-          return current;
+        const stillPresent = current != null && detected.some((b) => b.port === current.port);
+        const firstIdentified = detected.find((b) => b.fqbn) ?? null;
+        if (stillPresent) {
+          // Auto-swap: if the current selection is an unidentified port (no
+          // FQBN) and an identified board is now available, prefer it. Gated by
+          // the personal preference; when off, a present selection is kept.
+          if (autoSelectIdentifiedBoard && !current!.fqbn && firstIdentified) {
+            return firstIdentified;
+          }
+          return current!;
         }
-        return detected.find((b) => b.fqbn) ?? detected[0] ?? null;
+        // Selection gone (or none yet): prefer an identified board, else first.
+        return firstIdentified ?? detected[0] ?? null;
       });
     } catch (err) {
       setCliError(typeof err === 'string' ? err : String(err));
@@ -110,7 +128,7 @@ export function useArduino() {
       setBoards([]);
       setSelectedBoard(null);
     }
-  }, [tauriAvailable]);
+  }, [tauriAvailable, autoSelectIdentifiedBoard]);
 
   // Shared compile→upload runner: drives uploadStatus/lastResult around any
   // Rust upload command (generated diagram or the bundled test sketch).
@@ -134,6 +152,7 @@ export function useArduino() {
       };
 
       setUploadStatus('compiling');
+      setUploadProgress(null);
       try {
         const rustResult = await invoke<RustUploadResult>(command, args);
         if (cancelledRef.current) {
@@ -356,6 +375,23 @@ export function useArduino() {
     };
   }, [tauriAvailable]);
 
+  // Reflect fine-grained compile/upload progress emitted by the Rust backend.
+  useEffect(() => {
+    if (!tauriAvailable) return;
+    let active = true;
+    let unlisten: UnlistenFn | null = null;
+    listen<UploadProgress>('arduino-upload-progress', (event) => {
+      setUploadProgress(event.payload);
+    }).then((fn) => {
+      if (active) unlisten = fn;
+      else fn();
+    });
+    return () => {
+      active = false;
+      if (unlisten) unlisten();
+    };
+  }, [tauriAvailable]);
+
   // Clear any pending idle-reset timer on unmount.
   useEffect(
     () => () => {
@@ -374,6 +410,7 @@ export function useArduino() {
     setSelectedBoard,
     refreshBoards,
     uploadStatus,
+    uploadProgress,
     lastResult,
     compileAndUpload,
     uploadTestSketch,

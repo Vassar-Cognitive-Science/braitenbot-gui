@@ -13,6 +13,10 @@ const INSTALL_LOG_EVENT: &str = "arduino-install-log";
 /// the phase string (currently only `"uploading"`).
 const UPLOAD_PHASE_EVENT: &str = "arduino-upload-phase";
 
+/// Event name used to stream fine-grained compile/upload progress. Payload is
+/// an [`UploadProgress`] (phase + optional percent).
+const UPLOAD_PROGRESS_EVENT: &str = "arduino-upload-progress";
+
 /// Event name used to stream a line of serial-monitor output to the frontend.
 /// Payload is the raw text chunk (typically one line).
 const SERIAL_MONITOR_LINE_EVENT: &str = "serial-monitor-line";
@@ -78,6 +82,42 @@ pub struct UploadResult {
     pub upload_output: String,
 }
 
+/// A progress update for the compile/upload flow. `percent` is `None` when the
+/// underlying tool doesn't report a percentage (compiling, or an uploader that
+/// prints no progress bar) — the UI shows an indeterminate bar in that case.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UploadProgress {
+    phase: String,
+    percent: Option<f32>,
+}
+
+/// Extracts the last `NN%` (or `NN.N%`) value from a chunk of tool output, if
+/// any. Turns avrdude/bossac progress bars into a numeric percentage; returns
+/// `None` for output with no percentage marker.
+fn parse_percent(text: &str) -> Option<f32> {
+    let bytes = text.as_bytes();
+    let mut found = None;
+    for (i, &b) in bytes.iter().enumerate() {
+        if b != b'%' {
+            continue;
+        }
+        // Walk back over the run of digits/decimal point immediately before '%'.
+        let mut j = i;
+        while j > 0 && (bytes[j - 1].is_ascii_digit() || bytes[j - 1] == b'.') {
+            j -= 1;
+        }
+        if j < i {
+            if let Ok(v) = text[j..i].parse::<f32>() {
+                if (0.0..=100.0).contains(&v) {
+                    found = Some(v); // keep the last one in the chunk
+                }
+            }
+        }
+    }
+    found
+}
+
 /// Runs the bundled arduino-cli sidecar with the given arguments.
 /// Returns (stdout, stderr, success).
 async fn run_sidecar(app: &AppHandle, args: &[&str]) -> ArduinoResult<(String, String, bool)> {
@@ -108,6 +148,7 @@ async fn run_sidecar_cancellable(
     app: &AppHandle,
     state: &ArduinoState,
     args: &[&str],
+    progress_phase: Option<&str>,
 ) -> ArduinoResult<(String, String, bool)> {
     let (mut rx, child) = app
         .shell()
@@ -124,6 +165,22 @@ async fn run_sidecar_cancellable(
         *guard = Some(child);
     }
 
+    // As output streams in, opportunistically surface any `NN%` markers (avrdude
+    // / bossac progress) as progress events for the given phase.
+    let emit_progress = |chunk: &str| {
+        if let Some(phase) = progress_phase {
+            if let Some(percent) = parse_percent(chunk) {
+                let _ = app.emit(
+                    UPLOAD_PROGRESS_EVENT,
+                    UploadProgress {
+                        phase: phase.to_string(),
+                        percent: Some(percent),
+                    },
+                );
+            }
+        }
+    };
+
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut success = false;
@@ -132,10 +189,14 @@ async fn run_sidecar_cancellable(
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) => {
-                stdout.push_str(&String::from_utf8_lossy(&line));
+                let chunk = String::from_utf8_lossy(&line);
+                emit_progress(&chunk);
+                stdout.push_str(&chunk);
             }
             CommandEvent::Stderr(line) => {
-                stderr.push_str(&String::from_utf8_lossy(&line));
+                let chunk = String::from_utf8_lossy(&line);
+                emit_progress(&chunk);
+                stderr.push_str(&chunk);
             }
             CommandEvent::Error(err) => {
                 let _ = state.upload_child.lock().unwrap().take();
@@ -245,9 +306,20 @@ async fn build_and_flash(
     fqbn: &str,
     port: &str,
 ) -> ArduinoResult<UploadResult> {
+    // Kick off with an indeterminate compile bar; it fills in if the tool
+    // reports percentages.
+    let _ = app.emit(
+        UPLOAD_PROGRESS_EVENT,
+        UploadProgress {
+            phase: "compile".to_string(),
+            percent: None,
+        },
+    );
+
     // Step 1: compile
     let (compile_stdout, compile_stderr, compile_ok) =
-        run_sidecar_cancellable(app, state, &["compile", "--fqbn", fqbn, sketch_dir]).await?;
+        run_sidecar_cancellable(app, state, &["compile", "--fqbn", fqbn, sketch_dir], Some("compile"))
+            .await?;
     let compile_output = format!("{}{}", compile_stdout, compile_stderr);
     if !compile_ok {
         return Ok(UploadResult {
@@ -260,11 +332,24 @@ async fn build_and_flash(
     // Signal the frontend that we've moved from compile → upload so the UI can
     // show accurate phase feedback (upload can take minutes on UNO R4).
     let _ = app.emit(UPLOAD_PHASE_EVENT, "uploading");
+    let _ = app.emit(
+        UPLOAD_PROGRESS_EVENT,
+        UploadProgress {
+            phase: "upload".to_string(),
+            percent: None,
+        },
+    );
 
-    // Step 2: upload
-    let (upload_stdout, upload_stderr, upload_ok) =
-        run_sidecar_cancellable(app, state, &["upload", "-p", port, "--fqbn", fqbn, sketch_dir])
-            .await?;
+    // Step 2: upload. `-v` asks arduino-cli (and avrdude/bossac beneath it) to
+    // print the progress bar we parse percentages from; without a percentage the
+    // UI just shows an indeterminate upload bar.
+    let (upload_stdout, upload_stderr, upload_ok) = run_sidecar_cancellable(
+        app,
+        state,
+        &["upload", "-v", "-p", port, "--fqbn", fqbn, sketch_dir],
+        Some("upload"),
+    )
+    .await?;
     let upload_output = format!("{}{}", upload_stdout, upload_stderr);
 
     Ok(UploadResult {
@@ -429,6 +514,23 @@ pub async fn start_serial_monitor(
 #[tauri::command]
 pub fn stop_serial_monitor(state: State<'_, ArduinoState>) -> ArduinoResult<()> {
     kill_monitor_child(state.inner())
+}
+
+/// Sends text to the board over the open serial monitor. `arduino-cli monitor`
+/// forwards its stdin to the serial port, so writing to the child's stdin
+/// transmits to the board. The caller includes any line terminator it wants.
+/// Fails if no monitor is currently open (nothing holds the port to write to).
+#[tauri::command]
+pub fn write_serial(state: State<'_, ArduinoState>, data: String) -> ArduinoResult<()> {
+    let mut guard = state.monitor_child.lock().unwrap();
+    match guard.as_mut() {
+        Some(child) => child
+            .write(data.as_bytes())
+            .map_err(|e| ArduinoError::CliFailed(e.to_string())),
+        None => Err(ArduinoError::CliFailed(
+            "Serial monitor is not open.".to_string(),
+        )),
+    }
 }
 
 /// Cores we require to cover the supported boards:

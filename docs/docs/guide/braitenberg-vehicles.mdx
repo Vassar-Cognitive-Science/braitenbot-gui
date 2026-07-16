@@ -7,7 +7,7 @@ title: Braitenberg Vehicles
 
 In 1984, the neuroscientist Valentino Braitenberg published *Vehicles: Experiments in Synthetic Psychology*, a slim book of thought experiments. His premise was deceptively simple: take a box on wheels, add a sensor and a motor, and wire them together. Then watch what happens.
 
-What happens is surprisingly lifelike behavior. A vehicle with two photoresistors and two motors — four components, two wires — can appear to "fear" light, "chase" it, or "fall in love" with it, depending entirely on which wire goes where. Braitenberg's point was that we instinctively attribute complex mental states to agents whose mechanisms are trivially simple. The vehicles are a lesson in how much behavior can emerge from very little structure.
+What happens is surprisingly lifelike behavior. A vehicle with two photoresistors and two motors (four components, two wires) can appear to "fear" light, "chase" it, or "fall in love" with it, depending entirely on which wire goes where. Braitenberg's point was that we instinctively attribute complex mental states to agents whose mechanisms are trivially simple. The vehicles are a lesson in how much behavior can emerge from very little structure.
 
 BraitenBot lets you build these vehicles for real, on physical hardware, and extend them far beyond Braitenberg's original designs.
 
@@ -15,95 +15,21 @@ BraitenBot lets you build these vehicles for real, on physical hardware, and ext
 
 A Braitenberg vehicle has:
 
-- **Sensors** on the front that detect something in the environment — light, distance, color
+- **Sensors** on the front that detect something in the environment: light, distance, color
 - **Motors** that drive wheels on the left and right sides
 - **Wires** connecting sensors to motors, each with a weight that amplifies or attenuates the signal
 
 No microcontroller logic, no if-statements, no planning. The vehicle's behavior emerges entirely from how the wires are arranged and weighted.
 
-import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+## The classic vehicles
 
-## Vehicle 2a: "Fear"
+Braitenberg named a few of these wiring patterns himself:
 
-Wire each sensor to the motor on the **same** side (ipsilateral):
+- **Vehicle 2a, "fear"**: each sensor wired to the motor on the same side (ipsilateral), positive weight.
+- **Vehicle 2b, "aggression"**: each sensor cross-wired to the opposite motor (contralateral), positive weight.
+- **Vehicle 3, "love"**: 2b's cross-wiring again, with negative weights over a Constant baseline.
 
-<InteractiveDiagram
-  initialInputs={{ 'ls-2a': 70, 'rs-2a': 20 }}
-  diagram={{
-    nodes: [
-      { id: 'ls-2a', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20, arduinoPort: 'A0' },
-      { id: 'rs-2a', type: 'sensor-analog', label: 'Right Sensor', x: 300, y: 20, arduinoPort: 'A1' },
-      { id: 'lm-2a', type: 'servo-cr', label: 'Left Motor', x: 60, y: 210, servoPin: '5' },
-      { id: 'rm-2a', type: 'servo-cr', label: 'Right Motor', x: 300, y: 210, servoPin: '6' },
-    ],
-    connections: [
-      { id: 'a1', from: 'ls-2a', to: 'lm-2a', weight: 1, transferMode: 'linear', transferPoints: [] },
-      { id: 'a2', from: 'rs-2a', to: 'rm-2a', weight: 1, transferMode: 'linear', transferPoints: [] },
-    ],
-  }}
-  caption="Vehicle 2a — same-side wiring. Drag the left slider up: the left motor speeds up, the nose swings right — away from the light."
-/>
-
-Place a flashlight to the left of this vehicle. The left sensor reads high, the left motor speeds up, and the vehicle veers **away** from the light. The stronger the stimulus, the faster it flees. If you didn't know it was two wires and two motors, you'd say it was afraid.
-
-On a real robot, this is useful for light-avoidance behaviors — a robot that stays in the shadows, or retreats from a bright area.
-
-## Vehicle 2b: "Aggression"
-
-Wire each sensor to the motor on the **opposite** side (contralateral):
-
-<InteractiveDiagram
-  initialInputs={{ 'ls-2b': 70, 'rs-2b': 20 }}
-  diagram={{
-    nodes: [
-      { id: 'ls-2b', type: 'sensor-analog', label: 'Left Sensor', x: 60, y: 20, arduinoPort: 'A0' },
-      { id: 'rs-2b', type: 'sensor-analog', label: 'Right Sensor', x: 300, y: 20, arduinoPort: 'A1' },
-      { id: 'lm-2b', type: 'servo-cr', label: 'Left Motor', x: 60, y: 210, servoPin: '5' },
-      { id: 'rm-2b', type: 'servo-cr', label: 'Right Motor', x: 300, y: 210, servoPin: '6' },
-    ],
-    connections: [
-      { id: 'b1', from: 'ls-2b', to: 'rm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
-      { id: 'b2', from: 'rs-2b', to: 'lm-2b', weight: 1, transferMode: 'linear', transferPoints: [] },
-    ],
-  }}
-  caption="Vehicle 2b — cross-wired. Same left-slider drag, but now the right motor accelerates: the nose swings left, toward the light."
-/>
-
-Same hardware, different wiring. Now light on the left speeds up the **right** motor, turning the vehicle **toward** the light. It accelerates as it approaches — charging at the source. Braitenberg called this "aggression."
-
-This is the basis of the [light follower tutorial](../tutorials/light-follower). It's also how phototaxis works in biology: many organisms steer toward light using exactly this kind of contralateral wiring between photoreceptors and motor neurons.
-
-## Vehicle 3: "Love"
-
-Take Vehicle 2b's cross-wiring, but use **negative** (inhibitory) weights. Because inhibition only makes sense as *subtraction from something*, we add a **Constant** baseline that drives both motors forward; each sensor then subtracts from the opposite motor as light rises. The diagram below runs live with more light on the left — notice the right motor is held below the baseline while the left runs near-full, steering the vehicle toward the light while slowing it down. Drag the sliders up together and watch both motors sink toward zero: the vehicle parks.
-
-<InteractiveDiagram
-  initialInputs={{ 'ls-3': 60, 'rs-3': 15 }}
-  diagram={{
-    nodes: [
-      { id: 'ls-3', type: 'sensor-analog', label: 'Left Sensor', x: 40, y: 20, arduinoPort: 'A0' },
-      { id: 'rs-3', type: 'sensor-analog', label: 'Right Sensor', x: 320, y: 20, arduinoPort: 'A1' },
-      { id: 'baseline', type: 'constant', label: 'Forward', x: 190, y: 20, constantValue: 80 },
-      { id: 'lm-3', type: 'compute-summation', label: 'Left Mix', x: 60, y: 160 },
-      { id: 'rm-3', type: 'compute-summation', label: 'Right Mix', x: 300, y: 160 },
-      { id: 'left-motor', type: 'servo-cr', label: 'Left Motor', x: 60, y: 280, servoPin: '5' },
-      { id: 'right-motor', type: 'servo-cr', label: 'Right Motor', x: 300, y: 280, servoPin: '6' },
-    ],
-    connections: [
-      { id: 'b1', from: 'baseline', to: 'lm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'b2', from: 'baseline', to: 'rm-3', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'x1', from: 'ls-3', to: 'rm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'x2', from: 'rs-3', to: 'lm-3', weight: -1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'm1', from: 'lm-3', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-      { id: 'm2', from: 'rm-3', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
-    ],
-  }}
-  caption="Vehicle 3 — cross-wired with negative weights over a Constant baseline. Light on one side inhibits the opposite motor, so the vehicle turns toward the light and slows as it nears."
-/>
-
-The vehicle still turns toward the stimulus (cross-wiring), but now it **slows down** as it gets closer. Stronger light means more inhibition of the motors. The vehicle approaches gently and parks next to the source — Braitenberg's "love."
-
-The **Constant** baseline is what makes the negative weights read as "ease off the throttle" rather than "throw it in reverse." Without it, a bright light would drive the motors below zero and the vehicle would back away instead of parking. The [speed cap curve](./transfer-functions#speed-cap) offers an alternative route to the same approach-and-stop behavior using a capped response curve instead of negative weights.
+Build all three hands-on in the [Fear & Love lesson](../lessons/fear-and-love).
 
 ## The power of the idea
 
@@ -116,18 +42,18 @@ The remarkable thing about Braitenberg vehicles is that they demonstrate how the
 | Cross-wired | Negative | Approaches gently |
 | Same-side | Negative | Slows near stimulus, orients away |
 
-We walked through the first three above; the fourth — same-side wiring with negative weights — is a good one to reason through yourself, or to try in [trace mode](./simulation).
+The first three are the ones from the table above; the fourth (same-side wiring with negative weights) is a good one to reason through on your own, or to try in [trace mode](./simulation).
 
-Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior — and it's the principle that BraitenBot is built around.
+Four behaviors from four wiring configurations. No code changed. No logic was added. This is why Braitenberg vehicles are a powerful teaching tool for understanding how simple neural circuits produce complex behavior, and it's the principle that BraitenBot is built around.
 
 ## Beyond Braitenberg
 
 Braitenberg's original vehicles used only direct sensor-to-motor wiring. BraitenBot extends this with:
 
-- **Compute nodes** — threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
-- **Feedback loops** — delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [latch tutorial](../tutorials/latches-with-delay))
-- **Transfer functions** — curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
-- **Compound nodes** — reusable sub-circuits that keep complex diagrams manageable
-- **Multiple sensor types** — analog, digital, and I2C sensors for interacting with a richer physical world
+- **Compute nodes**: threshold, summation, and multiplication allow signal processing between sensors and motors, enabling more sophisticated decision-making
+- **Feedback loops**: delay nodes create cycles in the graph, giving the vehicle short-term memory (as in the [Memory lesson](../lessons/latches-with-delay))
+- **Transfer functions**: curves that reshape the sensor-to-motor mapping (for example, non-linear responses), solving real-world problems like noise filtering and speed limiting
+- **Compound nodes**: reusable sub-circuits that keep complex diagrams manageable
+- **Multiple sensor types**: analog, digital, and I2C sensors for interacting with a richer physical world
 
-With these additions, you can build behaviors that Braitenberg only hinted at: state machines, oscillating search patterns, and layered [subsumption architectures](../tutorials/subsumption-architecture) where multiple behaviors cooperate and compete.
+With these additions, you can build behaviors that Braitenberg only hinted at: state machines, oscillating search patterns, and layered [subsumption architectures](../lessons/subsumption-architecture) where multiple behaviors cooperate and compete.

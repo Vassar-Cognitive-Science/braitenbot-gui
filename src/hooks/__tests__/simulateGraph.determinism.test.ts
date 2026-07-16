@@ -2,7 +2,7 @@
 // (seed, diagram, inputs, tick index). Two clients constructing separate
 // simulations from the same seed and stepping the same tick sequence must
 // produce BIT-IDENTICAL traces — this is the contract shared trace mode
-// (deterministic lockstep, collab-sync-design.md) is built on.
+// (deterministic lockstep) is built on.
 
 import { describe, it, expect } from 'vitest';
 import {

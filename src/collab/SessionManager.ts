@@ -93,6 +93,7 @@ function buildDocFrom(state: DiagramState): Y.Doc {
       doc.getMap('nodes'),
       doc.getMap('connections'),
       doc.getMap('compoundTypes'),
+      doc.getMap('comments'),
       doc.getMap('meta'),
       state,
     );
@@ -155,6 +156,16 @@ export class SessionManager {
   }
 
   // --- public API -----------------------------------------------------------
+
+  /**
+   * Point future connections at a different relay (Settings → Advanced). The
+   * live socket is untouched; the new URL is used the next time connect() runs
+   * — i.e. the next host/join, or a reconnect. Normal use is to set it while
+   * idle, before starting a session.
+   */
+  setRelayUrl(url: string): void {
+    this.relayUrl = url;
+  }
 
   /** Start hosting: share a fresh doc pre-loaded with the given diagram. */
   host(initial: DiagramState, displayName: string): void {

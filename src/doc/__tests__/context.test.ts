@@ -25,6 +25,9 @@ describe('compound-body context routing', () => {
       nodes: [node('motor-left', 'servo-cr'), node('motor-right', 'servo-cr')],
       connections: [],
       loopPeriodMs: 20,
+      capWeights: true,
+      pulseDurationMs: 200,
+      comments: [],
       compoundTypes: [compoundDef('comp-1')],
     });
   });

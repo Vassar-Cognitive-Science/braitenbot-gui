@@ -1,4 +1,4 @@
-import { getOutputPorts, TYPE_BY_ID, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM } from '../types/diagram';
+import { getOutputPorts, TYPE_BY_ID, DEFAULT_COLOR_GAIN, DEFAULT_TOF_MAX_MM, DEFAULT_THRESHOLD_OP } from '../types/diagram';
 import type { NodeTypeId, PinFieldId } from '../types/diagram';
 import type { WiringGraph, GraphNode, GraphEdge } from './graph';
 
@@ -433,9 +433,10 @@ const NODE_EMITTERS: Record<NodeTypeId, NodeEmitter> = {
   'compute-threshold': {
     loop: (node, { graph, indent }) => {
       const thresh = node.threshold ?? 50;
+      const op = node.thresholdOp ?? DEFAULT_THRESHOLD_OP;
       return [
         emitInputAggregation(graph, node, indent),
-        `${indent}float ${varName(node)} = (${inputVar(node)} > ${thresh.toFixed(4)}) ? 100.0 : 0.0;`,
+        `${indent}float ${varName(node)} = (${inputVar(node)} ${op} ${thresh.toFixed(4)}) ? 100.0 : 0.0;`,
       ].join('\n');
     },
   },

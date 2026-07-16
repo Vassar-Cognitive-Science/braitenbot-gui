@@ -1,0 +1,228 @@
+---
+sidebar_position: 2
+title: "2. Fear & Love"
+---
+
+# Fear & Love
+
+Your first vehicle had one eye, so it could only ever speed up or slow down. It could never steer. Give it a second eye and a choice appears that didn't exist before: which side's wire runs to which wheel. That single choice is the whole difference between Braitenberg's **Vehicle 2b**, which chases light, and **Vehicle 2a**, which flees it.
+
+This is the moment Braitenberg's vehicles start to feel uncanny. The same two sensors and two motors, wired one way, produce a creature that *chases* light. Wired the other way, they produce one that *flees* it. The hardware doesn't change, only which wire crosses to which wheel. As you play, notice how strongly the behavior invites an emotional reading, and how little is actually there to do any feeling.
+
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+<InteractiveDiagram
+  initialInputs={{ 'left-sensor': 70, 'right-sensor': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'left-sensor', type: 'sensor-analog', label: 'Left Photocell', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'right-sensor', type: 'sensor-analog', label: 'Right Photocell', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', labelT: 0.35, from: 'left-sensor', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.35, from: 'right-sensor', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Drag the left eye brighter and see which wheel races, and which way the nose swings."
+/>
+
+## Why cross-wiring creates steering
+
+A two-wheeled robot steers by running its wheels at different speeds: if the right wheel spins faster than the left, the robot turns left, like a tank. Cross-wiring exploits this. When the light is to the left, the left sensor reads high and drives the **right** motor faster, turning the robot **left**, toward the light. The stronger the difference between the two sides, the sharper the turn; when the light is centered, both motors match and the vehicle drives straight.
+
+Now wire it yourself.
+
+## Puzzle 1: Finish the chaser
+
+Someone got halfway through building this vehicle and wandered off. The left eye is cross-wired to the right wheel, but the right eye connects to nothing. Bright light on the right side and the creature just sits there, blind on one flank.
+
+One wire fixes it. Drag from the **Right Eye**'s bottom dot to the **Left Wheel**.
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'ex-left': 20, 'ex-right': 70 }}
+  goal={{
+    title: 'Make it chase: it must turn toward whichever side is brighter, in either direction.',
+    tests: [
+      {
+        label: 'brighter on the left turns it left',
+        phases: [{ inputs: { 'ex-left': 80, 'ex-right': 20 }, ticks: 5 }],
+        expect: [
+          { node: 'ex-rm', op: 'gt', other: 'ex-lm' },
+        ],
+      },
+      {
+        label: 'brighter on the right turns it right',
+        phases: [{ inputs: { 'ex-left': 20, 'ex-right': 80 }, ticks: 5 }],
+        expect: [
+          { node: 'ex-lm', op: 'gt', other: 'ex-rm' },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'ex-left', type: 'sensor-analog', label: 'Left Eye', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'ex-right', type: 'sensor-analog', label: 'Right Eye', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'ex-lm', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'e1', labelT: 0.28, from: 'ex-left', to: 'ex-rm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Half a chaser. Draw the missing wire from the Right Eye to the Left Wheel. The light slider stays live while you work."
+/>
+
+New wires start at weight 1.0, the same as the existing wire, so the twin is symmetric the moment you draw it, no weight to tweak. Cross-to-the-left plus cross-to-the-right is the complete Vehicle 2b: whichever side glows brighter, the *opposite* wheel surges, and the nose swings toward the glow.
+
+## The fearful twin
+
+Swap the cross-wiring for same-side wiring (left eye to left wheel, right eye to right wheel) and the identical hardware does the opposite: it turns **away** from light. Strong light on the left speeds up the *left* wheel, pushing the robot's nose to the right, into the dark. This is Vehicle 2a.
+
+Compare the diagram below with the cross-wired one above. The nodes and weights are identical; only the wire destinations have swapped. Drag the left sensor up and watch the **left** motor accelerate this time.
+
+<InteractiveDiagram
+  initialInputs={{ 'ls-fear': 70, 'rs-fear': 20 }}
+  diagram={{
+    nodes: [
+      { id: 'ls-fear', type: 'sensor-analog', label: 'Left Photocell', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'rs-fear', type: 'sensor-analog', label: 'Right Photocell', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'lm-fear', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'rm-fear', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'f1', from: 'ls-fear', to: 'lm-fear', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'f2', from: 'rs-fear', to: 'rm-fear', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Vehicle 2a (same-side wiring): left sensor drives the left motor, so strong light on one side pushes the vehicle's nose away."
+/>
+
+## Puzzle 2: Rewire love into fear
+
+A single crossed wire separates love from fear. The diagram below starts as the cross-wired **chaser** you just finished. Your task: turn it into the **fearful** Vehicle 2a by rewiring it yourself, without adding or removing a single node.
+
+To make the switch:
+
+1. **Delete both crossed wires.** Click a connection's weight badge and use **Delete connection** in the popover.
+2. **Draw the same-side wires.** Drag from the **Left Eye**'s bottom dot to the **Left Wheel**, and from the **Right Eye** to the **Right Wheel**.
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'ex-left': 70, 'ex-right': 20 }}
+  goal={{
+    title: 'Same eyes, same wheels: make it flee the bright side instead. No new nodes.',
+    tests: [
+      {
+        label: 'bright left pushes the nose right',
+        phases: [{ inputs: { 'ex-left': 80, 'ex-right': 20 }, ticks: 5 }],
+        expect: [
+          { node: 'ex-lm', op: 'gt', other: 'ex-rm' },
+          { node: 'ex-rm', op: 'gte', value: 0 },
+        ],
+      },
+      {
+        label: 'bright right pushes the nose left',
+        phases: [{ inputs: { 'ex-left': 20, 'ex-right': 80 }, ticks: 5 }],
+        expect: [
+          { node: 'ex-rm', op: 'gt', other: 'ex-lm' },
+          { node: 'ex-lm', op: 'gte', value: 0 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'ex-left', type: 'sensor-analog', label: 'Left Eye', x: 60, y: 30, arduinoPort: 'A0' },
+      { id: 'ex-right', type: 'sensor-analog', label: 'Right Eye', x: 300, y: 30, arduinoPort: 'A1' },
+      { id: 'ex-lm', type: 'servo-cr', label: 'Left Wheel', x: 60, y: 240, servoPin: '5' },
+      { id: 'ex-rm', type: 'servo-cr', label: 'Right Wheel', x: 300, y: 240, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'e1', labelT: 0.35, from: 'ex-left', to: 'ex-rm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'e2', labelT: 0.35, from: 'ex-right', to: 'ex-lm', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Start cross-wired (love). Your job: rewire it into the fearful same-side vehicle. If you get tangled, press Reset and start over."
+/>
+
+Now drag the Left Eye's slider up. In the chaser, the *right* wheel raced ahead. In your rewired version, the *left* wheel should accelerate, pushing the vehicle's nose *away* from the light. The eyes and wheels are unchanged; only which wire meets which wheel is different.
+
+Notice what you *didn't* have to do: there was no rule to write, no "if light then flee" to encode. Fear here is a fact about wiring and a world with a light in it, exactly Braitenberg's point, now sitting in your own edited diagram.
+
+:::note[Thinking like Braitenberg]
+
+You now have two vehicles, identical down to the last component, that an observer would describe in opposite emotional terms: one *loves* the light and pursues it, the other *fears* it and flees. Braitenberg's unsettling claim is that the emotion lives entirely in the eye of the observer: the vehicles differ only by a single crossed wire.
+
+He took the moth further than a metaphor. A moth spiraling into a flame is, roughly, a cross-wired vehicle whose ancient navigation trick (hold a fixed angle to a faraway light) collapses when the light is suddenly close. The "tragedy" is a story we tell about it. The mechanism is wiring meeting a world it wasn't built for.
+:::
+
+## Puzzle 3: Keep it moving in the dark
+
+Both of your vehicles share an embarrassing flaw: in total darkness they stop dead. Without light there's no signal to drive the motors, so the chaser starves the moment the room goes dark.
+
+The cure is a **Constant** node: a steady value that never changes, feeding both wheels through **Summation** nodes so the sensor signals can add steering *on top of* a baseline forward drive. The diagram below has the whole cross-wired chaser rebuilt through summations, plus a Forward constant of 30 sitting there, connected to nothing. Wire **Forward** into both summations (the default weight of 1.0 is exactly right).
+
+<InteractiveDiagram
+  editable
+  initialInputs={{ 'ls': 0, 'rs': 0 }}
+  goal={{
+    title: 'It stops dead in the dark. Give it restlessness: both wheels at least 25 with no light, and it still steers toward light.',
+    tests: [
+      {
+        label: 'darkness no longer stops it',
+        phases: [{ inputs: { ls: 0, rs: 0 }, ticks: 5 }],
+        expect: [
+          { node: 'lm', op: 'gte', value: 25 },
+          { node: 'rm', op: 'gte', value: 25 },
+        ],
+      },
+      {
+        label: 'it still chases the light',
+        phases: [{ inputs: { ls: 80, rs: 20 }, ticks: 5 }],
+        expect: [
+          { node: 'rm', op: 'gt', other: 'lm' },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'ls', type: 'sensor-analog', label: 'Left Eye', x: 40, y: 30, arduinoPort: 'A0' },
+      { id: 'rs', type: 'sensor-analog', label: 'Right Eye', x: 360, y: 30, arduinoPort: 'A1' },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 200, y: 120, constantValue: 30 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Sum', x: 40, y: 210 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Sum', x: 360, y: 210 },
+      { id: 'lm', type: 'servo-cr', label: 'Left Wheel', x: 40, y: 360, servoPin: '5' },
+      { id: 'rm', type: 'servo-cr', label: 'Right Wheel', x: 360, y: 360, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'k1', labelT: 0.25, from: 'ls', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'k2', labelT: 0.25, from: 'rs', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'k3', from: 'lsum', to: 'lm', weight: 1, transferMode: 'linear', transferPoints: [] },
+      { id: 'k4', from: 'rsum', to: 'rm', weight: 1, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Both sliders at zero and both wheels dead. Wire the Forward constant into both summations to give the creature a pulse."
+/>
+
+Once both wires are in, the vehicle always drives forward at 30, and when light appears to one side, the sensor signal *adds* to the baseline on the opposite motor, steering on top of the forward motion. It's behavior stacked on behavior, built from nothing but addition.
+
+## What you've learned
+
+By changing only the wiring pattern (same-side vs. cross-wired), the same hardware produces opposite behaviors: attraction or avoidance. No programming logic changed; the behavior emerges entirely from which wire goes where. "Fear" and "love" are words you supplied while watching, not properties of the wires themselves.
+
+### Questions to sit with
+
+- A single sign flip turns "fear" into "love." If an emotion in a vehicle is that cheap, how confidently should we read emotions into *anything* whose wiring we can't see?
+- The cross-wired robot only "seeks" light because of the world it's in; in a uniformly lit room the behavior vanishes. How much of what looks like a goal is really a property of the environment?
+- Would you be comfortable saying the moth "wants" to reach the flame? If not, where is the line between the moth and the robot, and is there one?
+
+## What's next
+
+[3. Don't](./obstacle-avoidance): inhibition, teaching a vehicle to say no.
+
+Have the robot kit? [9. Eyes: Photocells](../on-the-robot/photocells) mounts these two eyes on the real robot.

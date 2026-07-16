@@ -1,0 +1,225 @@
+---
+sidebar_position: 7
+title: "7. Say What You Mean"
+---
+
+# Say What You Mean
+
+This lesson is optional. Skip it and every robot you build will run exactly as well; it just may take you longer to remember why. Nothing here changes behavior, and the robot is the reason: at upload, node names are discarded, comments are stripped before code generation, and compounds are flattened into an anonymous mesh. The machine runs identically whether a threshold is called `Dark?` or `Threshold 1`. So this lesson isn't for the robot. It's for the only reader a diagram ever has: a human. A classmate who inherits the vehicle, a teacher reading twenty of them at once, and most often future-you, two weeks from now, with no memory of what the third summation was for.
+
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+## The mystery machine
+
+Here's a working vehicle. Every part in it is familiar: a threshold like the ones from [3. Don't](./obstacle-avoidance), the multiply-as-gate trick with a tiny 0.01 weight from [6. Nobody Home](./subsumption-architecture), an oscillator. Before you read past the embed, spend a minute with it. Slide the sensor, watch the wheels, and try to say in one sentence what this creature does.
+
+<InteractiveDiagram
+  initialInputs={{ 'photo': 15 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Analog Sensor 1', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'osc', type: 'compute-oscillator', label: 'Oscillator 1', x: 280, y: 20, frequencyHz: 0.5, amplitude: 60 },
+      { id: 'cruise', type: 'constant', label: 'Constant 1', x: 560, y: 20, constantValue: 40 },
+      { id: 'dark', type: 'compute-threshold', label: 'Threshold 1', x: 60, y: 170, threshold: 40, thresholdOp: '<' },
+      { id: 'gate', type: 'compute-multiply', label: 'Multiply 1', x: 280, y: 170 },
+      { id: 'lsum', type: 'compute-summation', label: 'Summation 1', x: 380, y: 330 },
+      { id: 'rsum', type: 'compute-summation', label: 'Summation 2', x: 580, y: 330 },
+      { id: 'left', type: 'servo-cr', label: 'Continuous Servo 1', x: 380, y: 480, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Continuous Servo 2', x: 580, y: 480, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'dark', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'osc', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.5, from: 'dark', to: 'gate', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.3, from: 'gate', to: 'lsum', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.55, from: 'gate', to: 'rsum', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.3, from: 'cruise', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', labelT: 0.55, from: 'cruise', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="A perfectly functional vehicle, named the way the editor names things when nobody intervenes. What does it do?"
+/>
+
+Now the same circuit, same nodes, same weights, same coordinates, with the labels a person actually chose.
+
+<InteractiveDiagram
+  initialInputs={{ 'photo': 15 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Light Level', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'osc', type: 'compute-oscillator', label: 'Weave', x: 280, y: 20, frequencyHz: 0.5, amplitude: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 560, y: 20, constantValue: 40 },
+      { id: 'dark', type: 'compute-threshold', label: 'Dark?', x: 60, y: 170, threshold: 40, thresholdOp: '<' },
+      { id: 'gate', type: 'compute-multiply', label: 'Gated Weave', x: 280, y: 170 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Mix', x: 380, y: 330 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Mix', x: 580, y: 330 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 380, y: 480, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 480, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'dark', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'osc', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.5, from: 'dark', to: 'gate', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.3, from: 'gate', to: 'lsum', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.55, from: 'gate', to: 'rsum', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.3, from: 'cruise', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', labelT: 0.55, from: 'cruise', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="Same machine, chosen names. Slide Light Level up and down and watch the labels narrate what's happening before the numbers do."
+/>
+
+Once the names are legible, the machine reads itself. It's a night-weaver. In the dark (light below 40), `Dark?` fires and its 100 passes through Gated Weave's tiny 0.01 weight (100 × 0.01 = 1), which does nothing but flip the gate open: Multiply then passes Weave's slow ±60 oscillation straight through. That signal reaches the two wheel mixes with opposite sign, +0.5 and −0.5, so it pushes the wheels in antiphase around the 40 cruise: each wheel swings from 10 to 70, and the vehicle wanders forward in lazy S-curves. In bright light `Dark?` sits at 0, the gate shuts, Gated Weave collapses to 0, and both wheels settle on a plain 40: dead straight.
+
+Notice what the minute you spent on the first embed actually bought you. Nothing about the parts was new; you'd met a threshold, a multiply gate, an oscillator, and a pair of summations in earlier lessons already. What was missing wasn't information, it was **intent**: the labels didn't say what any of it was for, so you had to reconstruct that intent from arithmetic before you could recognize a design you already knew.
+
+## What a good name says
+
+Look again at the second embed and notice something the first one couldn't show you: every node already carries a small type glyph and a meta-label, a sun for an analog sensor, a sigma for a summation. That glyph already says *what kind of part this is*. A label that just repeats it ("Threshold 1" on a threshold) spends the one field you control saying nothing the icon didn't already say. The label's job is to record the node's **role**: what it's doing in this particular machine, not what category of block it happens to be.
+
+Thresholds read especially well as questions, because their 0-or-100 output *is* an answer: `Dark?`, `Wall Ahead?`, and (a name you've already met) `Still stinging?` from [5. Memory](./latches-with-delay). Naming a threshold as a question turns every trace readout into a yes or no you can read at a glance, instead of a number you have to compare to a threshold you'd have to go look up.
+
+For compute stages further downstream, name the *signal that comes out*, not the operation that produced it. "Gated Weave" tells you what's flowing on that wire; "Multiply 1" tells you which palette icon got dragged onto the canvas. And where a diagram has a symmetric structure, keep the names symmetric: `Left Mix` and `Right Mix`, not `Left Mix` and `Summation 2`. A mismatched pair is often the first sign that the two halves of a "symmetric" vehicle have quietly drifted apart.
+
+Renaming a node in the app is one of two moves: double-click its label right on the canvas and type (Enter confirms, Escape cancels), or select the node and edit the **Label** field in the [config panel](../getting-started/editor).
+
+:::note[You've been reading these all along]
+The names in this course were never decorative. "Latch," "Cruise Gate," "Still stinging?": each one was doing real teaching work, telling you what the cluster was for before you'd worked out the arithmetic yourself. You've been enjoying well-named diagrams for six lessons without anyone pointing it out. This lesson is just the first time you're asked to write one.
+:::
+
+## A box with a name on it
+
+Naming has a ceiling, though. A twenty-node diagram of perfectly named nodes is still twenty nodes: your eye has to travel across all of them to find the shape of the thing. Recall Puzzle 3 in [6. Nobody Home](./subsumption-architecture): boxing the escape cluster into a compound didn't change what the robot did, but it changed what the *canvas* looked like: the architecture became visible instead of merely implied.
+
+That's the new tool here: a **compound** as a legibility device, not just a wiring shortcut. A compound is a claim ("this cluster is one idea"), and the test of whether the claim is true is whether you can name it. If the best you can manage is "Compound 1," you probably haven't found a real part yet; you've taped a box shut without labeling what's inside.
+
+Ports carry names too. A compound's port names are just the labels of the compound-input and compound-output nodes inside its body, so name them for the *signal* they carry, like "Turn" or "Suppress," not "Out 1". And renaming matters more here than anywhere else in the diagram: editing the Label field on any instance of a compound renames the compound **type**, so every instance updates at once. That's deliberate. The name belongs to the idea, not to the copy sitting on the canvas.
+
+One more consequence worth knowing before you build: the Comment tool is disabled while you're inside a compound body. Names are the only explanatory device available in there, so inside a box they carry all the weight a comment might otherwise share.
+
+Here's the night-weaver again, with the whole weave cluster boxed as one named part:
+
+<InteractiveDiagram
+  initialInputs={{ 'photo': 15 }}
+  diagram={{
+    loopPeriodMs: 20,
+    compoundTypes: [
+      {
+        id: 'weave-in-dark',
+        displayName: 'Weave in the Dark',
+        body: {
+          nodes: [
+            { id: 'in-light', type: 'compound-input', label: 'Light', x: 60, y: 20 },
+            { id: 'weave', type: 'compute-oscillator', label: 'Weave', x: 280, y: 20, frequencyHz: 0.5, amplitude: 60 },
+            { id: 'dark', type: 'compute-threshold', label: 'Dark?', x: 60, y: 160, threshold: 40, thresholdOp: '<' },
+            { id: 'gate', type: 'compute-multiply', label: 'Gated Weave', x: 280, y: 160 },
+            { id: 'out-turn', type: 'compound-output', label: 'Turn', x: 280, y: 300 },
+          ],
+          connections: [
+            { id: 'b1', from: 'in-light', to: 'dark', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'b2', from: 'weave', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+            { id: 'b3', labelT: 0.5, from: 'dark', to: 'gate', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+            { id: 'b4', from: 'gate', to: 'out-turn', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+          ],
+        },
+      },
+    ],
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Light Level', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 560, y: 20, constantValue: 40 },
+      { id: 'weaver', type: 'compound', label: 'Weave in the Dark', x: 60, y: 170, compoundTypeId: 'weave-in-dark' },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Mix', x: 380, y: 340 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Mix', x: 580, y: 340 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 380, y: 490, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 490, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'weaver', toPort: 'in-light', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', labelT: 0.3, from: 'weaver', fromPort: 'out-turn', to: 'lsum', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.55, from: 'weaver', fromPort: 'out-turn', to: 'rsum', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.3, from: 'cruise', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.55, from: 'cruise', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="The same night-weaver with the whole weave cluster boxed as one named part. The canvas now reads as a sentence: light level in, turn signal out, mixed with cruise. (In the app, double-clicking the box opens its body.)"
+/>
+
+Four nodes and their wiring collapsed into one part with one input and one output, and the canvas now reads almost as a sentence: light level goes in, a turn signal comes out, and that turn is mixed with cruise at the wheels. Nothing about the robot's behavior moved. What moved was how much of the diagram you need to hold in your head at once. For the mechanics of grouping and ungrouping, see the [compound nodes reference](../guide/compound-nodes).
+
+## Notes in the margin
+
+The last tool isn't a node at all. The toolbar's **Comment** button drops a gray note box onto the canvas: it sits behind the nodes, and you can move it, resize it, and edit its text freely. It's saved with the diagram like everything else, but it carries no signal and is ignored entirely when the code generator runs. Comments live on the top-level diagram only: the button is disabled the moment you're editing inside a compound body, which is part of why naming matters so much once you're in one.
+
+The craft question is what to put in a comment, and the honest answer is: not what the wires already show. A wire from `Bumper` to `Latch` already says the bumper connects to the latch; a comment that repeats it ("bumper connects to latch") is dead weight. Worse than dead: unlike the wire, a comment can go stale and start lying about a diagram that's since been rewired around it.
+
+What a comment is actually good for is the numbers a stranger would trip over. Take this page's own machine. The 0.01 weight on the gate wire looks, out of context, like a typo someone forgot to fix; a note that says it's a switch, not a volume knob, and shows the arithmetic (100 × 0.01 = 1, which is all it takes to flip Multiply open) saves the next reader from "fixing" it into something that breaks the gate. The `Dark?` threshold of 40 was calibrated against one room's ambient light, and a comment saying so tells the next person to retune it rather than trust it in a different room. And from [5. Memory](./latches-with-delay): a note reading "feedback 0.95 ≈ 1.5 s hold" records tuning work that took real trial and error to find, work nobody wants to redo from scratch.
+
+Here's the night-weaver one more time, with both of those notes actually written down. Drag a note box by its grip to move it, drag its corner to resize it, or click into the text to edit it. There's also a blank spot bottom-left with room for one of your own: click **+ Comment** and write the third thing you'd tell a classmate before leaving the room.
+
+<InteractiveDiagram
+  editable
+  commenting
+  initialInputs={{ 'photo': 15 }}
+  diagram={{
+    loopPeriodMs: 20,
+    nodes: [
+      { id: 'photo', type: 'sensor-analog', label: 'Light Level', x: 60, y: 20, arduinoPort: 'A0' },
+      { id: 'osc', type: 'compute-oscillator', label: 'Weave', x: 280, y: 20, frequencyHz: 0.5, amplitude: 60 },
+      { id: 'cruise', type: 'constant', label: 'Cruise', x: 560, y: 20, constantValue: 40 },
+      { id: 'dark', type: 'compute-threshold', label: 'Dark?', x: 60, y: 170, threshold: 40, thresholdOp: '<' },
+      { id: 'gate', type: 'compute-multiply', label: 'Gated Weave', x: 280, y: 170 },
+      { id: 'lsum', type: 'compute-summation', label: 'Left Mix', x: 380, y: 330 },
+      { id: 'rsum', type: 'compute-summation', label: 'Right Mix', x: 580, y: 330 },
+      { id: 'left', type: 'servo-cr', label: 'Left Wheel', x: 380, y: 480, servoPin: '5' },
+      { id: 'right', type: 'servo-cr', label: 'Right Wheel', x: 580, y: 480, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'photo', to: 'dark', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'osc', to: 'gate', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', labelT: 0.5, from: 'dark', to: 'gate', weight: 0.01, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', labelT: 0.3, from: 'gate', to: 'lsum', weight: 0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', labelT: 0.55, from: 'gate', to: 'rsum', weight: -0.5, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', labelT: 0.3, from: 'cruise', to: 'lsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', labelT: 0.55, from: 'cruise', to: 'rsum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'lsum', to: 'left', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'rsum', to: 'right', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+    comments: [
+      { id: 'comment-gate', x: 60, y: 580, width: 280, height: 120, text: "0.01 here isn't a volume knob, it's a switch: 100 × 0.01 = 1, just enough to flip Gated Weave open once Dark? fires. Don't round it up — a bigger weight leaks the weave through even in daylight." },
+      { id: 'comment-dark', x: 380, y: 580, width: 280, height: 120, text: "40 was calibrated against this room's ambient light. Retune it, don't trust it, in a different room." },
+    ],
+  }}
+  caption="Same night-weaver, its two trickiest numbers explained in place. The empty patch at the bottom is yours."
+/>
+
+A useful test, when you're not sure whether something deserves a comment: imagine handing the diagram to a classmate and walking out of the room. The three sentences you'd feel compelled to say out loud before you reached the door: those are the comments.
+
+:::note[Where does the meaning live?]
+Here's the turn this lesson has been building to. The named, boxed, commented machine from this page and the anonymous one at the top of it compile to byte-identical Arduino sketches. [6. Nobody Home](./subsumption-architecture) ended by asking whether a compound's structure is "really there" once the robot runs as a flat mesh with no boxes in it at all. The same question applies to every name and every note you've added since: a diagram is really two artifacts sharing one canvas, a machine for the robot and an explanation for the humans standing around it, and only one of those two artifacts ever uploads.
+:::
+
+## What you've learned
+
+Names, compounds, and comments change nothing about how a vehicle behaves; they change how much of it a human can hold in their head, and how much of that understanding survives the trip from the person who built it to whoever reads it next. A good label records a role, not a type; a good compound is a claim you can defend by naming it; a good comment records the one thing a stranger would otherwise have to rediscover the hard way. None of it touches the sketch that gets uploaded.
+
+### Questions to sit with
+
+- If names change nothing about behavior, what exactly is a well-named diagram *better at*, and for whom? Would your answer differ for a diagram you'll open again yourself versus one you're handing off?
+- You'll sometimes discover, mid-rename, that a cluster you thought was one idea is actually two ideas wearing a trench coat. Does naming *describe* a design that was already there, or does it *finish* designing it?
+- Future-you is a stranger who happens to share your memories, most of which will be gone by the time they arrive. How much of what you'd tell a classmate would you actually bother telling them?
+
+## What's next
+
+Have the kit? [8. First Upload](../on-the-robot/first-upload) starts the hardware arc: five lessons mounting real sensors and putting each circuit you've built on the physical robot.
+
+No kit, or done with hardware for now? [13. Habits, Whims & Preferences](./habits-whims-preferences) closes out the course with the node types the lessons haven't needed yet.
+
+Either way, if you want the mechanics of grouping, ungrouping, and editing compound bodies in more depth, the [compound nodes reference](../guide/compound-nodes) covers them directly.

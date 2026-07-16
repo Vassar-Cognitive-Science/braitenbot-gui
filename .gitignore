@@ -3,6 +3,13 @@ dist
 dist-ssr
 *.local
 
+# Generated diagram-render gallery (docs/scripts/render-diagrams.ts)
+docs/scripts/out/
+
+# Docs site staged into the app bundle for the in-app Lessons view
+# (scripts/stage-docs.mjs copies docs/build here)
+public/braitenbot-gui/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

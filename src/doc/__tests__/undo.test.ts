@@ -106,7 +106,10 @@ describe('undo scoping and gesture boundaries', () => {
       nodes: [node('motor-left', { type: 'servo-cr' }), node('motor-right', { type: 'servo-cr' })],
       connections: [],
       loopPeriodMs: 20,
+      capWeights: true,
+      pulseDurationMs: 200,
       compoundTypes: [],
+      comments: [],
     });
     store.undo(); // no-op: history cleared
     expect(store.getSnapshot().topNodes.some((n) => n.id === 'n')).toBe(false);

@@ -1,6 +1,7 @@
 import * as Y from 'yjs';
 import type {
   CompoundTypeDefinition,
+  DiagramComment,
   DiagramConnection,
   DiagramNode,
 } from '../types/diagram';
@@ -8,10 +9,12 @@ import { TYPE_BY_ID } from '../types/diagram';
 import type { DiagramState } from '../lib/diagramFile';
 import { ORIGIN_LOCAL, ORIGIN_REMOTE, ORIGIN_REPAIR, ORIGIN_UNTRACKED } from './origins';
 import {
+  commentToYMap,
   compoundTypeToYMap,
   connectionToYMap,
   loadDiagramInto,
   nodeToYMap,
+  readComments,
   readCompoundType,
   readConnections,
   readNodes,
@@ -30,7 +33,11 @@ export interface DiagramSnapshot {
   topNodes: DiagramNode[];
   topConnections: DiagramConnection[];
   compoundTypes: CompoundTypeDefinition[];
+  /** Top-level explanatory notes. Never routed into compound bodies. */
+  comments: DiagramComment[];
   loopPeriodMs: number;
+  capWeights: boolean;
+  pulseDurationMs: number;
 }
 
 /**
@@ -145,6 +152,9 @@ export class DiagramStore {
   private nodes!: Container;
   private connections!: Container;
   private compoundTypes!: Container;
+  // Top-level explanatory notes. Undo-tracked like nodes/connections, but never
+  // routed into a compound body — comments only live on the top-level canvas.
+  private comments!: Container;
   private meta!: Y.Map<unknown>;
   // Session-ephemeral shared trace state (enabled flag, PRNG seed, sensor
   // inputs, pulse events). Backed by the doc even solo; never tracked by the
@@ -183,6 +193,7 @@ export class DiagramStore {
   // nested cache pair per compound type). Cleared on doc swap.
   private nodeCache: EntityCache<DiagramNode> = new Map();
   private connectionCache: EntityCache<DiagramConnection> = new Map();
+  private commentCache: EntityCache<DiagramComment> = new Map();
   private bodyCaches = new Map<string, BodyCache>();
 
   constructor() {
@@ -196,17 +207,28 @@ export class DiagramStore {
     this.nodes = doc.getMap('nodes');
     this.connections = doc.getMap('connections');
     this.compoundTypes = doc.getMap('compoundTypes');
+    this.comments = doc.getMap('comments');
     this.meta = doc.getMap('meta');
     this.trace = doc.getMap('trace');
     if (initial) {
       doc.transact(() => {
-        loadDiagramInto(this.nodes, this.connections, this.compoundTypes, this.meta, initial);
+        loadDiagramInto(
+          this.nodes,
+          this.connections,
+          this.compoundTypes,
+          this.comments,
+          this.meta,
+          initial,
+        );
       });
     }
-    this.undoManager = new Y.UndoManager([this.nodes, this.connections, this.compoundTypes], {
-      trackedOrigins: new Set([ORIGIN_LOCAL]),
-      captureTimeout: 500,
-    });
+    this.undoManager = new Y.UndoManager(
+      [this.nodes, this.connections, this.compoundTypes, this.comments],
+      {
+        trackedOrigins: new Set([ORIGIN_LOCAL]),
+        captureTimeout: 500,
+      },
+    );
     doc.on('update', this.onUpdate);
   }
 
@@ -216,6 +238,7 @@ export class DiagramStore {
     this.undoManager.destroy();
     this.nodeCache.clear();
     this.connectionCache.clear();
+    this.commentCache.clear();
     this.bodyCaches.clear();
     this.init(doc);
     this.refresh();
@@ -234,6 +257,7 @@ export class DiagramStore {
         doc.getMap('nodes'),
         doc.getMap('connections'),
         doc.getMap('compoundTypes'),
+        doc.getMap('comments'),
         doc.getMap('meta'),
         state,
       );
@@ -261,17 +285,31 @@ export class DiagramStore {
       prev?.topConnections,
     );
     const compoundTypes = this.shareCompoundTypes(prev?.compoundTypes);
+    const comments = shareEntities(readComments(this.comments), this.commentCache, prev?.comments);
     const loopPeriodMs = (this.meta.get('loopPeriodMs') as number) ?? 20;
+    const capWeights = (this.meta.get('capWeights') as boolean) ?? true;
+    const pulseDurationMs = (this.meta.get('pulseDurationMs') as number) ?? 200;
     if (
       prev &&
       prev.topNodes === topNodes &&
       prev.topConnections === topConnections &&
       prev.compoundTypes === compoundTypes &&
-      prev.loopPeriodMs === loopPeriodMs
+      prev.comments === comments &&
+      prev.loopPeriodMs === loopPeriodMs &&
+      prev.capWeights === capWeights &&
+      prev.pulseDurationMs === pulseDurationMs
     ) {
       return prev;
     }
-    return { topNodes, topConnections, compoundTypes, loopPeriodMs };
+    return {
+      topNodes,
+      topConnections,
+      compoundTypes,
+      comments,
+      loopPeriodMs,
+      capWeights,
+      pulseDurationMs,
+    };
   }
 
   private shareCompoundTypes(
@@ -551,6 +589,51 @@ export class DiagramStore {
     });
   }
 
+  /** Delete every connection touching a node (but keep the node). One undo entry. */
+  disconnectNode(id: string): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => {
+      const connectionContainer = this.contextConnectionContainer();
+      for (const [connectionId, connection] of [...connectionContainer.entries()]) {
+        if (connection.get('from') === id || connection.get('to') === id) {
+          connectionContainer.delete(connectionId);
+        }
+      }
+    });
+  }
+
+  // --- comment mutations (top-level only) --------------------------------
+
+  addComment(comment: DiagramComment): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => {
+      this.comments.set(comment.id, commentToYMap(comment) as YNode);
+    });
+  }
+
+  patchComment(id: string, patch: Partial<DiagramComment>): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => this.applyPatch(this.comments, id, patch));
+  }
+
+  moveComment(id: string, x: number, y: number): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => {
+      const map = this.comments.get(id);
+      if (map) {
+        map.set('x', x);
+        map.set('y', y);
+      }
+    });
+  }
+
+  removeComment(id: string): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => {
+      this.comments.delete(id);
+    });
+  }
+
   private applyPatch(container: Container, id: string, patch: Record<string, unknown>): void {
     const map = container.get(id);
     if (!map) return;
@@ -662,6 +745,14 @@ export class DiagramStore {
           map.set('y', (map.get('y') as number) + opts.dy);
         }
       }
+      // Comments live in the same world space as nodes, so the resize-driven
+      // translation must move them too or annotations drift off their groups.
+      if (opts.dx !== 0 || opts.dy !== 0) {
+        for (const map of this.comments.values()) {
+          map.set('x', (map.get('x') as number) + opts.dx);
+          map.set('y', (map.get('y') as number) + opts.dy);
+        }
+      }
     });
   }
 
@@ -674,12 +765,31 @@ export class DiagramStore {
     this.transactLocal(() => this.meta.set('loopPeriodMs', ms));
   }
 
+  // Diagram-level preferences. Like loop period, these live in shared `meta`
+  // (so they sync live and save with the diagram) and are outside undo scope.
+  setCapWeights(capWeights: boolean): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => this.meta.set('capWeights', capWeights));
+  }
+
+  setPulseDurationMs(ms: number): void {
+    if (this.readOnly) return;
+    this.transactLocal(() => this.meta.set('pulseDurationMs', ms));
+  }
+
   // Full replacement (file open, restore, new). Clears undo history: undoing
   // back into a discarded diagram would be wrong.
   replaceAll(state: DiagramState): void {
     if (this.readOnly) return;
     this.doc.transact(() => {
-      loadDiagramInto(this.nodes, this.connections, this.compoundTypes, this.meta, state);
+      loadDiagramInto(
+        this.nodes,
+        this.connections,
+        this.compoundTypes,
+        this.comments,
+        this.meta,
+        state,
+      );
     }, ORIGIN_LOCAL);
     this.undoManager.clear();
   }

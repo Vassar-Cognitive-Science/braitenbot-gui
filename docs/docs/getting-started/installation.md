@@ -24,6 +24,8 @@ browse every release on the [GitHub releases page](https://github.com/Vassar-Cog
 
 `<version>` is the release version embedded in each filename (for example, `0.1.0`), so it changes from release to release. The [**Install page**](/install) is generated from the latest GitHub release and always links the current release's assets automatically, so you don't have to track the exact filenames.
 
+**Jump to install steps:** [macOS](#macos) · [Windows](#windows) · [Linux](#linux)
+
 ### macOS
 
 1. Open the `.dmg` file and drag **BraitenBot GUI** into Applications.
@@ -58,7 +60,7 @@ If you want to build BraitenBot yourself:
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) toolchain
-- Platform-specific build dependencies — see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
+- Platform-specific build dependencies: see the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
 ### Steps
 

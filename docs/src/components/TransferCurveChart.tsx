@@ -125,12 +125,14 @@ function Chart({ points, height }: { points: TransferPoint[]; height: number }) 
 export default function TransferCurveChart({
   points,
   caption,
-  height = 260,
+  height = 300,
 }: TransferCurveChartProps) {
+  // `height` is the square side length (max width); the wrapper is kept square
+  // via CSS `aspect-ratio` so it matches the in-app curve editor's shape.
   return (
     <figure className="tc-figure">
-      <div className="tc-chart-wrapper" style={{ height }}>
-        <BrowserOnly fallback={<div style={{ height }} />}>
+      <div className="tc-chart-wrapper" style={{ maxWidth: height }}>
+        <BrowserOnly fallback={<div style={{ width: '100%', height: '100%' }} />}>
           {() => <Chart points={points} height={height} />}
         </BrowserOnly>
       </div>

@@ -168,6 +168,27 @@ describe('generateSketch', () => {
     expect(code).toContain('float sig_Threshold');
   });
 
+  it('emits the chosen comparison operator on a threshold node', () => {
+    const thresh: DiagramNode = {
+      id: 'thresh-1',
+      type: 'compute-threshold',
+      label: 'Gate Open',
+      x: 0,
+      y: 0,
+      threshold: 50,
+      thresholdOp: '<',
+    };
+    const nodes: DiagramNode[] = [makeSensor(), thresh, makeMotor()];
+    const connections: DiagramConnection[] = [
+      conn({ id: 'c1', from: 'sensor-1', to: 'thresh-1', weight: 1 }),
+      conn({ id: 'c2', from: 'thresh-1', to: 'motor-left', weight: 1 }),
+    ];
+    const code = generateSketch(buildGraph(nodes, connections));
+
+    expect(code).toContain('< 50.0000');
+    expect(code).not.toContain('> 50.0000');
+  });
+
   it('generates multiply node as a product of weighted edges', () => {
     const mult: DiagramNode = {
       id: 'mult-1',

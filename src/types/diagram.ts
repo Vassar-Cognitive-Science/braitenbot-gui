@@ -2,6 +2,32 @@ export type NodeKind = 'sensor' | 'compute' | 'output' | 'constant' | 'compound'
 export type SensorProtocol = 'analog' | 'digital' | 'i2c';
 export type ComputeMode = 'threshold' | 'delay' | 'summation' | 'multiply' | 'min' | 'max' | 'oscillator' | 'noise';
 export type ColorChannel = 'clear' | 'red' | 'green' | 'blue';
+/** Comparison operators a threshold node can apply. The strings double as the
+ *  emitted C++ operators, so codegen can interpolate them directly. */
+export type ThresholdOp = '>' | '<' | '>=' | '<=';
+export const THRESHOLD_OPS: readonly ThresholdOp[] = ['>', '<', '>=', '<='];
+export const DEFAULT_THRESHOLD_OP: ThresholdOp = '>';
+/** Evaluate `value {op} threshold` — the single source of truth shared by the
+ *  emitter (C++) and the trace simulation (JS) so they never diverge. */
+export function compareThreshold(value: number, threshold: number, op: ThresholdOp = DEFAULT_THRESHOLD_OP): boolean {
+  switch (op) {
+    case '<': return value < threshold;
+    case '>=': return value >= threshold;
+    case '<=': return value <= threshold;
+    default: return value > threshold;
+  }
+}
+/** User-facing labels for the color-sensor channels. The internal ids stay
+ *  'clear'/'red'/'green'/'blue' (used by codegen and the trace sim); only the
+ *  display differs. The unfiltered "clear" photodiode reads the total light
+ *  across all colors, so it surfaces as "White" (short label "W", distinct from
+ *  Red/Green/Blue on the small port handle). */
+export const COLOR_CHANNEL_LABELS: Record<ColorChannel, { name: string; short: string }> = {
+  clear: { name: 'White', short: 'W' },
+  red: { name: 'Red', short: 'R' },
+  green: { name: 'Green', short: 'G' },
+  blue: { name: 'Blue', short: 'B' },
+};
 /** TCS34725 RGBC gain multipliers the UI offers; the emitter maps each to a
  *  CONTROL-register value. 16× is a good default for indoor/classroom light. */
 export const COLOR_GAINS = [1, 4, 16, 60] as const;
@@ -89,6 +115,10 @@ export interface DiagramNode {
    *  DEFAULT_TOF_MAX_MM. Ignored for non-ToF sensors. */
   maxDistanceMm?: number;
   threshold?: number;
+  /** Comparison a threshold node applies against its `threshold` value. Fires
+   *  (outputs 100) when `input {op} threshold` holds. Defaults to '>' when
+   *  unset. Ignored for non-threshold nodes. */
+  thresholdOp?: ThresholdOp;
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;
@@ -127,6 +157,29 @@ export interface DiagramConnection {
    *  same node pair). Set by dragging the badge along its curve. */
   labelT?: number;
 }
+
+/**
+ * A free-floating explanatory note drawn on the top-level canvas. Comments are
+ * purely didactic — they carry no ports, take part in no signal flow, and are
+ * ignored by the code emitter. They render behind the nodes so wiring stays
+ * legible on top. Position and size are in world coordinates (pre-zoom), like
+ * DiagramNode.x/y.
+ */
+export interface DiagramComment {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+}
+
+/** Default size (world units) for a freshly dropped comment box. */
+export const DEFAULT_COMMENT_WIDTH = 220;
+export const DEFAULT_COMMENT_HEIGHT = 120;
+/** Lower bounds so a comment can't be collapsed past usability while resizing. */
+export const MIN_COMMENT_WIDTH = 80;
+export const MIN_COMMENT_HEIGHT = 48;
 
 /**
  * A user-defined compound node — a named subdiagram with declared input and

@@ -1,17 +1,18 @@
 ---
 sidebar_position: 1
 title: "1. Your First Vehicle"
+pagination_prev: null
 ---
 
 # Your First Vehicle
 
-Imagine a moth drawn to a porch light. It doesn't plan a route or make decisions — it simply moves faster when light hits its sensors. That's the idea behind a Braitenberg vehicle: wire a sensor directly to a motor and behavior emerges from the connection itself.
+Imagine a moth drawn to a porch light: it simply moves faster when light hits its sensors. That's the idea behind a Braitenberg vehicle: wire a sensor directly to a motor and behavior emerges from the connection itself.
 
-This is Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to *build* minds rather than dissect them: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. (For the full tour of vehicles, see [Braitenberg Vehicles](../guide/braitenberg-vehicles).)
-
-Every circuit on this page is live — nothing to install, nothing to read first. Start by playing.
+This is Braitenberg's **Vehicle 1**, the first machine in his 1984 book *Vehicles: Experiments in Synthetic Psychology*. His method was to build minds: start with a trivial mechanism, set it loose, and watch how quickly we reach for words like "wants," "likes," and "afraid" to describe it. (For the full tour of vehicles, see [Braitenberg Vehicles](../guide/braitenberg-vehicles).)
 
 import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+Every circuit on this page is live. Start by playing.
 
 <InteractiveDiagram
   initialInputs={{ 'sensor': 60 }}
@@ -26,24 +27,22 @@ import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
       { id: 'c2', from: 'sensor', to: 'right', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="This is a complete animal. Drag the light slider — you are the sun."
+  caption="This is a complete animal. Drag the light slider: you are the sun."
 />
 
-One sensor, two wires, two wheels. The brighter the light, the faster both wheels turn — and because they always turn at exactly the same speed, this creature can only ever drive straight. There is no program anywhere in it. The wiring *is* the behavior.
+The brighter the light, the faster both wheels turn, and because they always turn at exactly the same speed, this creature can only ever drive straight. There is no program in it; the wiring produces the behavior directly.
 
 Now build it yourself, one move at a time.
 
-## Puzzle 1 — Wake the other wheel
+## Puzzle 1: Wake the other wheel
 
-Someone wired this vehicle in a hurry and only connected one wheel. In bright light it pivots in a sad circle.
-
-Draw a connection: drag from the dot at the bottom of the sensor down to the Right Wheel.
+Someone wired this vehicle in a hurry and only connected one wheel. In bright light it pivots in a sad circle. Draw the missing connection: drag from the dot at the bottom of the sensor down to the Right Wheel.
 
 <InteractiveDiagram
   editable
   initialInputs={{ 'sensor': 60 }}
   goal={{
-    title: 'Make both wheels spin in bright light — and stop dead in the dark.',
+    title: 'Make both wheels spin in bright light, and stop dead in the dark.',
     tests: [
       {
         label: 'bright light drives both wheels',
@@ -73,12 +72,19 @@ Draw a connection: drag from the dot at the bottom of the sensor down to the Rig
       { id: 'c1', from: 'sensor', to: 'left', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="Drag from the sensor's bottom dot to the Right Wheel. The slider stays live while you wire."
+  caption="The light slider stays live while you wire."
 />
+
+:::note[In the app?]
+Every editable diagram in these lessons has an **Upload to bot** button in
+its bottom-right corner: pick your board and whatever you've wired up goes
+straight onto the robot, no need to open the editor. (The button only
+exists inside the desktop app; on the website there's no robot to upload to.)
+:::
 
 That wire you just drew is the whole idea. A connection carries the sensor's value to the motor, and the connection's **weight** decides how much of it arrives. Both wires here have weight 1.0: a light reading of 75 becomes a motor speed of 75, unmodified.
 
-## Puzzle 2 — Make it timid
+## Puzzle 2: Make it timid
 
 The weight badge is the small number sitting on each wire. Click it and a slider appears.
 
@@ -118,12 +124,12 @@ The weight badge is the small number sitting on each wire. Click it and a slider
       { id: 'c2', from: 'sensor', to: 'right', weight: 1, transferMode: 'linear', transferPoints: [] },
     ],
   }}
-  caption="Click a weight badge to open its slider. Both wires need the same weight, or the vehicle starts to veer — try it and watch."
+  caption="Click a weight badge to open its slider. Both wires need the same weight, or the vehicle starts to veer."
 />
 
-Same wiring, half the response. Nothing about the vehicle's *character* changed — it still loves light and only light — but its temperament did. Weight is the first knob you have on a creature's personality.
+Same wiring, half the response. Nothing about the vehicle's *character* changed (it still loves light and only light), but its temperament did. Weight is the first knob you have on a creature's personality.
 
-## Puzzle 3 — Now make light repel it
+## Puzzle 3: Now make light repel it
 
 Weights can be negative. A negative weight turns the wire into a "don't": the brighter the light, the harder the motor drives *backward*.
 
@@ -166,33 +172,29 @@ Weights can be negative. A negative weight turns the wire into a "don't": the br
   caption="Drag both weights below zero. The same two wires now encode the opposite reaction."
 />
 
-Stop and notice what just happened. You didn't add a "flee" module or write an avoidance rule. You changed the *sign of a number*, and an observer watching the physical robot would tell you it's a different animal — one that backs away from flashlights instead of chasing them.
+Stop and notice what just happened. You didn't add a "flee" module or write an avoidance rule. You changed the *sign of a number*, and an observer watching the physical robot would tell you it's a different animal, one that backs away from flashlights instead of chasing them.
 
 :::note[Thinking like Braitenberg]
 
-Watch someone meet this robot for the first time. They'll say it "likes" the light, or "is looking for" the flashlight — the language of goals and desires. But you built it, so you know there is no goal anywhere inside it: only a wire that turns brightness into speed.
+Watch someone meet this robot for the first time. They'll say it "likes" the light, or "is looking for" the flashlight, the language of goals and desires. But you built it, so you know there is no goal anywhere inside it: only a wire that turns brightness into speed.
 
-Braitenberg called this the **law of uphill analysis and downhill invention** — it is far easier to *create* a behavior than to *deduce* the mechanism behind one. An observer reasoning backward from what the robot does would invent something far more elaborate than the truth. We do exactly this every day when we explain other people, and perhaps even ourselves. Sitting with that possibility is the real point of the exercise; the robot is just the excuse.
+Braitenberg called this the **law of uphill analysis and downhill invention**: it is far easier to *create* a behavior than to *deduce* the mechanism behind one. An observer reasoning backward from what the robot does would invent something far more elaborate than the truth. We do exactly this every day when we explain other people, and perhaps even ourselves. Sitting with that possibility is the real point of the exercise; the robot is just the excuse.
 :::
-
-## Building it in the app
-
-Everything you did on this page works the same way in the desktop app: drag nodes from the palette, wire them by dragging from output dots, click connections to edit weights, and use **Trace Signal Flow** to simulate. The [editor guide](../getting-started/editor) walks the interface; the app's canvas starts with the two wheel nodes already placed.
 
 ## What you've learned
 
-With one sensor and two wires you built a vehicle that responds to its environment — and then rebuilt its whole personality twice without adding a single part. There's no program logic anywhere. The behavior is entirely a product of the wiring: which nodes connect, and with what weight.
+With one sensor and two wires you built a vehicle that responds to its environment, then rebuilt its whole personality twice without adding a single part. There's no program logic anywhere. The behavior is entirely a product of the wiring: which nodes connect, and with what weight.
 
 ### Questions to sit with
 
 - If a friend insisted the robot "wants" the light, what is the simplest experiment that would change their mind? Would it change *yours*?
-- The behavior isn't really in the robot or in the room, but in their interaction. Where, exactly, is "moving toward light" located — in the sensor, the wire, the motor, or the flashlight?
+- The behavior isn't really in the robot or in the room, but in their interaction. Where, exactly, is "moving toward light" located: in the sensor, the wire, the motor, or the flashlight?
 - You wrote no rules, yet the robot reliably does something that looks purposeful. How much of a *living* animal's behavior, do you think, might also run without rules?
 
-This vehicle has a limitation: with one sensor it can only speed up or slow down, never steer. Giving it a second eye — and choosing how the two eyes cross to the two wheels — is where things get genuinely strange.
+This vehicle has a limitation: with one sensor it can only speed up or slow down, never steer. Giving it a second eye, and choosing how the two eyes cross to the two wheels, is where things get genuinely strange.
 
 ## What's next
 
-[2. Fear & Love](./light-follower) — add a second sensor and discover that the *same parts* wired two different ways produce a creature that chases light or one that flees it.
+[2. Fear & Love](./fear-and-love): add a second sensor and discover that the *same parts* wired two different ways produce a creature that chases light or one that flees it.
 
-Have the robot kit? [First Upload](../on-the-robot/first-upload) puts this exact circuit on real wheels.
+Have the robot kit? [8. First Upload](../on-the-robot/first-upload) puts this exact circuit on real wheels.

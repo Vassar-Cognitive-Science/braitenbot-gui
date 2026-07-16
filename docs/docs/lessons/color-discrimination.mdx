@@ -1,0 +1,332 @@
+---
+sidebar_position: 4
+title: "4. Taste"
+---
+
+# Taste
+
+Every vehicle you've built so far has had one axis of opinion: *how much*. More light, more speed; closer wall, harder turn. Animals do something richer. They tell stimuli *apart*: a bee flies to the yellow flowers and past the green leaves. That capacity is **discrimination**, responding differently to different stimuli rather than more-or-less to a single one. It's the territory of Braitenberg's later vehicles, where thresholds and comparisons produce machines an observer can only describe as having *taste*.
+
+import InteractiveDiagram from '@site/src/components/InteractiveDiagram';
+
+export const Sw = ({ c }) => (
+  <span style={{ display: 'inline-block', width: '0.85em', height: '0.85em', borderRadius: '2px', background: c, verticalAlign: 'middle', marginRight: '0.35em', border: '1px solid rgba(0,0,0,0.25)' }} />
+);
+
+<InteractiveDiagram
+  initialInputs={{ 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: -70 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 210 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 210 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 340, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 340, threshold: 15 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 300, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 470 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 600, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 600, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'color', fromPort: 'blue', to: 'blueness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'color', fromPort: 'red', to: 'blueness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'redness', to: 'see-red', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'blueness', to: 'see-blue', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'forward', to: 'left-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'forward', to: 'right-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c9', from: 'see-red', to: 'left-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'c10', labelT: 0.12, from: 'see-red', to: 'right-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'c11', labelT: 0.4, from: 'see-blue', to: 'left-sum', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', from: 'left-sum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="It's over a red patch and thrilled about it. Slide the channels to blue (red 10, blue 40) and watch the mood turn."
+/>
+
+One eye, pointed at the floor, and two completely different reactions: red makes it lunge, blue makes it recoil, and everything else leaves it cold. By the end of this page you'll have built that whole circuit and dodged the trap that catches almost everyone who tries.
+
+## Four sensors sharing one eye
+
+The **Color Sensor** node has something no other node has: **four output ports** along its bottom edge, tinted grey, red, green, and blue. **Red**, **Green**, and **Blue** report how much light in each band bounces back from the surface below; the grey **White** port (labelled `W`) is the sensor's unfiltered channel: the total light across all colors, regardless of hue. Each channel reads 0–100, and to wire one you drag from that specific colored dot.
+
+Nothing about the color sensor is special: a channel is just a light sensor with a colored filter in front of it. You already know how to wire a light sensor. You now have four of them, aimed at the same spot.
+
+White light is red, green, and blue together, so a white surface reflects all three and reads high on *every* channel at once:
+
+<div style={{ fontSize: '1.1em', margin: '1rem 0' }}>
+  <Sw c="#c8473a" />Red&nbsp; + &nbsp;<Sw c="#4fa04a" />Green&nbsp; + &nbsp;<Sw c="#3f63b8" />Blue&nbsp; = &nbsp;<Sw c="#e8e6df" />White
+</div>
+
+That is the crux of the trap ahead: a bright, colorless surface can light up the red channel harder than a genuinely red one does.
+
+## The white-paper trap
+
+The obvious plan for detecting red: threshold the **red** channel. Wire `red` → Threshold, fire when it's high. Before you commit, here's what the four channels actually read over four different surfaces:
+
+| Surface | red | green | blue | white |
+|---------|-----|-------|------|-------|
+| <Sw c="#8a8a86" />Plain grey floor | 12 | 12 | 11 | 12 |
+| <Sw c="#c8473a" />Red patch | 45 | 15 | 12 | 25 |
+| <Sw c="#3f63b8" />Blue patch | 10 | 18 | 40 | 24 |
+| <Sw c="#eceae3" />**White paper** | **70** | 72 | 68 | 70 |
+
+Look at the last row. **White paper reads a red channel of 70, higher than the red patch's 45.** A robot that thresholds the red channel would decide that a sheet of white printer paper is the reddest thing in the room. That is simply how the sensor works: the red channel measures *red light reflected*, and white surfaces reflect a lot of everything, red included. Brightness and hue are tangled together in every channel.
+
+Discrimination requires untangling them. Instead of asking "how much red?", ask "**more red than blue, or more blue than red?**" Run down the table again, subtracting blue from red each time:
+
+| Surface | red − blue |
+|---------|-----------|
+| <Sw c="#8a8a86" />Plain grey floor | +1 |
+| <Sw c="#c8473a" />Red patch | **+33** |
+| <Sw c="#3f63b8" />Blue patch | **−30** |
+| <Sw c="#eceae3" />White paper | +2 |
+
+Now the patches separate cleanly. Red gives a big positive number, blue a big negative one, and the two colorless surfaces (grey floor and white paper) both land near zero, *regardless of how bright they are*. Subtracting one channel from another cancels the shared brightness and leaves only the hue difference.
+
+## Puzzle 1: The white-paper trap
+
+The vehicle below has walked straight into the trap: the red channel is wired directly into a **See Red** threshold (set at 15), and it's currently sitting on white paper, firing with total confidence. There's a **Redness** summation node waiting off to the side, the same Summation from obstacle avoidance, but now you'll exploit its ability to add *negatively-weighted* inputs.
+
+The fix: click the naive `red → See Red` wire and press **Delete**. Then build the subtraction: drag from the sensor's **red** port to Redness (leave it at +1.0), drag from the **blue** port to Redness and slide its weight to **−1.0**, and finally wire Redness into See Red. The summation now outputs `red − blue`, and a threshold of 15 sits comfortably above the ±2 of floor and paper but well below the +33 of a real red patch.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'color:red': 70, 'color:green': 72, 'color:blue': 68, 'color:clear': 70 }}
+  goal={{
+    title: 'Fire on the red patch. Stay silent on white paper and blue.',
+    tests: [
+      {
+        label: 'red patch fires the detector',
+        phases: [{ inputs: { 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }, ticks: 5 }],
+        expect: [
+          { node: 'see-red', op: 'gte', value: 90 },
+        ],
+      },
+      {
+        label: 'white paper leaves it silent',
+        phases: [{ inputs: { 'color:red': 70, 'color:green': 72, 'color:blue': 68, 'color:clear': 70 }, ticks: 5 }],
+        expect: [
+          { node: 'see-red', op: 'eq', value: 0 },
+        ],
+      },
+      {
+        label: 'blue patch leaves it silent',
+        phases: [{ inputs: { 'color:red': 10, 'color:green': 18, 'color:blue': 40, 'color:clear': 24 }, ticks: 5 }],
+        expect: [
+          { node: 'see-red', op: 'eq', value: 0 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 60, y: 190 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 256, y: 190, threshold: 15 },
+      { id: 'motor', type: 'servo-cr', label: 'Right Wheel', x: 256, y: 330, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'n1', from: 'color', fromPort: 'red', to: 'see-red', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'n2', from: 'see-red', to: 'motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="It's on white paper right now, and firing. Delete the naive wire, then route red (+1.0) and blue (−1.0) through Redness instead."
+/>
+
+Did you find the shortcut? A Threshold node *sums its inputs* before comparing, just like a Summation does, so wiring red at +1.0 and blue at −1.0 straight into See Red, skipping Redness entirely, works too. The goal only checks behavior, and a subtraction is a subtraction wherever it happens. Keeping it in a named Redness node just makes the diagram say what it means.
+
+## Opponent coding
+
+What you just built has a name: an **opponent signal**. Your own retina does exactly this. Rather than shipping the brain a raw brightness for red, it ships **red-minus-green** and **blue-minus-yellow**, known as "color-opponent" signals. Evolution arrived at the same subtraction you just did, for the same reason: a comparison between two sensors is far more robust than either sensor alone.
+
+## Puzzle 2: The mirror taste
+
+A single opinion is just a tic, not taste. Your red pathway is intact below, and two new parts wait unwired: a **Blueness** summation and a **See Blue** threshold (also 15). Build the mirror image of what you just built: **blue** port at **+1.0**, **red** port at **−1.0**, Blueness into See Blue.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'color:red': 10, 'color:green': 18, 'color:blue': 40, 'color:clear': 24 }}
+  goal={{
+    title: 'Build the opposite opinion: detect blue, ignore white, ignore red.',
+    tests: [
+      {
+        label: 'blue patch fires the detector',
+        phases: [{ inputs: { 'color:red': 10, 'color:green': 18, 'color:blue': 40, 'color:clear': 24 }, ticks: 5 }],
+        expect: [
+          { node: 'see-blue', op: 'gte', value: 90 },
+        ],
+      },
+      {
+        label: 'white paper leaves it silent',
+        phases: [{ inputs: { 'color:red': 70, 'color:green': 72, 'color:blue': 68, 'color:clear': 70 }, ticks: 5 }],
+        expect: [
+          { node: 'see-blue', op: 'eq', value: 0 },
+        ],
+      },
+      {
+        label: 'red patch leaves it silent',
+        phases: [{ inputs: { 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }, ticks: 5 }],
+        expect: [
+          { node: 'see-blue', op: 'eq', value: 0 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 80, y: 240 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 430, y: 240 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 80, y: 370, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 430, y: 370, threshold: 15 },
+    ],
+    connections: [
+      { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'redness', to: 'see-red', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="It's over the blue patch and can't see it yet. Wire Blueness as the mirror of Redness: blue +1.0, red −1.0."
+/>
+
+Two detectors, each blind to what the other sees and to plain brightness. Each threshold outputs a clean 0 or 100: "I'm over that color" / "I'm not." The eye now delivers *decisions*; all that's left is to decide what each one is worth.
+
+## Puzzle 3: Two tastes, two acts
+
+Here's where discrimination becomes visible. If red and blue triggered the same reaction at different strengths, an observer would just see one appetite with a volume knob. To make them feel like different *opinions*, wire them into **different patterns**:
+
+- **Likes red, lunges:** wire **See Red** into *both* summations at weight **+0.4**. When it fires (100), each wheel gets 40 + 40 = 80, so the robot drives straight ahead, excited.
+- **Fears blue, recoils:** wire **See Blue** into the **Left Sum** only, at weight **−1.0**. When it fires, the left wheel gets 40 − 100 = −60 while the right stays at 40, so the robot pivots hard and peels away.
+
+The cruise chain (a Forward constant of 40 feeding both wheel summations) is already wired. You'll need three wires and two weight edits.
+
+<InteractiveDiagram
+  editable
+  curveEditing
+  initialInputs={{ 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }}
+  goal={{
+    title: 'Give each color its own reaction: lunge straight at red, spin away from blue, shrug at plain floor.',
+    tests: [
+      {
+        label: 'red patch: full-speed lunge, dead straight',
+        phases: [{ inputs: { 'color:red': 45, 'color:green': 15, 'color:blue': 12, 'color:clear': 25 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 70 },
+          { node: 'left-motor', op: 'eq', other: 'right-motor', tol: 2 },
+        ],
+      },
+      {
+        label: 'blue patch: hard pivot away',
+        phases: [{ inputs: { 'color:red': 10, 'color:green': 18, 'color:blue': 40, 'color:clear': 24 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'lt', value: 0 },
+          { node: 'right-motor', op: 'gte', value: 35 },
+        ],
+      },
+      {
+        label: 'grey floor: steady indifferent cruise',
+        phases: [{ inputs: { 'color:red': 12, 'color:green': 12, 'color:blue': 11, 'color:clear': 12 }, ticks: 5 }],
+        expect: [
+          { node: 'left-motor', op: 'gte', value: 35 },
+          { node: 'left-motor', op: 'lte', value: 45 },
+          { node: 'right-motor', op: 'gte', value: 35 },
+          { node: 'right-motor', op: 'lte', value: 45 },
+        ],
+      },
+    ],
+  }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: -70 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 40, y: 210 },
+      { id: 'blueness', type: 'compute-summation', label: 'Blueness', x: 470, y: 210 },
+      { id: 'see-red', type: 'compute-threshold', label: 'See Red', x: 40, y: 340, threshold: 15 },
+      { id: 'see-blue', type: 'compute-threshold', label: 'See Blue', x: 470, y: 340, threshold: 15 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 256, y: 300, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 470 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 470 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 600, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 600, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'c1', from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c2', from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c3', from: 'color', fromPort: 'blue', to: 'blueness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c4', from: 'color', fromPort: 'red', to: 'blueness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c5', from: 'redness', to: 'see-red', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c6', from: 'blueness', to: 'see-blue', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c7', from: 'forward', to: 'left-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c8', from: 'forward', to: 'right-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c12', from: 'left-sum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'c13', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="See Red into both sums at +0.4; See Blue into Left Sum at −1.0. Then run the four surfaces from the readings table through the sliders and watch it choose."
+/>
+
+Once it's solved, don't skip the best part: set the sliders to white paper (red 70, green 72, blue 68, white 70). Every raw channel is pegged near 70, and the robot cruises straight over it at 40, completely indifferent. The naive red-channel robot would have gone wild here. Yours doesn't even notice.
+
+:::note[Thinking like Braitenberg]
+
+Watch this vehicle and you'll say it *likes* red and *dislikes* blue, that it has preferences, even a rudimentary aesthetic sense. Braitenberg leaned all the way into this: in his later vehicles, thresholds and comparisons produce machines whose behavior an observer can only describe with words like *taste*, *judgment*, and *value*.
+
+But notice where the "taste" actually lives. It isn't in any channel; a channel is a dumb photon-counter. It appears the instant we *compare* two of them and *threshold* the difference. Preference, here, is a shape in the wiring: a subtraction and a cut-off. That should be at least a little unsettling, because your own "I like this, I don't like that" is also, somewhere down at the bottom, sensors being compared and differences crossing thresholds. Discrimination is the first place a vehicle stops merely reacting to the world and starts, however faintly, having opinions about it.
+
+:::
+
+## Graded taste
+
+The thresholds give this vehicle its decisive, all-or-nothing character: 0 or 100, no shades of opinion. But taste doesn't have to be binary. Here's the same opponent signal feeding the wheels *directly*, no threshold in the path:
+
+<InteractiveDiagram
+  initialInputs={{ 'color:red': 25, 'color:green': 15, 'color:blue': 12, 'color:clear': 18 }}
+  diagram={{
+    nodes: [
+      { id: 'color', type: 'sensor-color', label: 'Floor Color', x: 256, y: 10 },
+      { id: 'redness', type: 'compute-summation', label: 'Redness', x: 256, y: 210 },
+      { id: 'forward', type: 'constant', label: 'Forward', x: 60, y: 250, constantValue: 40 },
+      { id: 'left-sum', type: 'compute-summation', label: 'Left Sum', x: 170, y: 410 },
+      { id: 'right-sum', type: 'compute-summation', label: 'Right Sum', x: 342, y: 410 },
+      { id: 'left-motor', type: 'servo-cr', label: 'Left Wheel', x: 170, y: 530, servoPin: '5' },
+      { id: 'right-motor', type: 'servo-cr', label: 'Right Wheel', x: 342, y: 530, servoPin: '6' },
+    ],
+    connections: [
+      { id: 'g1', labelT: 0.4, from: 'color', fromPort: 'red', to: 'redness', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'g2', labelT: 0.12, from: 'color', fromPort: 'blue', to: 'redness', weight: -1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'g3', from: 'redness', to: 'left-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'g4', from: 'redness', to: 'right-sum', weight: 0.4, transferMode: 'linear', transferPoints: [] },
+      { id: 'g5', from: 'forward', to: 'left-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'g6', from: 'forward', to: 'right-sum', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'g7', from: 'left-sum', to: 'left-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+      { id: 'g8', from: 'right-sum', to: 'right-motor', weight: 1.0, transferMode: 'linear', transferPoints: [] },
+    ],
+  }}
+  caption="No threshold: Redness drives the wheels at +0.4. Slide the red channel from 12 up to 45 and watch enthusiasm fade in gradually instead of snapping on at a cutoff."
+/>
+
+Enthusiasm now *ramps* as red fills the eye: a patch half in view earns half a reaction. In the app, [transfer functions](../guide/transfer-functions) let you shape exactly how a taste ramps: a dead zone that ignores marginal readings, a soft knee, a hard cap.
+
+## What you've learned
+
+- The color sensor is **four light sensors sharing one eye**: you wire its channels exactly like any other source, using its four colored output ports.
+- Raw channels **confound hue with brightness**, which is why a bright white surface can out-red a red one. Any single channel, thresholded on its own, will fool you.
+- **Comparing channels** (opponent coding: one channel minus another) cancels brightness and isolates hue, the same trick your retina uses. It's built from a Summation with one positive and one negative input, or fed straight into a Threshold, which also sums its inputs.
+- **Discrimination** (routing different stimuli to different behaviors) is a genuine step beyond attraction and avoidance, and it's where a vehicle first starts to look like it has preferences.
+
+### Questions to sit with
+
+- The robot's "preference" for red turned out to be a subtraction and a threshold. When you notice yourself *liking* something, how sure are you that it's anything more than that, viewed from the inside?
+- Nothing in the circuit represents "red" as such: only "more red than blue." Do *you* ever perceive a color absolutely, or always as a comparison against its surroundings?
+- White paper reflects more red light than the red patch does, yet the robot ignores it and we'd say it's "right" to. What is the color of a thing, if not the light it sends you, and why do we trust the comparison over the raw signal?
+
+## What's next
+
+[5. Memory](./latches-with-delay): circuits that remember what just happened, so a vehicle can react to things it can no longer sense.
+
+Have the kit? [11. The Color Eye](../on-the-robot/color-sensor) mounts and calibrates the real sensor.

@@ -5,6 +5,7 @@ import { ask, message } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '../lib/tauri';
 import { diagramStore } from '../doc/DiagramStore';
 import { parse, serialize, type DiagramState } from '../lib/diagramFile';
+import { recordRecent } from '../lib/recentFiles';
 
 // The user's own diagram ("personal slot") — never written while a guest is in
 // a collaborative session, so leaving a session can always restore it.
@@ -46,6 +47,10 @@ export interface DiagramPersistenceOptions {
   // is the copy of record. Any in-session role gates file ops behind a
   // "replaces the shared diagram" confirm.
   sessionRole: 'host' | 'guest' | null;
+  // Fired after every successful file-driven apply (File → Load, a recent
+  // file or "Open a file…" from the landing page) — lets App switch its view
+  // to the editor (a no-op when already there).
+  onDiagramOpened?: () => void;
 }
 
 export function useDiagramPersistence({
@@ -54,10 +59,15 @@ export function useDiagramPersistence({
   isPristine,
   resetToDefault,
   sessionRole,
+  onDiagramOpened,
 }: DiagramPersistenceOptions) {
   const applyRef = useRef(applyDiagram);
   // eslint-disable-next-line react-hooks/refs
   applyRef.current = applyDiagram;
+
+  const onDiagramOpenedRef = useRef(onDiagramOpened);
+  // eslint-disable-next-line react-hooks/refs
+  onDiagramOpenedRef.current = onDiagramOpened;
 
   const stateRef = useRef(state);
   // eslint-disable-next-line react-hooks/refs
@@ -130,7 +140,8 @@ export function useDiagramPersistence({
     const handleSave = async () => {
       try {
         const contents = serialize(stateRef.current);
-        await invoke<string | null>('save_diagram', { contents });
+        const path = await invoke<string | null>('save_diagram', { contents });
+        if (path !== null) recordRecent(path);
       } catch (err) {
         await message(`Failed to save diagram: ${String(err)}`, { kind: 'error' });
       }
@@ -138,13 +149,30 @@ export function useDiagramPersistence({
 
     const handleLoad = async () => {
       try {
-        const contents = await invoke<string | null>('load_diagram');
-        if (contents === null) return;
-        const file = parse(contents);
+        const loaded = await invoke<{ path: string; contents: string } | null>('load_diagram');
+        if (loaded === null) return;
+        const file = parse(loaded.contents);
         if (!(await confirmReplace('Replace the current diagram with the loaded file?', 'Load Diagram'))) return;
         applyRef.current(file);
+        recordRecent(loaded.path);
+        onDiagramOpenedRef.current?.();
       } catch (err) {
         await message(`Failed to load diagram: ${String(err)}`, { kind: 'error' });
+      }
+    };
+
+    // The landing page's "Recent designs" list: open a known path directly,
+    // no dialog. Same confirm/apply/record shape as handleLoad.
+    const handleOpenPath = async (event: { payload: { path: string } }) => {
+      try {
+        const contents = await invoke<string>('read_diagram', { path: event.payload.path });
+        const file = parse(contents);
+        if (!(await confirmReplace('Replace the current diagram with this file?', 'Open Recent'))) return;
+        applyRef.current(file);
+        recordRecent(event.payload.path);
+        onDiagramOpenedRef.current?.();
+      } catch (err) {
+        await message(`Failed to open diagram: ${String(err)}`, { kind: 'error' });
       }
     };
 
@@ -175,6 +203,16 @@ export function useDiagramPersistence({
           return;
         }
         unlistenFns.push(newUnlisten);
+
+        const openPathUnlisten = await listen<{ path: string }>(
+          'app://open-path',
+          handleOpenPath,
+        );
+        if (disposed) {
+          openPathUnlisten();
+          return;
+        }
+        unlistenFns.push(openPathUnlisten);
       } catch (err) {
         console.warn('[diagram] failed to attach menu listeners:', err);
       }

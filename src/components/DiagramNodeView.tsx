@@ -1,9 +1,95 @@
-import React from 'react';
-import type { CSSProperties, Dispatch, MouseEvent, SetStateAction } from 'react';
-import type { CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
-import { TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
+import React, { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, Dispatch, MouseEvent, MutableRefObject, SetStateAction } from 'react';
+import type { ColorChannel, CompoundTypeDefinition, DiagramNode, OutputPortId } from '../types/diagram';
+import { COLOR_CHANNEL_LABELS, DEFAULT_THRESHOLD_OP, TYPE_BY_ID, getInputPorts, getOutputPorts, getPortLabel } from '../types/diagram';
 import { canInput, canOutput, supportsArduinoPort } from './diagramShared';
 import type { ConfigTarget } from './diagramShared';
+import type { NodeTypeId } from '../types/diagram';
+import type { ColorChannels } from '../lib/colorSensor';
+import { COLOR_SWATCHES, channelsToHue, hueToChannels, rgbToHex } from '../lib/colorSensor';
+import type { IconProps } from './icons';
+import {
+  AsteriskIcon,
+  ChevronsDownIcon,
+  ChevronsUpIcon,
+  FilterIcon,
+  GaugeIcon,
+  HashIcon,
+  LayersIcon,
+  LogInIcon,
+  LogOutIcon,
+  MonitorIcon,
+  NoiseIcon,
+  PaletteIcon,
+  PowerIcon,
+  RotateIcon,
+  RulerIcon,
+  SigmaIcon,
+  SineWaveIcon,
+  SunIcon,
+  TimerIcon,
+  ToggleIcon,
+} from './icons';
+
+// A small glyph shown before each node's label, so its type is legible at a
+// glance without reading the text. Keyed by node type; every type has one.
+const NODE_TYPE_ICONS: Record<NodeTypeId, (props: IconProps) => React.ReactElement> = {
+  'sensor-analog': SunIcon,
+  'sensor-digital': ToggleIcon,
+  'sensor-color': PaletteIcon,
+  'sensor-tof': RulerIcon,
+  'compute-threshold': FilterIcon,
+  'compute-delay': TimerIcon,
+  'compute-summation': SigmaIcon,
+  'compute-multiply': AsteriskIcon,
+  'compute-min': ChevronsDownIcon,
+  'compute-max': ChevronsUpIcon,
+  'compute-oscillator': SineWaveIcon,
+  'compute-noise': NoiseIcon,
+  constant: HashIcon,
+  'servo-cr': RotateIcon,
+  'servo-positional': GaugeIcon,
+  'digital-out': PowerIcon,
+  'display-tm1637': MonitorIcon,
+  compound: LayersIcon,
+  'compound-input': LogInIcon,
+  'compound-output': LogOutIcon,
+};
+
+/**
+ * A "reception" meter for light/distance sensors: four concentric arcs opening
+ * toward the sensor (the dot on the right) that fill *continuously* with the
+ * reading — a faint track when the value is low, brightening arc-by-arc as the
+ * signal grows, with the current level's arc partway lit like a moving
+ * wavefront. It reads as the sensor *detecting* something in the world (waves
+ * arriving), deliberately unlike the wheel-drive bars that grow *outward* to
+ * show a motor emitting — so a bright light or a near object never looks like
+ * the sensor is emitting. The continuous fill (vs the old three on/off steps)
+ * makes "how strong / how near" legible at a glance.
+ */
+function SensorReception({ value }: { value: number }) {
+  // Map 0–100 onto the four arcs; each arc fills from a faint 0.12 track to a
+  // full 1.0 as the level sweeps past it, so the leading arc is partway lit.
+  const level = (Math.max(0, Math.min(100, value)) / 100) * 4;
+  const arc = (i: number) => Math.max(0.12, Math.min(1, level - i));
+  const width = (i: number) => 1.2 + 0.9 * Math.max(0, Math.min(1, level - i));
+  return (
+    <svg
+      className="sensor-reception"
+      width="16"
+      height="18"
+      viewBox="0 0 16 18"
+      role="img"
+      aria-label={`reading ${Math.round(value)}`}
+    >
+      <circle cx="14" cy="9" r="1.6" fill="currentColor" />
+      <path d="M11 5 A 4.5 4.5 0 0 0 11 13" fill="none" stroke="currentColor" strokeWidth={width(0)} opacity={arc(0)} />
+      <path d="M8.5 2.8 A 7 7 0 0 0 8.5 15.2" fill="none" stroke="currentColor" strokeWidth={width(1)} opacity={arc(1)} />
+      <path d="M6 1 A 9.5 9.5 0 0 0 6 17" fill="none" stroke="currentColor" strokeWidth={width(2)} opacity={arc(2)} />
+      <path d="M3.5 0 A 12 12 0 0 0 3.5 18" fill="none" stroke="currentColor" strokeWidth={width(3)} opacity={arc(3)} />
+    </svg>
+  );
+}
 
 interface DiagramNodeViewProps {
   node: DiagramNode;
@@ -40,9 +126,16 @@ interface DiagramNodeViewProps {
   // Duration of the "▶" sensor pulse — shown in the button tooltip.
   pulseDurationMs: number;
   beginNodeDrag: (event: MouseEvent, nodeId: string) => void;
+  // Set by beginNodeDrag when a multi-node drag moves; the node's onClick
+  // reads and clears it to swallow the click that ends the drag.
+  clickSuppressRef: MutableRefObject<boolean>;
   beginLinkDrag: (event: MouseEvent, nodeId: string, port?: OutputPortId) => void;
   completeLink: (toId: string, toPort?: string) => void;
   enterCompound: (compoundTypeId: string) => void;
+  // Double-click the label to rename; omitted (or readOnly) disables it.
+  onRename?: (id: string, label: string) => void;
+  // Right-click the node body; the host opens a context menu at the point.
+  onContextMenu?: (id: string, clientX: number, clientY: number) => void;
   pulseSensor: (id: string) => void;
   setSelectedNodeIds: Dispatch<SetStateAction<Set<string>>>;
   setConfigTarget: Dispatch<SetStateAction<ConfigTarget | null>>;
@@ -76,9 +169,12 @@ function DiagramNodeViewInner({
   isPulsing,
   pulseDurationMs,
   beginNodeDrag,
+  clickSuppressRef,
   beginLinkDrag,
   completeLink,
   enterCompound,
+  onRename,
+  onContextMenu,
   pulseSensor,
   setSelectedNodeIds,
   setConfigTarget,
@@ -90,6 +186,25 @@ function DiagramNodeViewInner({
 }: DiagramNodeViewProps) {
   const nodeType = TYPE_BY_ID[node.type];
   const isCompoundInput = node.type === 'compound-input';
+  // Inline label rename (double-click the label text). Disabled in read-only
+  // views or when the host doesn't supply an onRename callback.
+  const canRename = !readOnly && onRename !== undefined;
+  const [renaming, setRenaming] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  // On open, focus the field and select its text (file-rename behavior), so the
+  // caret is live and typing replaces the old label immediately.
+  useEffect(() => {
+    if (!renaming) return;
+    const el = renameInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [renaming]);
+  const commitRename = (raw: string) => {
+    setRenaming(false);
+    const next = raw.trim();
+    if (next && next !== node.label) onRename?.(node.id, next);
+  };
   const hasSlider =
     traceMode &&
     (nodeType.kind === 'sensor' ||
@@ -106,6 +221,11 @@ function DiagramNodeViewInner({
     nodeMeta = `output: ${traceValue}`;
   } else if (supportsArduinoPort(nodeType) && node.arduinoPort?.trim()) {
     nodeMeta = `${nodeType.metaLabel} • port ${node.arduinoPort.trim()}`;
+  } else if (nodeType.mode === 'threshold' && node.thresholdOp && node.thresholdOp !== DEFAULT_THRESHOLD_OP) {
+    // A non-default comparison is the point of the block (e.g. gating in
+    // subsumption), so spell it out: "input < 50". Plain '>' thresholds keep
+    // the compact meta so earlier lessons read unchanged.
+    nodeMeta = `input ${node.thresholdOp} ${node.threshold ?? 50}`;
   } else if (nodeType.mode === 'threshold' && node.threshold !== undefined) {
     nodeMeta = `${nodeType.metaLabel} • ${node.threshold}`;
   } else if (nodeType.mode === 'delay' && node.delayMs !== undefined) {
@@ -137,6 +257,7 @@ function DiagramNodeViewInner({
         hasSlider ? 'trace-expanded' : '',
         hasSlider && node.type === 'sensor-color' ? 'trace-color-expanded' : '',
         remoteColor ? 'remote-selected' : '',
+        renaming ? 'renaming' : '',
       ].filter(Boolean).join(' ')}
       style={{
         left: `${worldX}px`,
@@ -146,7 +267,24 @@ function DiagramNodeViewInner({
           : null),
       }}
       onMouseDown={(event) => beginNodeDrag(event, node.id)}
+      onContextMenu={
+        onContextMenu
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedNodeIds(new Set([node.id]));
+              setConfigTarget({ kind: 'node', id: node.id });
+              onContextMenu(node.id, event.clientX, event.clientY);
+            }
+          : undefined
+      }
       onClick={(event) => {
+        // A multi-node drag just ended: swallow this click so it doesn't
+        // collapse the selection down to only the grabbed node.
+        if (clickSuppressRef.current) {
+          clickSuppressRef.current = false;
+          return;
+        }
         if (event.shiftKey) {
           // Toggle this node in the multi-select set without
           // disturbing the rest.
@@ -176,7 +314,52 @@ function DiagramNodeViewInner({
           {remoteLabel}
         </span>
       )}
-      <div className="node-label">{node.label}</div>
+      <div
+        className="node-label"
+        onDoubleClick={
+          canRename
+            ? (event) => {
+                // Rename on label double-click; stop it reaching the node's
+                // enter-compound double-click handler.
+                event.stopPropagation();
+                setRenaming(true);
+              }
+            : undefined
+        }
+      >
+        {(() => {
+          const TypeIcon = NODE_TYPE_ICONS[node.type];
+          return TypeIcon ? (
+            <span className="node-type-icon" aria-hidden="true">
+              <TypeIcon size={13} />
+            </span>
+          ) : null;
+        })()}
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="node-label-input"
+            type="text"
+            defaultValue={node.label}
+            spellCheck={false}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onBlur={(e) => commitRename(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitRename((e.target as HTMLInputElement).value);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setRenaming(false);
+              }
+            }}
+          />
+        ) : (
+          node.label
+        )}
+      </div>
       <div className={`node-meta ${traceValue !== undefined ? 'node-meta-trace' : ''}`}>{nodeMeta}</div>
       {hasSlider && node.type === 'sensor-digital' && (
         <div className="trace-slider-row">
@@ -212,33 +395,91 @@ function DiagramNodeViewInner({
         </div>
       )}
       {hasSlider && node.type === 'sensor-color' && (() => {
-        // Decode the comma-joined per-channel values (same port order the
-        // parent used to encode them).
-        const channelValues = colorSensorValues?.split(',');
+        // The four channels are the source of truth (the sim reads them), but a
+        // color picker + brightness is far easier than dialing four sliders.
+        // Port order matches how the parent encoded the comma-joined values.
+        const ports = getOutputPorts('sensor-color')! as ColorChannel[];
+        const vals = colorSensorValues?.split(',').map(Number) ?? [];
+        const at = (c: ColorChannel) => vals[ports.indexOf(c)] ?? 0;
+        const channels: ColorChannels = {
+          clear: at('clear'), red: at('red'), green: at('green'), blue: at('blue'),
+        };
+        const { hex } = channelsToHue(channels);
+        // Dot showing the color the sensor currently "sees" (raw channels, so a
+        // dim reading reads dim — unlike the brightness-normalized picker hue).
+        const seen = rgbToHex(channels.red * 2.55, channels.green * 2.55, channels.blue * 2.55);
+        const apply = (c: ColorChannels) => {
+          setSensorValue(`${node.id}:red`, c.red);
+          setSensorValue(`${node.id}:green`, c.green);
+          setSensorValue(`${node.id}:blue`, c.blue);
+          setSensorValue(`${node.id}:clear`, c.clear);
+        };
         return (
-        <div className="trace-color-sliders">
-          {getOutputPorts('sensor-color')!.map((ch, i) => (
-            <div className="trace-slider-row" key={ch}>
-              <span className={`trace-slider-label output-port-label-${ch}`}>
-                {ch[0].toUpperCase()}
-              </span>
-              <input
-                type="range"
-                className="trace-slider"
-                min="0"
-                max="100"
-                step="1"
+        <div className="trace-color-input">
+          <div className="trace-color-swatches">
+            <span
+              className="trace-color-seen"
+              style={{ background: seen }}
+              title="Color the sensor currently sees"
+            />
+            {COLOR_SWATCHES.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                className="trace-color-swatch"
+                style={{ background: s.hex }}
                 disabled={readOnly}
-                value={Number(channelValues?.[i] ?? 0)}
+                title={s.name}
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setSensorValue(`${node.id}:${ch}`, v);
-                }}
+                onClick={(e) => { e.stopPropagation(); apply(hueToChannels(s.hex, 100)); }}
               />
+            ))}
+            {/* Rainbow swatch opens the OS color picker for any custom hue. It's
+                a label wrapping a hidden native input, so a single click opens
+                the picker (no flaky open/close toggle). */}
+            <label
+              className="trace-color-swatch trace-color-rainbow"
+              title="Custom color…"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="color"
+                value={hex}
+                disabled={readOnly}
+                onChange={(e) => apply(hueToChannels(e.target.value, 100))}
+              />
+            </label>
+          </div>
+          <details className="trace-color-advanced" onMouseDown={(e) => e.stopPropagation()}>
+            <summary title="White is estimated from RGB — verify on the real sensor">
+              Exact channels
+            </summary>
+            <div className="trace-color-sliders">
+              {ports.map((ch) => (
+                <div className="trace-slider-row" key={ch}>
+                  <span
+                    className={`trace-slider-label output-port-label-${ch}`}
+                    title={COLOR_CHANNEL_LABELS[ch].name}
+                  >
+                    {COLOR_CHANNEL_LABELS[ch].short}
+                  </span>
+                  <input
+                    type="range"
+                    className="trace-slider"
+                    min="0"
+                    max="100"
+                    step="1"
+                    disabled={readOnly}
+                    value={at(ch)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setSensorValue(`${node.id}:${ch}`, parseFloat(e.target.value))}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
+          </details>
         </div>
         );
       })()}
@@ -249,8 +490,10 @@ function DiagramNodeViewInner({
           : isCompoundInput
             ? (sensorValue ?? 0)
             : (node.constantValue ?? 0);
+        const isDetector = node.type === 'sensor-analog' || node.type === 'sensor-tof';
         return (
         <div className="trace-slider-row">
+          {isDetector && <SensorReception value={typeof sliderValue === 'number' ? sliderValue : 0} />}
           <span className="trace-slider-label">{sliderMin}</span>
           <input
             type="range"
@@ -302,19 +545,29 @@ function DiagramNodeViewInner({
           );
         }
         const isCompound = node.type === 'compound';
+        const isColorSensor = node.type === 'sensor-color';
         // Pre-formatted per-port values from the parent; '' = no value.
         const portValues = outputPortValues?.split(',');
         return ports.map((port, i) => {
           const leftPct = ((i + 0.5) / ports.length) * 100;
-          const label = isCompound ? getPortLabel(port, node, compoundTypes) : port[0].toUpperCase();
+          // Color channels get a friendly display name (White/Red/…); the
+          // clear/unfiltered diode reads total light, hence "White" (short "W"
+          // so it doesn't collide with Red/Green/Blue on the handle).
+          const colorChannel = isColorSensor ? COLOR_CHANNEL_LABELS[port as ColorChannel] : undefined;
+          const label = isCompound
+            ? getPortLabel(port, node, compoundTypes)
+            : colorChannel
+              ? colorChannel.short
+              : port[0].toUpperCase();
+          const portTitle = colorChannel ? colorChannel.name : port;
           const portValue = portValues?.[i] || undefined;
           return (
             <span key={port}>
               <button
                 className={`node-handle output-handle output-handle-port output-handle-${port}`}
                 style={{ left: `${leftPct}%` }}
-                title={port}
-                aria-label={`Start ${port} connection from ${node.label}`}
+                title={portTitle}
+                aria-label={`Start ${portTitle} connection from ${node.label}`}
                 onMouseDown={(event) => beginLinkDrag(event, node.id, port)}
               />
               <span

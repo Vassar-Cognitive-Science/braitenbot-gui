@@ -6,6 +6,7 @@ import type {
   NodeTypeId,
   OutputPortId,
   SensorProtocol,
+  ThresholdOp,
 } from '../types/diagram';
 import { TYPE_BY_ID } from '../types/diagram';
 import { flattenCompounds } from './flatten';
@@ -32,6 +33,7 @@ export interface GraphNode {
   xshutPin?: string;
   maxDistanceMm?: number;
   threshold?: number;
+  thresholdOp?: ThresholdOp;
   delayMs?: number;
   servoPin?: string;
   constantValue?: number;
@@ -109,6 +111,7 @@ export function buildGraph(
       xshutPin: node.xshutPin,
       maxDistanceMm: node.maxDistanceMm,
       threshold: node.threshold,
+      thresholdOp: node.thresholdOp,
       delayMs: node.delayMs,
       servoPin: node.servoPin,
       constantValue: node.constantValue,

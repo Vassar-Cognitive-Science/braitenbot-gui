@@ -54,6 +54,23 @@ export function useSerialMonitor() {
 
   const clear = useCallback(() => setLines([]), []);
 
+  // Send a line to the board. `arduino-cli monitor` forwards its stdin to the
+  // serial port, so this reaches the sketch's `Serial.read()`. A trailing
+  // newline is appended if missing so line-based sketch parsers see a complete
+  // command. No-op unless a monitor is currently open.
+  const send = useCallback(
+    async (text: string) => {
+      if (!tauriAvailable || !runningRef.current) return;
+      const data = text.endsWith('\n') ? text : `${text}\n`;
+      try {
+        await invoke<void>('write_serial', { data });
+      } catch (err) {
+        setNote(typeof err === 'string' ? err : String(err));
+      }
+    },
+    [tauriAvailable],
+  );
+
   // Stop the monitor ahead of a compile/upload so it can't hold the serial
   // port (which would make the upload fail). Deliberately does NOT auto-restart
   // afterwards: boards re-enumerate on flash, so reconnection stays manual.
@@ -97,5 +114,5 @@ export function useSerialMonitor() {
     };
   }, [tauriAvailable]);
 
-  return { running, lines, note, start, stop, clear, pauseForUpload };
+  return { running, lines, note, start, stop, clear, send, pauseForUpload };
 }

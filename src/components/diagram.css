@@ -39,6 +39,10 @@
   --sensor-color: #c4905a;
   --compute-color: #7888b8;
   --output-color: #6aab7a;
+  /* Compound instances get their own hue — a saturated purple-blue
+     (periwinkle), distinct from the muted indigo compute blocks. */
+  --compound-color: #8a6ee6;
+  --compound-label: #d3c8f7;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   /* Type scale — 1.25 ratio (subset used by the diagram) */
   --text-xs: 0.64rem;
@@ -78,6 +82,44 @@
   opacity: 1;
 }
 
+/* Selecting a node lifts the wires touching it and fades the rest, so a single
+   connection is easy to follow through a busy diagram. */
+.bb-diagram .diagram-links .connection-link.emphasized {
+  stroke-width: 2.6;
+  opacity: 1;
+}
+
+.bb-diagram .diagram-links .connection-link.dimmed {
+  opacity: 0.3;
+}
+
+/* Dashed overlay for the spans of a wire hidden behind opaque node boxes,
+   drawn above the node layer (z-index 2) so an occluded connection stays
+   traceable. pointer-events stay off so nodes/badges remain interactive. */
+.bb-diagram .diagram-links-occluded {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 4;
+}
+
+.bb-diagram .diagram-links-occluded .connection-occluded {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+}
+
+.bb-diagram .diagram-links-occluded .connection-occluded.emphasized {
+  stroke: #d4bc78;
+  stroke-width: 2;
+  opacity: 0.95;
+}
+
 .bb-diagram .connection-config-trigger {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -99,6 +141,58 @@
   cursor: grabbing;
 }
 
+/* When the badge shows a non-linear curve thumbnail instead of text, drop the
+   text padding so it reads as a tidy little square. */
+.bb-diagram .connection-config-trigger.has-curve {
+  padding: 2px;
+  line-height: 0;
+}
+
+/* Advanced weight visualization: the badge spells out the whole calculation,
+   so let it grow wider and keep the operators muted. */
+.bb-diagram .connection-config-trigger.advanced-weight {
+  white-space: nowrap;
+}
+
+.bb-diagram .connection-config-trigger .badge-calc-op {
+  color: var(--muted);
+}
+
+/* Non-linear transfer-curve thumbnail drawn inside a connection badge. The
+   axes use the diagram line color; the path inherits the badge's text color
+   (currentColor) so it brightens with the badge on select/hover. Shared here
+   (not App.css) so the docs embed renders the curve too. */
+.bb-diagram .mini-transfer-curve {
+  display: block;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-axis {
+  stroke: var(--line);
+  stroke-width: 0.75;
+  opacity: 0.6;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-path {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Out-of-range arrow (steep linear weight) and the live trace operating point. */
+.bb-diagram .mini-transfer-curve .mini-curve-arrow {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.bb-diagram .mini-transfer-curve .mini-curve-point {
+  fill: #d4bc78;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.5;
+}
+
 .bb-diagram .connection-config-trigger.selected {
   border-color: #d4bc78;
   color: #d4bc78;
@@ -108,6 +202,16 @@
 .bb-diagram .connection-config-trigger.trace-signal {
   border-color: rgba(196, 168, 98, 0.5);
   color: #d4bc78;
+}
+
+/* Badge emphasis mirrors the wire emphasis when a node is selected. */
+.bb-diagram .connection-config-trigger.emphasized {
+  border-color: #d4bc78;
+  z-index: 5;
+}
+
+.bb-diagram .connection-config-trigger.dimmed {
+  opacity: 0.45;
 }
 
 /* Remote-selection halo under a connection path. */
@@ -156,6 +260,54 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* While renaming, lift the node above its neighbors so the floating editor
+   isn't painted over by an overlapping block. */
+.bb-diagram .diagram-node.renaming {
+  z-index: 10;
+}
+
+/* Inline label editor — double-click a node's label to rename it. Rendered as a
+   floating textbox over the top of the node (the `.node-label` box clips its
+   overflow, which would hide the border/caret), so it reads unmistakably as an
+   editable field: solid fill, accent border + focus ring, and a live caret. */
+.bb-diagram .diagram-node .node-label-input {
+  position: absolute;
+  /* Start past the type glyph so it stays visible while renaming. */
+  left: 27px;
+  right: 5px;
+  top: 5px;
+  z-index: 6;
+  height: 24px;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: none;
+  caret-color: var(--accent);
+  cursor: text;
+  box-shadow: 0 0 0 2px rgba(106, 171, 122, 0.35), 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.bb-diagram .diagram-node .node-label-input::selection {
+  background: rgba(106, 171, 122, 0.45);
+  color: var(--text);
+}
+
+/* At-a-glance type marker before each node label, so a node's kind is legible
+   without reading the text. Inline so the label still truncates with an
+   ellipsis; inherits the label's per-kind color by default. */
+.bb-diagram .node-type-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 4px;
+  color: currentColor;
+  opacity: 0.9;
 }
 
 .bb-diagram .diagram-node .node-meta {
@@ -322,7 +474,7 @@
 .bb-diagram .output-port-label-green { color: #6eb87a; }
 .bb-diagram .output-port-label-blue  { color: #5e90d2; }
 .bb-diagram .output-port-label-compound {
-  color: rgba(160, 185, 215, 0.85);
+  color: rgba(180, 160, 240, 0.9);
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -348,7 +500,7 @@
   letter-spacing: 0.04em;
   pointer-events: none;
   user-select: none;
-  color: rgba(160, 185, 215, 0.85);
+  color: rgba(180, 160, 240, 0.9);
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -390,17 +542,22 @@
 /* Compound instance — same dimensions as a regular node, distinctive
    double border + muted blue accent so it reads as a subdiagram. */
 .bb-diagram .diagram-node.node-compound {
-  border: 1px solid #8aa8d8;
-  box-shadow: inset 0 0 0 1px rgba(138, 168, 216, 0.25);
+  border: 1px solid var(--compound-color);
+  box-shadow: inset 0 0 0 1px rgba(138, 110, 230, 0.25);
 }
 
 .bb-diagram .diagram-node.node-compound .node-label {
-  color: #c4d5ee;
+  color: var(--compound-label);
 }
 
 .bb-diagram .node-compound .node-handle {
-  color: #8aa8d8;
-  border-color: #8aa8d8;
+  color: var(--compound-color);
+  border-color: var(--compound-color);
+}
+
+/* Compound uses the saturated accent (its label text is a lighter tint). */
+.bb-diagram .node-compound .node-type-icon {
+  color: var(--compound-color);
 }
 
 /* Compound port anchors (compound-input / compound-output) — used inside a
@@ -454,6 +611,81 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Color-sensor picker: a color well + brightness slider, a row of impure
+   rainbow swatches, and the exact per-channel sliders tucked in a disclosure. */
+.bb-diagram .trace-color-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.bb-diagram .trace-color-swatches {
+  display: flex;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+/* Dot showing the color the sensor currently sees (not a picker). */
+.bb-diagram .trace-color-seen {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  align-self: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.bb-diagram .trace-color-swatch {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  padding: 0;
+  cursor: pointer;
+}
+
+.bb-diagram .trace-color-swatch:hover {
+  outline: 1px solid var(--accent);
+}
+
+/* The custom-color swatch: a rainbow gradient that opens the OS color picker.
+   It wraps a hidden native <input type="color"> so one click opens the dialog. */
+.bb-diagram .trace-color-rainbow {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    #f24a3a, #f2a63a, #ecec44, #4f9a4a, #4661b8, #8154ac, #f24a3a
+  );
+}
+
+.bb-diagram .trace-color-rainbow input[type='color'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bb-diagram .trace-color-advanced > summary {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+/* Inward "reception" arcs for light/distance sensors — see SensorReception. */
+.bb-diagram .sensor-reception {
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 /* Disconnected nodes in trace mode */
@@ -575,6 +807,104 @@
   background: var(--accent);
   color: var(--bg);
   border-color: var(--accent);
+}
+
+/* --- Comment (annotation) boxes -------------------------------------------
+   Inert explanatory notes drawn behind the nodes. Gray on purpose so they
+   read as marginalia rather than as part of the signal-flow graph. Shared
+   here (not App.css) so the docs embed's CommentView instances render
+   identically to the app's. */
+.bb-diagram .diagram-comment {
+  position: absolute;
+  z-index: 0;
+  /* World layer is pointer-events:none; opt back in like nodes/badges do,
+     or clicks fall through to the canvas (pan) and the textarea can't focus. */
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  background: rgba(144, 140, 126, 0.1);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.bb-diagram .diagram-comment-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.15em 0.35em;
+  background: rgba(144, 140, 126, 0.16);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.bb-diagram .diagram-comment-grip {
+  color: var(--muted);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.bb-diagram .diagram-comment-delete {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.15em;
+  border-radius: 4px;
+}
+
+.bb-diagram .diagram-comment-delete:hover {
+  color: var(--text);
+  background: rgba(144, 140, 126, 0.25);
+}
+
+.bb-diagram .diagram-comment-text {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.35;
+  padding: 0.35em 0.5em;
+}
+
+.bb-diagram .diagram-comment-text::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.bb-diagram .diagram-comment-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 50%,
+    var(--muted) 50% 60%,
+    transparent 60% 75%,
+    var(--muted) 75% 85%,
+    transparent 85%
+  );
+  opacity: 0.6;
+}
+
+.bb-diagram .diagram-comment-resize:hover {
+  opacity: 1;
 }
 
 /* ── Remote (collab) node highlights ───────────────────────────────────── */

@@ -35,3 +35,28 @@ jobs:
       - run: npm run lint
 
       - run: npm test
+
+  docs-typecheck:
+    runs-on: ubuntu-latest
+
+    # The app build now hard-depends on the docs site building (`stage:docs`
+    # copies `docs/build` into the app bundle), and the docs' InteractiveDiagram
+    # imports the app's simulation core via the `@app` alias — so a type error
+    # on either side of that boundary should fail fast here, not surface later
+    # as a broken Tauri build.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Typecheck docs
+        working-directory: docs
+        run: npm run typecheck

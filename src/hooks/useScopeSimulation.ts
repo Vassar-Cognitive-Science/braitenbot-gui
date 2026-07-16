@@ -31,13 +31,21 @@ interface Pulse {
   endsAtTick: number;
 }
 
-const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, disconnected: new Set() };
+const EMPTY: TraceResult = { nodeValues: {}, edgeSignals: {}, edgeInputs: {}, disconnected: new Set() };
 
 /**
- * Minimum wall-derived sim time between React state pushes for the diagram
- * trace display (~10Hz). Scope buffers still append every tick — only the
- * React re-render is throttled — and the cadence is independent of the loop
+ * Minimum wall-clock time between React state pushes for the diagram trace
+ * display (~10Hz). Scope buffers still append every tick — only the React
+ * re-render is throttled — and the cadence is independent of the loop
  * period (a 5ms loop won't flood React at 200Hz).
+ *
+ * Measured against `performance.now()`, not simulated time: at very small
+ * loopPeriodMs the browser clamps setInterval well above the requested
+ * delay (commonly ~4ms), so ticks arrive slower than the nominal period and
+ * simulated time lags real time. Throttling on simulated time would then
+ * wait far longer than DIAGRAM_UPDATE_INTERVAL_MS of actual wall time to
+ * push a frame — inverting the expected relationship (smaller loop periods
+ * appearing to update less often than larger ones).
  */
 const DIAGRAM_UPDATE_INTERVAL_MS = 100;
 
@@ -109,7 +117,8 @@ export function useScopeSimulation(
   const timeRef = useRef(0);
   const seedRef = useRef(0);
   const pulsesRef = useRef<Map<string, Pulse>>(new Map());
-  // Sim time (ms) of the last React state push — throttles re-renders.
+  // Wall-clock time (performance.now()) of the last React state push —
+  // throttles re-renders independent of tick/sim-time cadence.
   const lastDisplayPushRef = useRef(0);
 
   // Latest props for the interval callback — refs avoid restarting the
@@ -161,8 +170,8 @@ export function useScopeSimulation(
     buffersRef.current = new Map();
     pulsesRef.current = new Map();
     // Reset the throttle marker so the first push lands ~one interval after
-    // start (sim time begins at 0) — never left starved indefinitely.
-    lastDisplayPushRef.current = 0;
+    // start — never left starved indefinitely.
+    lastDisplayPushRef.current = performance.now();
     setCurrent(EMPTY);
   }, [loopPeriodMs, optionSeed]);
 
@@ -254,11 +263,12 @@ export function useScopeSimulation(
         if (!liveIds.has(id)) buffers.delete(id);
       }
 
-      // Push to React state at most ~10Hz of sim time, regardless of loop
-      // period. Buffers above already captured this tick; only the re-render
-      // is throttled.
-      if (t - lastDisplayPushRef.current >= DIAGRAM_UPDATE_INTERVAL_MS) {
-        lastDisplayPushRef.current = t;
+      // Push to React state at most ~10Hz of wall-clock time, regardless of
+      // loop period. Buffers above already captured this tick; only the
+      // re-render is throttled.
+      const now = performance.now();
+      if (now - lastDisplayPushRef.current >= DIAGRAM_UPDATE_INTERVAL_MS) {
+        lastDisplayPushRef.current = now;
         setCurrent(result);
       }
     }, Math.max(1, loopPeriodMs));

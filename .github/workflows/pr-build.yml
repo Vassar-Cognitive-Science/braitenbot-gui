@@ -57,6 +57,28 @@ jobs:
 
       - run: npm ci
 
+      # tauri.conf.json's beforeBuildCommand chain (via `stage:docs`) hard-fails
+      # if `docs/build` is missing, so the bundled docs site must exist before
+      # the Tauri build step runs — on every platform in the matrix. Uses
+      # whatever's already committed in docs/src/data/latest-release.json
+      # rather than running scripts/fetch-latest-release.mjs (that script only
+      # refreshes the Install page's download links for the deployed website;
+      # the app-bundled copy never renders that page).
+      - name: Set up Node for docs
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build docs site
+        working-directory: docs
+        run: npm run build
+
       # Pre-fetch every arduino-cli sidecar before tauri-action runs. The
       # host-only fetch inside `beforeBuildCommand` picks the sidecar for the
       # *runner's* architecture, which is wrong when cross-compiling (e.g.
