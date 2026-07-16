@@ -40,19 +40,16 @@ The idea is simple: wire a sensor directly to a motor and you get a vehicle that
   into the app (they work offline), and every circuit you wire there has an
   **Upload to bot** button: pick your board and it goes straight onto a real
   robot, no need to open the editor.
-- **Can't install it?** iPad, Chromebook, locked-down machine — no problem.
+- **Can't install it?** iPad, Chromebook, locked-down machine: no problem.
   The same [Lessons](./lessons/your-first-vehicle) run right here in your
   browser, nothing to set up.
-- **Teaching with BraitenBot**: planning a class? The course overview links the
-  lesson arc and the hardware build in one place.
-- **Lessons**: the full thirteen-lesson course — seven software lessons, five
+- **Lessons**: the full thirteen-lesson course: seven software lessons, five
   more ("On the Robot") that calibrate and tune real sensors, and a closing
   lesson rounding out the toolbox.
 - **Install & Setup**: installing the app and setting up Arduino.
-- **Reference**: the building blocks (nodes, connections, transfer functions,
-  compounds, the simulator, collaborative sessions) and the editor itself.
-- **Under the Hood**: optional. What the generated Arduino sketch looks like and
-  how diagrams are stored.
+- **Keep Building**: go further with the diagram building blocks:
+  nodes, connections, transfer functions, compounds, the simulator,
+  collaborative sessions, and the editor itself.
 
 The separate **Hardware** section covers building the physical robot.
 
@@ -61,5 +58,4 @@ The separate **Hardware** section covers building the physical robot.
 - [Install BraitenBot](/install) and take the lessons inside the app
 - [Play the first lesson in your browser](./lessons/your-first-vehicle) if you
   can't install: nothing to set up
-- [Teaching this as a course?](./teaching-with-braitenbot): the educator overview
 - [Explore the building blocks](./guide/nodes)

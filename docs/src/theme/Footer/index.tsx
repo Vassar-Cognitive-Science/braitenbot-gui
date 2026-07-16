@@ -10,7 +10,7 @@ type LinkItem = {label?: string; to?: string; href?: string};
 type LinkColumn = {title?: string; items: LinkItem[]};
 
 /**
- * The colophon — the dark "ink page" at the back of the monograph.
+ * The colophon: the dark "ink page" at the back of the monograph.
  *
  * Where the rest of the site is warm graph-paper, the footer is the inside
  * back cover: ink ground, hairline rules, a Fraunces wordmark, and link
@@ -51,6 +51,17 @@ export default function Footer(): React.ReactElement | null {
   const {footer} = useThemeConfig() as {footer?: FooterConfig};
   const {siteConfig} = useDocusaurusContext();
 
+  // Inside the desktop app's Lessons iframe, the footer's links (Hardware,
+  // Teaching, GitHub) are exactly the escape hatches out of lesson content
+  // the app should never offer a student. But that hiding must NOT be a
+  // render branch on `isEmbeddedInApp`: the static HTML is always built with
+  // it false, so returning null here in the app makes hydration's first
+  // client render disagree with the server DOM; React 19 then discards and
+  // rebuilds the page, which is how the footer ended up reordered above
+  // <main> in-app. Instead the footer always renders (matching SSR) and
+  // embed mode hides it via CSS, the same way the navbar and doc sidebar are
+  // hidden (`html[data-bb-embed] .bb-colophon` in custom.css, attribute set
+  // at module scope by src/lib/appBridge.ts).
   if (!footer) {
     return null;
   }
@@ -59,7 +70,7 @@ export default function Footer(): React.ReactElement | null {
   const year = new Date().getFullYear();
 
   return (
-    <footer className={styles.footer}>
+    <footer className={`bb-colophon ${styles.footer}`}>
       <div className={styles.inner}>
         <div className={styles.top}>
           <div className={styles.brand}>

@@ -55,7 +55,7 @@ output = source signal × weight
 
 See a weight in action, wired up hands-on, in the [Your First Vehicle lesson](../lessons/your-first-vehicle).
 
-:::tip A weight already covers every straight line through the origin
+:::tip[A weight already covers every straight line through the origin]
 Because linear mode is just multiplication, any response that's a **straight line
 through zero** is already a weight: you don't need a curve for it. "Invert the
 signal" is simply a weight of **-1**; "halve and invert" is **-0.5**. Reach for a

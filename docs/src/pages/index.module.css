@@ -1,4 +1,4 @@
-/* Homepage — asymmetric monograph layout with a live vehicle schematic. */
+/* Homepage: asymmetric monograph layout with a live vehicle schematic. */
 
 .page {
   --measure: 34rem;
@@ -70,7 +70,7 @@
   align-items: center;
 }
 
-/* Primary CTA: a "stamped" ink button — high contrast, the green stays for signal. */
+/* Primary CTA: a "stamped" ink button, high contrast, the green stays for signal. */
 .ctaPrimary {
   display: inline-flex;
   align-items: center;
@@ -84,6 +84,7 @@
   letter-spacing: 0.04em;
   border: 1px solid var(--bb-ink);
   border-radius: var(--ifm-global-radius);
+  cursor: pointer;
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
     background-color 0.25s ease;
 }
@@ -125,29 +126,6 @@
   transform: translateX(3px);
 }
 
-/* Secondary CTA: the download link, demoted below the audience fork — same
-   family as the mono meta line, just linkable and with its own arrow. */
-.ctaSecondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 1.25rem;
-  font-family: var(--bb-font-mono);
-  font-size: 0.78rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--bb-ink-soft);
-}
-
-.ctaSecondary:hover {
-  text-decoration: none;
-  color: var(--bb-signal-text);
-}
-
-.ctaSecondary:hover .ctaArrow {
-  transform: translateX(3px);
-}
-
 .meta {
   margin-top: 1.5rem;
   font-family: var(--bb-font-mono);
@@ -160,7 +138,7 @@
 /* ------------------------------------------------------- Schematic figure */
 
 /* Frameless: the illustration sits directly on the page's graph-paper grid,
-   as if drawn onto the page. No box, no surface — just art + a caption rule. */
+   as if drawn onto the page. No box, no surface: just art + a caption rule. */
 .figure {
   margin: 0;
   position: relative;

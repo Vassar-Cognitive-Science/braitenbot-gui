@@ -9,12 +9,16 @@ import InstallModal from '@site/src/components/InstallModal';
  *
  * 1. Suppressing the native right-click context menu when the site is
  *    loaded inside the desktop app's Lessons iframe (see
- *    `src/lib/appBridge.ts` for why) — SPA navigation between docs pages
+ *    `src/lib/appBridge.ts` for why): SPA navigation between docs pages
  *    never remounts this component, so the effect only needs to run once.
- * 2. Rendering `InstallModal`, the first-visit "get the app" interstitial.
- *    It manages its own visibility (including staying hidden when embedded
- *    in the app) and portals itself to `document.body`, so mounting it here
- *    unconditionally is enough to have it available on every page.
+ * 2. Rendering `InstallModal`, the "get the app" interstitial opened on
+ *    demand by the homepage's "I'm a student" CTA. It manages its own
+ *    visibility (including staying hidden when embedded in the app) and
+ *    portals itself to `document.body`, so mounting it here unconditionally
+ *    is enough to have it available on every page.
+ *
+ * (Tagging `<html>` with `data-bb-embed` when embedded happens at module
+ * scope in `src/lib/appBridge.ts`, before hydration, not here.)
  */
 export default function Root({ children }: { children: ReactNode }): React.ReactElement {
   useEffect(() => suppressNativeContextMenuIfEmbedded(), []);

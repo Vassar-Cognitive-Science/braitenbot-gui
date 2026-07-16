@@ -6,7 +6,7 @@ import type { DiagramState } from '@app/lib/diagramFile';
  * `LessonsView.tsx` (app side) loads the bundled docs with a `?bb-app=1`
  * query param on the very first URL; Docusaurus's client-side router only
  * ever does in-page navigations after that (no full document reload), so
- * this module — which evaluates exactly once per document load — can read
+ * this module, which evaluates exactly once per document load, can read
  * the flag a single time here rather than re-checking `location.search` on
  * every render or wiring up a postMessage handshake.
  *
@@ -15,7 +15,7 @@ import type { DiagramState } from '@app/lib/diagramFile';
  * restoring the iframe's document after eviction land back on a URL that no
  * longer carries `?bb-app=1` (only the very first navigation did). A
  * `sessionStorage` latch survives those reloads within the same tab/frame
- * session — once we've ever seen the query flag, we remember it for the rest
+ * session: once we've ever seen the query flag, we remember it for the rest
  * of the session even after the query string is gone.
  *
  * Guarded for SSR: Docusaurus statically renders every page (and therefore
@@ -32,12 +32,32 @@ if (queryFlag) {
   try {
     sessionStorage.setItem(EMBED_FLAG_KEY, '1');
   } catch {
-    // sessionStorage unavailable (privacy mode, etc.) — the query flag alone
+    // sessionStorage unavailable (privacy mode, etc.); the query flag alone
     // still covers the current document load.
   }
 }
 
+/**
+ * The app always loads the docs in a same-origin iframe, and the public
+ * website is always top-level, so `window.self !== window.top` is the most
+ * robust embed signal we have. Unlike the `?bb-app=1` query flag it survives
+ * Docusaurus route canonicalization, a hard reload inside the frame, and the
+ * packaged Tauri protocol's own index.html resolution, none of which reliably
+ * keep the query string on the document URL. The query flag and its
+ * sessionStorage latch stay below as a fallback.
+ */
+const inIframe = (() => {
+  try {
+    return typeof window !== 'undefined' && window.self !== window.top;
+  } catch {
+    // Reading `window.top` across origins throws; that only happens when some
+    // other site frames us, which we also treat as embedded.
+    return true;
+  }
+})();
+
 export const isEmbeddedInApp: boolean =
+  inIframe ||
   queryFlag ||
   (() => {
     try {
@@ -48,13 +68,31 @@ export const isEmbeddedInApp: boolean =
   })();
 
 /**
+ * CSS hook (see custom.css) that hides the docs chrome (navbar, footer,
+ * breadcrumb home link) while embedded in the app.
+ * Applied here at module-evaluation time, not from a React effect: it lands
+ * before hydration even starts, so embed scoping never depends on hydration
+ * completing and the chrome can't flash in (or stick around) first.
+ *
+ * A data attribute, NOT a class: Docusaurus manages the `<html>` element's
+ * `class` attribute through react-helmet (per-route classes like
+ * `docs-doc-page`), and each helmet write replaces the whole attribute,
+ * wiping any class added from outside React. Attributes helmet never
+ * declares are left alone, the same reason Docusaurus's own `data-theme`
+ * survives.
+ */
+if (typeof document !== 'undefined' && isEmbeddedInApp) {
+  document.documentElement.setAttribute('data-bb-embed', 'true');
+}
+
+/**
  * Send the reader's current diagram to the app shell for direct upload to
  * the robot. Posts to `window.parent` (the app shell that hosts the Lessons
  * iframe), which listens for `braitenbot:upload-to-bot` messages and opens
- * a small board-picker/upload dialog for the circuit — the student never
+ * a small board-picker/upload dialog for the circuit; the student never
  * has to leave the lesson or open the editor.
  *
- * Scoped to `window.location.origin` as the target origin — same-origin by
+ * Scoped to `window.location.origin` as the target origin: same-origin by
  * construction, since the iframe and the app shell both serve the bundled
  * docs build from the app's own protocol/origin.
  *
@@ -77,7 +115,7 @@ export function sendToBot(state: DiagramState): void {
  * `editorUnlocked` flag in its own `localStorage` (so cross-nav buttons
  * between Editor and Lessons appear from then on), and switches views.
  *
- * Scoped to `window.location.origin` as the target origin — same-origin by
+ * Scoped to `window.location.origin` as the target origin: same-origin by
  * construction, since the iframe and the app shell both serve the bundled
  * docs build from the app's own protocol/origin.
  *

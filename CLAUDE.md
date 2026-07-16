@@ -1,4 +1,4 @@
-# BraitenBot GUI — Claude Code Configuration
+# BraitenBot GUI: Claude Code Configuration
 
 ## Project Overview
 
@@ -12,10 +12,10 @@ project's main website.
 ## Tech Stack
 
 - **Framework**: React 18 + TypeScript 5
-- **Shell**: Tauri 2 (Rust) — primary distribution target
+- **Shell**: Tauri 2 (Rust), primary distribution target
 - **Build**: Vite 8 (Tauri frontend)
 - **Styling**: Plain CSS (dark theme, CSS variables in `src/App.css`)
-- **Rendering**: DOM-based (positioned divs + SVG paths for connections — no `<canvas>`)
+- **Rendering**: DOM-based (positioned divs + SVG paths for connections, no `<canvas>`)
 
 ## Commands
 
@@ -36,7 +36,7 @@ npm test             # vitest run (unit tests)
 
 | File | Purpose |
 |---|---|
-| `src/components/BraitenbergDiagram.tsx` | Core diagram editor — node/connection state, drag-drop, robot overlay, config panel |
+| `src/components/BraitenbergDiagram.tsx` | Core diagram editor: node/connection state, drag-drop, robot overlay, config panel |
 | `src/components/Oscilloscope.tsx` | Real-time signal oscilloscope panel driven by `useScopeSimulation` |
 | `src/components/NumberInput.tsx` | Controlled numeric input with keyboard/scroll increment |
 | `src/components/SetupModal.tsx` | First-run Arduino detection/setup dialog |
@@ -62,14 +62,14 @@ npm test             # vitest run (unit tests)
 
 - **Sensors**: `sensor-analog`, `sensor-digital`, `sensor-color` (TCS34725 RGBC), `sensor-tof` (VL53L4CD ToF distance)
 - **Compute**: `compute-threshold`, `compute-delay`, `compute-summation`, `compute-multiply`, `compute-min`, `compute-max`, `compute-oscillator`, `compute-noise`
-- **Constants**: `constant` — fixed-value input
+- **Constants**: `constant`, fixed-value input
 - **Outputs**: `servo-cr` (continuous servo), `servo-positional`, `digital-out`, `display-tm1637` (7-segment)
-- **Compound**: `compound` — user-defined sub-diagram instance; `compound-input` / `compound-output` port anchors (body-only)
+- **Compound**: `compound`, a user-defined sub-diagram instance; `compound-input` / `compound-output` port anchors (body-only)
 
 ### Diagram Data Model
 
-- `DiagramNode[]` — positioned nodes with type, label, and type-specific parameters
-- `DiagramConnection[]` — weighted edges with per-edge transfer curves (weight range: −1 to +1)
+- `DiagramNode[]`: positioned nodes with type, label, and type-specific parameters
+- `DiagramConnection[]`: weighted edges with per-edge transfer curves (weight range: −1 to +1)
 
 ### Robot Overlay
 
@@ -80,24 +80,24 @@ The robot is rendered as a top-down view in the center of the canvas:
 
 ## Adding a new node type
 
-Every node type is expected to be complete on all of these fronts — a new
+Every node type is expected to be complete on all of these fronts. A new
 block that skips one reads as half-finished. When adding one, touch:
 
-1. **`src/types/diagram.ts`** — add the id to the `NodeTypeId` union and an
+1. **`src/types/diagram.ts`**: add the id to the `NodeTypeId` union and an
    entry to the `NODE_TYPES` registry (kind, `displayName`, `metaLabel`,
    `mode`, port flags).
-2. **`src/components/icons.tsx`** — add a glyph. *Every node type has a
+2. **`src/components/icons.tsx`**: add a glyph. *Every node type has a
    per-node icon shown before its label; there are no exceptions.* Follow the
    existing lucide-style convention (24×24 viewBox, `currentColor` stroke).
-3. **`src/components/DiagramNodeView.tsx`** — register the glyph in the
+3. **`src/components/DiagramNodeView.tsx`**: register the glyph in the
    `NODE_TYPE_ICONS` map (the map is keyed by every `NodeTypeId`, so a new
    type won't type-check until it's added).
-4. **`src/components/palettePresets.ts`** — add the palette entry (Basic
+4. **`src/components/palettePresets.ts`**: add the palette entry (Basic
    and/or Advanced) with any pre-filled pins/params.
-5. **`src/codegen/emitter.ts`** — emit the node's Arduino code for its `mode`.
-6. **`src/hooks/useTraceSimulation.ts`** — implement its trace-mode behavior
+5. **`src/codegen/emitter.ts`**: emit the node's Arduino code for its `mode`.
+6. **`src/hooks/useTraceSimulation.ts`**: implement its trace-mode behavior
    so simulation matches the generated sketch.
-7. **Docs** — add a reference entry in `docs/docs/guide/nodes.md` and list it
+7. **Docs**: add a reference entry in `docs/docs/guide/nodes.md` and list it
    in the palette sections of `docs/docs/getting-started/editor.md`.
 
 Kinds are color-coded consistently across the app and docs: orange sensors,
@@ -115,12 +115,46 @@ the relevant page in the same change:
 - Trace / simulation behavior → `guide/simulation.md`
 - Connection or weight behavior → `guide/connections.md`
 
+## Website audience story (docs/ homepage)
+
+The homepage splits visitors into two audiences with two CTAs, and the app
+should be pitched to each differently:
+
+- **"I'm a student"**: students are who the desktop app is *for*: the whole
+  course is bundled in (works offline) and it's the only way to upload a
+  circuit onto a real robot. So the app pitch is prominent for them. This CTA
+  opens the `InstallModal` (`docs/src/components/InstallModal/`), triggered
+  via `openInstallModal()` in `docs/src/lib/installModal.ts`; the modal's
+  secondary action ("Continue to lessons") sends them on to `/docs/`.
+- **"I'm running a class"**: educators are evaluating/planning, not the ones
+  who need the app front-and-center. The app is *mentioned* on the teaching
+  page (`docs/docs/teaching-with-braitenbot.md`) but stays subordinate to
+  course/curriculum content. This CTA is a plain link, no modal.
+
+The install prompt must **never auto-pop** on load: pitching the app to
+everyone before they've said who they are is the intrusiveness we removed.
+It only appears on the explicit student CTA. It also never shows inside the
+app's Lessons iframe (`isEmbeddedInApp`) or on `/install`.
+
+This student/instructor split carries into navigation too (`docs/sidebars.ts`).
+The student sidebar (`softwareSidebar`) is just three sections: Lessons,
+Install & Setup, and Keep Building (the renamed Reference category).
+The instructor sidebar (`instructorSidebar`) is a superset of those student
+docs plus three instructor-only extras: the teaching page (lead), a Quick
+Reference of condensed wiring patterns (`docs/docs/quick-reference.md`,
+extracted from the old teaching-page cookbook), and Under the Hood (moved out
+of the student nav to the end here). The teaching page and Quick Reference
+select `instructorSidebar` via `displayed_sidebar` in their frontmatter.
+Students are never linked to the teaching page or Quick Reference from
+student-reachable pages (intro, lessons) or from in-app content; the only
+instructor entry point is the homepage's "I'm running a class" CTA.
+
 ## Conventions
 
 - Strict TypeScript (`strict: true` in tsconfig)
 - CSS class names use kebab-case (e.g., `.diagram-node`, `.robot-wheel`)
 - Node IDs use `{type}-{uuid}` format
-- No external UI library — all components are hand-rolled
+- No external UI library: all components are hand-rolled
 - Dark theme with CSS variables (`--bg`, `--surface`, `--accent`, etc.)
 
 ## Alpha-stage policy: no migrations
@@ -130,5 +164,5 @@ not stable, and there are no real users with persisted data to protect. Do
 **not** add migration code, version fields, legacy-shape adapters, or
 defensive clamps for "old" values when changing the data model. If a schema
 change breaks existing saved diagrams, the answer is to clear localStorage
-or re-export the file — not to write migration scaffolding. Revisit this
+or re-export the file, not to write migration scaffolding. Revisit this
 policy when we cut a 1.0.

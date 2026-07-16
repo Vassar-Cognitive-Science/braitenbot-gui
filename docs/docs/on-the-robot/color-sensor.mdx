@@ -21,13 +21,13 @@ Lay out some colored paper patches on the floor: a red one, a blue one, and (to 
 
 The channel numbers in the lesson are illustrative: your surfaces, lighting, and mounting height will shift them. A few things to get right on real hardware:
 
-- **Sensor height.** The white LED's usefulness depends on being close to the surface. Too high and it reads a dim blur averaged with room light; too low and it can scrape the floor. The mount fixes it at roughly a centimeter, which keeps readings consistent — worth knowing if a reading looks off.
-- **Gain.** The color node has a **gain** setting (1×, 4×, 16×, or 60×; default 16×). If every channel reads near 0 on your patches, raise the gain to amplify dim reflections. If white paper pins channels at a flat 100 (saturated, so red and blue can't be told apart), lower the gain until they come off the ceiling. You need headroom on *both* channels for the subtraction to mean anything.
+- **Sensor height.** The white LED's usefulness depends on being close to the surface. Too high and it reads a dim blur averaged with room light; too low and it can scrape the floor. The mount fixes it at roughly a centimeter, which keeps readings consistent (worth knowing if a reading looks off).
+- **Gain.** The color node has a **gain** setting (1×, 4×, 16×, or 60×; default 16×). If every channel reads near 0 on your patches, raise the gain to amplify dim reflections. If white paper pins channels at a flat 100 (saturated, so red and blue can't be told apart), lower the gain until they come off the ceiling. You need headroom on _both_ channels for the subtraction to mean anything.
 - **Reaction time.** The sensor produces a fresh reading about ten times a second. A fast robot can shoot clean across a small patch between readings, so keep the cruise speed modest or make the patches generous.
 - **Ambient light.** The onboard LED dominates at close range, but a beam of direct sunlight or a colored desk lamp can still bias the channels. If the robot behaves differently at different times of day, that's your culprit: shade the sensor or recalibrate the thresholds for the room it runs in.
 
-:::tip[Read the real numbers first]
-Park the robot over each patch and read the actual channel readings. See [Calibrating with trace mode](../guide/simulation#calibrating-with-trace-mode). Set your opponent-signal thresholds against *those* numbers, not the ones in the lesson.
+:::note[Read the real numbers first]
+Park the robot over each patch and read the actual channel readings. See [Calibrating with trace mode](../guide/simulation#calibrating-with-trace-mode). Set your opponent-signal thresholds against _those_ numbers, not the ones in the lesson.
 :::
 
 ## What's next

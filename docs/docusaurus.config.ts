@@ -12,8 +12,8 @@ const githubRepo = 'https://github.com/Vassar-Cognitive-Science/braitenbot-gui';
  * the simulation logic here, InteractiveDiagram imports it from `../src`.
  *
  * The default Docusaurus JS rule (`test: /\.[jt]sx?$/`, `exclude: excludeJS`)
- * already transpiles files outside the site dir — excludeJS only skips
- * node_modules — so no extra loader rule is needed for `../src/*.ts`.
+ * already transpiles files outside the site dir (excludeJS only skips
+ * node_modules), so no extra loader rule is needed for `../src/*.ts`.
  *
  * React MUST resolve to the docs' own React 19 copy: `../src` files `import
  * 'react'`, and webpack's bare `node_modules` resolution would otherwise walk
@@ -77,7 +77,7 @@ const config: Config = {
 
   stylesheets: [
     'https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap',
-    // The app's diagram font — used by the InteractiveDiagram embed (via the
+    // The app's diagram font, used by the InteractiveDiagram embed (via the
     // shared src/components/diagram.css) so embedded diagrams match the app.
     'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap',
   ],
@@ -108,23 +108,6 @@ const config: Config = {
     navbar: {
       title: 'BraitenBot',
       items: [
-        {
-          type: 'docSidebar',
-          sidebarId: 'softwareSidebar',
-          position: 'left',
-          label: 'Software',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'hardwareSidebar',
-          position: 'left',
-          label: 'Hardware',
-        },
-        {
-          to: '/install',
-          label: 'Install',
-          position: 'left',
-        },
         {
           href: githubRepo,
           label: 'GitHub',

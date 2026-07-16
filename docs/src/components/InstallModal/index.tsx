@@ -4,6 +4,7 @@ import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import { isEmbeddedInApp } from '@site/src/lib/appBridge';
+import { onOpenInstallModal } from '@site/src/lib/installModal';
 import {
   detectVisitorPlatform,
   refineMacArchitecture,
@@ -12,7 +13,6 @@ import {
 import { getAssetForPlatform, type PlatformKey } from '@site/src/lib/releaseAssets';
 import styles from './styles.module.css';
 
-const DISMISSED_KEY = 'braitenbot:install-modal-dismissed-v1';
 const HEADING_ID = 'braitenbot-install-modal-heading';
 
 function normalizePath(path: string): string {
@@ -24,19 +24,15 @@ function isMacPlatform(platform: VisitorPlatform): platform is 'macos-arm64' | '
 }
 
 /**
- * First-visit "get the app" modal, rendered by `Root` on every page. Unlike
- * the old `InstallNudge` admonition (lessons-page-only, always visible), this
- * is a site-wide interruption shown once: it decides whether to open on
- * mount, then remembers the visitor's choice in `localStorage` so it never
- * reappears after an explicit dismissal.
+ * "Get the app" modal, rendered by `Root` on every page but opened only on
+ * demand: the homepage "I'm a student" CTA triggers it by calling
+ * `openInstallModal()`. This component just subscribes and reacts.
  *
- * Never shown: inside the desktop app's Lessons iframe (`isEmbeddedInApp` —
- * telling a user inside the app to install the app is absurd), on the
- * `/install` page itself (redundant with the page's own content), or once
- * the visitor has dismissed it before.
+ * Never shown: inside the desktop app's Lessons iframe (`isEmbeddedInApp`,
+ * telling a user inside the app to install the app is absurd), or on the
+ * `/install` page itself (redundant with the page's own content).
  */
 export default function InstallModal(): ReactNode {
-  const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
   const [platform, setPlatform] = useState<VisitorPlatform>('unknown');
 
@@ -48,55 +44,30 @@ export default function InstallModal(): ReactNode {
   const primaryRef = useRef<HTMLElement>(null);
 
   const dismiss = useCallback(() => {
-    try {
-      localStorage.setItem(DISMISSED_KEY, new Date().toISOString());
-    } catch {
-      // localStorage unavailable (privacy mode, etc.) — the modal will just
-      // reappear next visit, which is an acceptable degradation.
-    }
     setOpen(false);
   }, []);
 
-  // Decide once, on mount, whether to open. SSR and the first client render
-  // both return null (see below), so flipping `open`/`ready` here client-side
-  // only cannot cause a hydration mismatch.
+  // Subscribe to the shared "open the install modal" signal. Fired by the
+  // homepage's "I'm a student" CTA (see src/lib/installModal.ts).
   useEffect(() => {
-    if (isEmbeddedInApp) {
-      setReady(true);
-      return;
-    }
-    if (isInstallRoute) {
-      setReady(true);
-      return;
-    }
-    let dismissed = false;
-    try {
-      dismissed = Boolean(localStorage.getItem(DISMISSED_KEY));
-    } catch {
-      dismissed = false;
-    }
-    if (dismissed) {
-      setReady(true);
-      return;
-    }
+    return onOpenInstallModal(() => {
+      if (isEmbeddedInApp) return;
 
-    const detected = detectVisitorPlatform();
-    setPlatform(detected);
-    setOpen(true);
-    setReady(true);
+      const detected = detectVisitorPlatform();
+      setPlatform(detected);
+      setOpen(true);
 
-    if (detected === 'macos-arm64') {
-      refineMacArchitecture().then((refined) => {
-        if (refined) setPlatform(refined);
-      });
-    }
-    // Mount-only: this is a one-time decision, not a reactive binding.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (detected === 'macos-arm64') {
+        refineMacArchitecture().then((refined) => {
+          if (refined) setPlatform(refined);
+        });
+      }
+    });
   }, []);
 
   // If the visitor navigates to /install while the modal is open (nav bar,
   // footer link, the modal's own "Visit the Install page" link, browser
-  // back/forward…), close it without treating that as a dismissal — they may
+  // back/forward…), close it without treating that as a dismissal: they may
   // come back to a different page later and the modal should still be able
   // to greet them there.
   useEffect(() => {
@@ -121,7 +92,7 @@ export default function InstallModal(): ReactNode {
     }
   }, [open]);
 
-  if (!ready || !open) {
+  if (!open) {
     return null;
   }
 
@@ -144,9 +115,6 @@ export default function InstallModal(): ReactNode {
           ×
         </button>
         <ModalContent platform={platform} primaryRef={primaryRef} onDismiss={dismiss} />
-        <p className={styles.footer}>
-          <Link to="/install">Visit the Install page</Link>
-        </p>
       </div>
     </div>,
     document.body,
@@ -167,26 +135,26 @@ function ModalContent({ platform, primaryRef, onDismiss }: ModalContentProps): R
           Take BraitenBot home
         </h2>
         <p className={styles.body}>
-          On this device, everything runs right here — no install needed. To
+          On this device, everything runs right here, no install needed. To
           upload a circuit onto a real robot, pair up with a classmate on a
           laptop.
         </p>
         <div className={styles.actions}>
-          <button
-            type="button"
-            ref={primaryRef as React.Ref<HTMLButtonElement>}
+          <Link
+            ref={primaryRef as React.Ref<HTMLAnchorElement>}
             className="button button--primary button--lg"
+            to="/docs/"
             onClick={onDismiss}
           >
-            Continue
-          </button>
+            Continue in browser
+          </Link>
         </div>
       </>
     );
   }
 
   const body =
-    'Every lesson runs right here in your browser. The desktop app is only for one thing: putting what you build onto a real robot.';
+    "You can keep reading right here in your browser. To upload a circuit onto a real robot, you'll need the app: it's the only way to program the hardware, and it works offline too.";
 
   if (platform === 'linux-or-other-desktop' || platform === 'unknown') {
     return (
@@ -204,13 +172,13 @@ function ModalContent({ platform, primaryRef, onDismiss }: ModalContentProps): R
           >
             See install options
           </Link>
-          <button
-            type="button"
+          <Link
             className="button button--secondary button--lg"
+            to="/docs/"
             onClick={onDismiss}
           >
             Continue in browser
-          </button>
+          </Link>
         </div>
       </>
     );
@@ -256,9 +224,9 @@ function ModalContent({ platform, primaryRef, onDismiss }: ModalContentProps): R
             See install options
           </Link>
         )}
-        <button type="button" className="button button--secondary button--lg" onClick={onDismiss}>
+        <Link className="button button--secondary button--lg" to="/docs/" onClick={onDismiss}>
           Continue in browser
-        </button>
+        </Link>
       </div>
       {altAsset ? (
         <Link className={styles.altLink} to={altAsset.url} onClick={onDismiss}>

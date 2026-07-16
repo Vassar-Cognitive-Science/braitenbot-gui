@@ -2,10 +2,11 @@ import React from 'react';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
+import { openInstallModal } from '@site/src/lib/installModal';
 
 import styles from './index.module.css';
 
-const LAMP = 'oklch(76% 0.15 74)'; // illustrative stimulus light — warm amber
+const LAMP = 'oklch(76% 0.15 74)'; // illustrative stimulus light, warm amber
 const TRAJECTORY = 'M 58 314 C 150 316, 214 300, 258 258 S 330 150, 360 102';
 
 /**
@@ -38,7 +39,7 @@ function PhototaxisScene(): React.ReactElement {
 
       {/* hand-inked scene */}
       <g filter="url(#bb-ink)">
-        {/* the plotted trajectory — emergent behavior, drawn in signal-green */}
+        {/* the plotted trajectory: emergent behavior, drawn in signal-green */}
         <path className={styles.trajectory} d={TRAJECTORY} />
         <circle className={styles.startDot} cx="58" cy="314" r="3.5" />
 
@@ -106,19 +107,13 @@ export default function Home(): React.ReactElement {
               <em>Vehicles</em>, made tangible.
             </p>
             <div className={`${styles.actions} ${styles.rise}`} style={{ animationDelay: '0.2s' }}>
-              <Link className={styles.ctaPrimary} to="/docs/lessons/your-first-vehicle">
-                For students <Arrow />
-              </Link>
+              <button type="button" className={styles.ctaPrimary} onClick={() => openInstallModal()}>
+                I&rsquo;m a student <Arrow />
+              </button>
               <Link className={styles.ctaGhost} to="/docs/teaching-with-braitenbot">
-                For educators <Arrow />
+                I&rsquo;m running a class <Arrow />
               </Link>
             </div>
-            <Link
-              className={`${styles.ctaSecondary} ${styles.rise}`}
-              style={{ animationDelay: '0.25s' }}
-              to="/install">
-              Download BraitenBot <Arrow />
-            </Link>
             <p className={`${styles.meta} ${styles.rise}`} style={{ animationDelay: '0.3s' }}>
               Open source · macOS · Windows · Linux
             </p>
